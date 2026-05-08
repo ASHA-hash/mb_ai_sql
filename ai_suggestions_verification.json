@@ -1,0 +1,236 @@
+{
+  "total": 10,
+  "passed": 10,
+  "failed_or_error": 0,
+  "generatedAtEpoch": 1776167451,
+  "reports": [
+    {
+      "question": "Top 10 products by total sales amount using readable ProductName (join dbo.VwAISalesData with dbo.VwMstItems on ItemId)",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (10) \n    i.Description AS ProductName, \n    SUM(s.SaleNetAmount) AS TotalSalesAmount\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems i ON s.ItemId = i.ItemId\nGROUP BY i.Description\nORDER BY TotalSalesAmount DESC",
+      "rowCount": 10,
+      "sampleRows": [
+        {
+          "ProductName": "SUIT PC",
+          "TotalSalesAmount": 3129195052.36
+        },
+        {
+          "ProductName": "SAREES-WOVEN (SAREES)",
+          "TotalSalesAmount": 1787690278.25
+        },
+        {
+          "ProductName": "SAREES-HLME (SAREES)",
+          "TotalSalesAmount": 1688955712.62
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Sum of SaleNetAmount grouped by BranchId",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (100) BranchId, SUM(SaleNetAmount) AS TotalSaleNetAmount\nFROM dbo.VwAISalesData\nGROUP BY BranchId",
+      "rowCount": 100,
+      "sampleRows": [
+        {
+          "BranchId": "002",
+          "TotalSaleNetAmount": 426285516.5
+        },
+        {
+          "BranchId": "014",
+          "TotalSaleNetAmount": 465369928
+        },
+        {
+          "BranchId": "024",
+          "TotalSaleNetAmount": 639923044.75
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Highest revenue salesperson this month by SaleNetAmount",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (1) \n    dbo.VwAISalesPerson.SalesPersonId, \n    dbo.VwAISalesPerson.SalesPersonName, \n    SUM(dbo.VwAISalesData.SaleNetAmount) AS TotalRevenue\nFROM \n    dbo.VwAISalesData\nJOIN \n    dbo.VwAISalesPerson ON dbo.VwAISalesData.SalesPersonId = dbo.VwAISalesPerson.SalesPersonId\nWHERE \n    YEAR(dbo.VwAISalesData.InvoiceDt) = YEAR(GETDATE()) \n    AND MONTH(dbo.VwAISalesData.InvoiceDt) = MONTH(GETDATE())\nGROUP BY \n    dbo.VwAISalesPerson.SalesPersonId, \n    dbo.VwAISalesPerson.SalesPersonName\nORDER BY \n    TotalRevenue DESC",
+      "rowCount": 1,
+      "sampleRows": [
+        {
+          "SalesPersonId": "000000000000000",
+          "SalesPersonName": "[Default]",
+          "TotalRevenue": 9086787
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Today's sales transactions with InvoiceNo, InvoiceDt, ItemId, Quantity, SaleNetAmount",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (100) InvoiceNo, InvoiceDt, ItemId, Quantity, SaleNetAmount \nFROM dbo.VwAISalesData \nWHERE InvoiceDt >= CAST(GETDATE() AS DATE) AND InvoiceDt < DATEADD(day, 1, CAST(GETDATE() AS DATE))",
+      "rowCount": 100,
+      "sampleRows": [
+        {
+          "InvoiceNo": "SE00676",
+          "InvoiceDt": "2026-04-14T00:00:00.000Z",
+          "ItemId": "26034176555",
+          "Quantity": 1,
+          "SaleNetAmount": 1100
+        },
+        {
+          "InvoiceNo": "SE00676",
+          "InvoiceDt": "2026-04-14T00:00:00.000Z",
+          "ItemId": "26034178510",
+          "Quantity": 1,
+          "SaleNetAmount": 1100
+        },
+        {
+          "InvoiceNo": "SE00677",
+          "InvoiceDt": "2026-04-14T00:00:00.000Z",
+          "ItemId": "26HQ5215525",
+          "Quantity": 1,
+          "SaleNetAmount": 16995
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Low stock items — quantity less than 10",
+      "tableHint": "dbo.VwAIStockData",
+      "sql": "SELECT TOP (100) ItemId, BranchId, StockQty \nFROM dbo.VwAIStockData \nWHERE StockQty < 10",
+      "rowCount": 100,
+      "sampleRows": [
+        {
+          "ItemId": "16HQ1244889",
+          "BranchId": "001",
+          "StockQty": 1
+        },
+        {
+          "ItemId": "17HQ1406359",
+          "BranchId": "001",
+          "StockQty": 1
+        },
+        {
+          "ItemId": "17HQ1406388",
+          "BranchId": "001",
+          "StockQty": 1
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Top 20 customers by total SaleNetAmount",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (20) CustomerId, SUM(SaleNetAmount) AS TotalSaleNetAmount\nFROM dbo.VwAISalesData\nGROUP BY CustomerId\nORDER BY TotalSaleNetAmount DESC",
+      "rowCount": 20,
+      "sampleRows": [
+        {
+          "CustomerId": "SLS_HQ1000000001131",
+          "TotalSaleNetAmount": 848488049
+        },
+        {
+          "CustomerId": "SLS_000000000000000",
+          "TotalSaleNetAmount": 280805194
+        },
+        {
+          "CustomerId": "SLS_OL1000000011468",
+          "TotalSaleNetAmount": 40986953
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Monthly sales trend for the last 6 months by InvoiceDt",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (100) \n    YEAR(InvoiceDt) AS SalesYear, \n    MONTH(InvoiceDt) AS SalesMonth, \n    SUM(SaleNetAmount) AS TotalSales\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEADD(month, -6, CAST(GETDATE() AS DATE))\nGROUP BY YEAR(InvoiceDt), MONTH(InvoiceDt)\nORDER BY SalesYear, SalesMonth",
+      "rowCount": 7,
+      "sampleRows": [
+        {
+          "SalesYear": 2025,
+          "SalesMonth": 10,
+          "TotalSales": 170331185.7
+        },
+        {
+          "SalesYear": 2025,
+          "SalesMonth": 11,
+          "TotalSales": 409784187.4
+        },
+        {
+          "SalesYear": 2025,
+          "SalesMonth": 12,
+          "TotalSales": 297006151.47
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Branches with zero sales in the last 7 days",
+      "tableHint": "dbo.VwAIBranch",
+      "sql": "SELECT TOP (100) b.BranchId, b.BranchName\nFROM dbo.VwAIBranch b\nLEFT JOIN dbo.VwAISalesData s ON b.BranchId = s.BranchId AND s.InvoiceDt >= DATEADD(day, -7, CAST(GETDATE() AS DATE))\nGROUP BY b.BranchId, b.BranchName\nHAVING COUNT(s.InvoiceId) = 0",
+      "rowCount": 22,
+      "sampleRows": [
+        {
+          "BranchId": "100",
+          "BranchName": "MEENA BAZAAR  --- Blank"
+        },
+        {
+          "BranchId": "009",
+          "BranchName": "MEENA BAZAAR AG"
+        },
+        {
+          "BranchId": "034",
+          "BranchName": "MEENA BAZAAR AHD"
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Top 10 vendors by purchase amount from purchase report (use amount/value column, not quantity)",
+      "tableHint": "dbo.VW_MB_POWERBI_PUR_REPORT",
+      "sql": "SELECT TOP (10) SupplierName, SUM(PurQty * ItemMRP) AS TotalPurchaseAmount\nFROM dbo.VW_MB_POWERBI_PUR_REPORT\nGROUP BY SupplierName\nORDER BY TotalPurchaseAmount DESC",
+      "rowCount": 10,
+      "sampleRows": [
+        {
+          "SupplierName": "LA VESTA",
+          "TotalPurchaseAmount": 1892740498
+        },
+        {
+          "SupplierName": "FLO WING",
+          "TotalPurchaseAmount": 1728177139
+        },
+        {
+          "SupplierName": "NOYA",
+          "TotalPurchaseAmount": 1671371639
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    },
+    {
+      "question": "Average order value by branch using SaleNetAmount per InvoiceId",
+      "tableHint": "dbo.VwAISalesData",
+      "sql": "SELECT TOP (100) BranchId, AVG(SaleNetAmount) AS AverageOrderValue\nFROM dbo.VwAISalesData\nGROUP BY BranchId",
+      "rowCount": 100,
+      "sampleRows": [
+        {
+          "BranchId": "003",
+          "AverageOrderValue": 3277.674037
+        },
+        {
+          "BranchId": "008",
+          "AverageOrderValue": 3746.752267
+        },
+        {
+          "BranchId": "016",
+          "AverageOrderValue": 2384.005414
+        }
+      ],
+      "errors": [],
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "sales": {
+    "main_view": "dbo.VW_MB_POWERBI_SLS_REPORT",
+    "description": "Sales transaction report for revenue and quantity analysis",
+    "default_date_column": "XnMemoDate",
+    "grain": "transaction-line",
+    "important_columns": [
+      "BranchName",
+      "BranchId",
+      "SupplierName",
+      "ArticleNo",
+      "NetSlsQty",
+      "NetAmount",
+      "NetSlsCostValue"
+    ],
+    "keywords": [
+      "sales",
+      "revenue",
+      "top sales",
+      "monthly sales",
+      "selling"
+    ],
+    "allowed_views": [
+      "dbo.VW_MB_POWERBI_SLS_REPORT",
+      "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
+      "dbo.VW_MB_POWERBI_SLS_ARTICLE_REPORT",
+      "dbo.VW_MB_POWERBI_SLS_BILLCOUNT",
+      "dbo.VwAISalesData",
+      "dbo.VwMstItems",
+      "dbo.VwAIBranch",
+      "dbo.VwAISalesPerson",
+      "dbo.VwAICustomerDetails"
+    ]
+  },
+  "purchase": {
+    "main_view": "dbo.VW_MB_POWERBI_PUR_REPORT",
+    "description": "Purchase report for vendor procurement analysis",
+    "default_date_column": "PurchaseDt",
+    "grain": "transaction-line",
+    "important_columns": [
+      "BranchName",
+      "BranchId",
+      "SupplierName",
+      "ArticleNo",
+      "PurQty"
+    ],
+    "keywords": [
+      "purchase",
+      "procurement",
+      "vendor purchase",
+      "supplier purchase",
+      "return"
+    ],
+    "allowed_views": [
+      "dbo.VW_MB_POWERBI_PUR_REPORT",
+      "dbo.VW_MB_POWERBI_PURXNS_REPORT",
+      "dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST",
+      "dbo.VW_MB_POWERBI_PRT_REPORT",
+      "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
+      "dbo.VwMstItems",
+      "dbo.VwAIBranch",
+      "dbo.VwAISupplier"
+    ]
+  },
+  "stock": {
+    "main_view": "dbo.VW_MB_POWERBI_STOCK_REPORT",
+    "description": "Inventory stock report for quantity and valuation checks",
+    "default_date_column": "PurInvoiceDt",
+    "grain": "item-branch",
+    "important_columns": [
+      "BranchName",
+      "BranchId",
+      "SupplierName",
+      "ArticleNo",
+      "StockQty",
+      "ItemMRP"
+    ],
+    "keywords": [
+      "stock",
+      "inventory",
+      "low stock",
+      "dead stock",
+      "stock aging"
+    ],
+    "allowed_views": [
+      "dbo.VW_MB_POWERBI_STOCK_REPORT",
+      "dbo.VW_MB_POWERBI_CBS_WITH_GIT",
+      "dbo.VwAIStockData",
+      "dbo.VwMstItems",
+      "dbo.VwAIBranch",
+      "dbo.VwAISalesData"
+    ]
+  },
+  "customer": {
+    "main_view": "dbo.VwAICustomerDetails",
+    "description": "Customer master details and profile attributes",
+    "default_date_column": "CreatedOn",
+    "grain": "customer",
+    "important_columns": [
+      "CustomerId",
+      "CustomerFirstName",
+      "CustomerLastName",
+      "BranchName",
+      "CreditLimit",
+      "ActiveStatus"
+    ],
+    "keywords": [
+      "customer",
+      "buyers",
+      "repeat customer",
+      "anniversary",
+      "birthday"
+    ],
+    "allowed_views": [
+      "dbo.VwAICustomerDetails",
+      "dbo.VwAISalesData",
+      "dbo.VwMstItems",
+      "dbo.VwAIBranch"
+    ]
+  },
+  "master": {
+    "main_view": "dbo.VwMstItems",
+    "description": "Item, supplier, and category master information",
+    "default_date_column": "PurInvoiceDt",
+    "grain": "item",
+    "important_columns": [
+      "ItemId",
+      "Itemcode",
+      "Description",
+      "SupplierName",
+      "InvDepartmentName",
+      "InvCategoryName",
+      "ItemMRP",
+      "PurchasePrice"
+    ],
+    "keywords": [
+      "item",
+      "product",
+      "supplier",
+      "vendor",
+      "branch",
+      "master"
+    ],
+    "allowed_views": [
+      "dbo.VwMstItems",
+      "dbo.VW_MB_POWERBI_PRODUCT_MASTER",
+      "dbo.VW_MB_POWERBI_VENDOR_MASTER",
+      "dbo.VW_MB_POWERBI_BRANCH_LIST",
+      "dbo.VwAISupplier",
+      "dbo.VwAIBranch"
+    ]
+  }
+}

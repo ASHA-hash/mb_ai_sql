@@ -1,0 +1,43 @@
+{
+  "name": "erp-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal read-only API for ERP (Step 2)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "mirror-sync": "node mirror-sync.js",
+    "test:db": "node scripts/test-db-connection.js",
+    "test:golden": "node scripts/run-golden-queries.js",
+    "export:registry-schema": "node scripts/export-registry-schema.js --out metadata/schema-registry-columns.json",
+    "export:all-data": "node scripts/export-all-data.js",
+    "reconcile:dashboard": "node scripts/reconcile-analytics.js",
+    "test:decompose": "node scripts/test-query-decomposer.js",
+    "mcp:erp-db": "node mcp/erp-database-server.js",
+    "mcp:erp-http": "node mcp/erp-database-server.js --http"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.43",
+    "@langchain/langgraph": "^1.2.9",
+    "@langchain/openai": "^1.4.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@msgpack/msgpack": "^3.1.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
+    "googleapis": "^171.4.0",
+    "langchain": "^1.3.5",
+    "mssql": "^12.2.1",
+    "openai": "^4.104.0",
+    "pg": "^8.13.1"
+  }
+}

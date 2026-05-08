@@ -1,0 +1,81 @@
+{
+  "metrics": {
+    "revenue": {
+      "label": "Net Sales",
+      "table": "dbo.VwAISalesData",
+      "column": "SaleNetAmount",
+      "aggregation": "SUM"
+    },
+    "quantity": {
+      "label": "Quantity",
+      "table": "dbo.VwAISalesData",
+      "column": "Quantity",
+      "aggregation": "SUM"
+    },
+    "invoice_count": {
+      "label": "Invoice Count",
+      "table": "dbo.VwAISalesData",
+      "column": "InvoiceNo",
+      "aggregation": "COUNT_DISTINCT"
+    },
+    "avg_order_value": {
+      "label": "Avg Order Value",
+      "table": "dbo.VwAISalesData",
+      "column": "SaleNetAmount",
+      "aggregation": "AVG"
+    }
+  },
+  "dimensions": {
+    "category": {
+      "label": "Category",
+      "table": "dbo.VwMstItems",
+      "join": "dbo.VwAISalesData s INNER JOIN dbo.VwMstItems d ON s.ItemId = d.ItemId",
+      "columnCandidates": ["InvCategoryName", "InvCategoryShortName"]
+    },
+    "department": {
+      "label": "Department",
+      "table": "dbo.VwMstItems",
+      "join": "dbo.VwAISalesData s INNER JOIN dbo.VwMstItems d ON s.ItemId = d.ItemId",
+      "columnCandidates": ["InvDepartmentShortName", "InvDepartmentName"]
+    },
+    "product": {
+      "label": "Product",
+      "table": "dbo.VwMstItems",
+      "join": "dbo.VwAISalesData s INNER JOIN dbo.VwMstItems d ON s.ItemId = d.ItemId",
+      "columnCandidates": ["Description", "ArticleShortName", "ArticleNo"]
+    },
+    "branch": {
+      "label": "Branch",
+      "table": "dbo.VwAIBranch",
+      "join": "dbo.VwAISalesData s LEFT JOIN dbo.VwAIBranch d ON s.BranchId = d.BranchId",
+      "columnCandidates": ["BranchName", "BranchShortName"]
+    },
+    "salesperson": {
+      "label": "Salesperson",
+      "table": "dbo.VwAISalesPerson",
+      "join": "dbo.VwAISalesData s LEFT JOIN dbo.VwAISalesPerson d ON s.SalesPersonId = d.SalesPersonId",
+      "columnCandidates": ["SalesPersonName", "SalesPersonShortName"]
+    },
+    "customer": {
+      "label": "Customer",
+      "table": "dbo.VwAICustomerDetails",
+      "join": "dbo.VwAISalesData s LEFT JOIN dbo.VwAICustomerDetails d ON s.CustomerId = d.CustomerId",
+      "columnCandidates": ["CustomerFirstName", "CustomerGroupName", "CustomerLastName"]
+    },
+    "date_day": {
+      "label": "Sale Date",
+      "table": "dbo.VwAISalesData",
+      "join": "dbo.VwAISalesData s",
+      "expression": "CAST(s.InvoiceDt AS date)"
+    },
+    "date_month": {
+      "label": "Sale Month",
+      "table": "dbo.VwAISalesData",
+      "join": "dbo.VwAISalesData s",
+      "expression": "FORMAT(s.InvoiceDt, 'MMM yyyy')",
+      "orderBy": "YEAR(s.InvoiceDt), MONTH(s.InvoiceDt)"
+    }
+  },
+  "dateRanges": ["today", "mtd", "qtd", "ytd", "last_30_days", "custom", "all_time"],
+  "intents": ["top_n", "trend", "kpi", "breakdown", "generic"]
+}

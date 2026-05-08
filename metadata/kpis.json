@@ -1,0 +1,68 @@
+{
+  "revenue": {
+    "domain": "sales",
+    "definition": "SUM(NetAmount) on Power BI sales reports; SUM(SaleNetAmount) on dbo.VwAISalesData",
+    "description": "Total sales value from net amount",
+    "strict_rule": "Use NetAmount on VW_MB_POWERBI_SLS_* views and SaleNetAmount on dbo.VwAISalesData—pick the column that exists in your chosen view. Never use MRP or before-tax fields for revenue unless the user explicitly asks."
+  },
+  "sales_qty": {
+    "domain": "sales",
+    "definition": "SUM(NetSlsQty)",
+    "description": "Net sold quantity"
+  },
+  "sales_cost": {
+    "domain": "sales",
+    "definition": "SUM(NetSlsCostValue)",
+    "description": "Cost of sold items"
+  },
+  "purchase_qty": {
+    "domain": "purchase",
+    "definition": "SUM(PurQty)",
+    "description": "Total purchased quantity"
+  },
+  "purchase_cost": {
+    "domain": "purchase",
+    "definition": "SUM(PurCost)",
+    "description": "Total purchase cost"
+  },
+  "stock_qty": {
+    "domain": "stock",
+    "definition": "SUM(StockQty)",
+    "description": "Current stock quantity"
+  },
+  "stock_value": {
+    "domain": "stock",
+    "definition": "SUM(StockQty * CostPrice)",
+    "description": "Approximate inventory value by cost"
+  },
+  "dead_stock": {
+    "domain": "stock",
+    "definition": "Items with StockQty > 0 and no sales in last 90 days",
+    "description": "Slow/non-moving stock candidates"
+  },
+  "top_supplier": {
+    "domain": "purchase",
+    "definition": "Top supplier by SUM(PurCost) or purchase amount",
+    "description": "Highest contributing supplier in selected period"
+  },
+  "top_customer": {
+    "domain": "sales",
+    "definition": "Top customer by SUM(SaleNetAmount)",
+    "description": "Highest customer contribution in selected period"
+  },
+  "repeat_customer": {
+    "domain": "customer",
+    "definition": "Customer with COUNT(DISTINCT InvoiceId) > 1",
+    "description": "Customer with repeat transactions"
+  },
+  "margin": {
+    "domain": "sales",
+    "definition": "SUM(NetAmount - NetSlsCostValue)",
+    "description": "Estimated gross margin"
+  },
+  "branch_performance": {
+    "domain": "sales",
+    "definition": "SUM(NetAmount) grouped by BranchName or BranchId (only use columns listed in schema for the chosen view)",
+    "description": "Branch-wise sales performance"
+  }
+}

@@ -1,0 +1,30 @@
+# Local workspace-only (not the API — do not push)
+google-apps-script/
+chrome-extension/
+erp-api/
+
+CHECKLIST*.md
+FEATURE_CHECKLIST.md
+*.zip
+
+# Large local DB exports — do not commit (breaks GitHub push)
+exports_py/
+**/*.jsonl
+
+# INFORMATION_SCHEMA snapshot (environment-specific — regenerate: npm run export:registry-schema)
+metadata/schema-registry-columns.json
+
+# Runtime / local logs
+logs/
+query-history.json
+
+# Dependencies & secrets
+node_modules/
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# OAuth client files (if ever placed at repo root)
+client_secret*.json
+*credentials*.json

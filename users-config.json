@@ -1,0 +1,52 @@
+{
+  "roles": {
+    "admin": {
+      "datasets": "*",
+      "features": [
+        "ai",
+        "data",
+        "schedule",
+        "explorer",
+        "admin"
+      ]
+    },
+    "manager": {
+      "datasets": [
+        "sales",
+        "stock",
+        "customers",
+        "branches"
+      ],
+      "features": [
+        "ai",
+        "data",
+        "schedule",
+        "explorer"
+      ]
+    },
+    "viewer": {
+      "datasets": [
+        "sales",
+        "branches"
+      ],
+      "features": [
+        "data",
+        "explorer"
+      ]
+    }
+  },
+  "users": [
+    {
+      "email": "ashakarthikeyan24@gmail.com",
+      "role": "admin",
+      "name": "Admin",
+      "passwordHash": ""
+    },
+    {
+      "email": "karthikeyanasha24@gmail.com",
+      "role": "manager",
+      "name": "Manager",
+      "passwordHash": "pbkdf2:e386d3d60e97d73d9751958371050044:3cae9f185ab5dbe47dbbcc9cba5975cb6fb13d39944b585d71deefefce704ddd"
+    }
+  ]
+}

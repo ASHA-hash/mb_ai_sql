@@ -1,0 +1,97 @@
+[
+  {
+    "id": "top_products_revenue",
+    "query": "Top 10 products by total sales amount using readable ProductName",
+    "expect": { "intent": "top_n", "minRows": 10, "chartPolicy": "bar" }
+  },
+  {
+    "id": "mtd_sales_kpi",
+    "query": "Total sales amount this month",
+    "expect": { "intent": "kpi", "minRows": 1, "chartPolicy": "kpi_card" }
+  },
+  {
+    "id": "daily_trend_30",
+    "query": "Daily sales trend for last 30 days",
+    "expect": { "intent": "trend", "minRows": 2, "chartPolicy": "line" }
+  },
+  {
+    "id": "branch_breakdown",
+    "query": "Sales breakdown by branch for this month",
+    "expect": { "intent": "breakdown", "minRows": 1, "chartPolicy": "bar" }
+  },
+  {
+    "id": "top_branches_ytd",
+    "query": "Top 5 branches by revenue ytd",
+    "expect": { "intent": "top_n", "minRows": 5, "chartPolicy": "bar" }
+  },
+  {
+    "id": "dept_breakdown_ytd",
+    "query": "Revenue by department this year",
+    "expect": { "intent": "breakdown", "minRows": 1, "chartPolicy": "bar" }
+  },
+  {
+    "id": "category_top10",
+    "query": "Top 10 categories by sales amount",
+    "expect": { "intent": "top_n", "minRows": 5, "chartPolicy": "bar" }
+  },
+  {
+    "id": "invoice_count_mtd",
+    "query": "Invoice count mtd",
+    "expect": { "intent": "kpi", "minRows": 1, "chartPolicy": "kpi_card" }
+  },
+  {
+    "id": "qty_last_30_days",
+    "query": "Daily quantity trend for last 30 days",
+    "expect": { "intent": "trend", "minRows": 2, "chartPolicy": "line" }
+  },
+  {
+    "id": "top_products_branch_filter",
+    "query": "Top 10 products in \"South Ex\" this month",
+    "expect": { "intent": "top_n", "minRows": 1, "chartPolicy": "bar" }
+  },
+  {
+    "id": "category_filter_breakdown",
+    "query": "Sales by category for \"Sarees\"",
+    "expect": { "intent": "breakdown", "minRows": 1, "chartPolicy": "bar" }
+  },
+  {
+    "id": "today_kpi",
+    "query": "Total sales today",
+    "expect": { "intent": "kpi", "minRows": 1, "chartPolicy": "kpi_card" }
+  },
+  {
+    "id": "monthly_trend_ytd",
+    "query": "Monthly sales trend ytd",
+    "expect": { "intent": "trend", "minRows": 2, "chartPolicy": "line" }
+  },
+  {
+    "id": "today_vs_last_monday_vs_last_month",
+    "query": "Show me today's sales vs last Monday vs last month",
+    "expect": { "intent": "breakdown", "minRows": 3, "chartPolicy": "bar" }
+  },
+  {
+    "id": "today_vs_specific_dates",
+    "query": "Show me today's sales vs 25.04.2026 vs 03.03.2026",
+    "expect": { "intent": "breakdown", "minRows": 3, "chartPolicy": "bar" }
+  },
+  {
+    "id": "sales_vs_purchase_simultaneous",
+    "query": "Show monthly sales and purchases simultaneously",
+    "expect": { "intent": "trend", "minRows": 2, "chartPolicy": "line" }
+  },
+  {
+    "id": "point_set_compare_two_dates",
+    "query": "Net sales on 01.03.2026 and 02.03.2026",
+    "expect": {
+      "intent": "breakdown",
+      "minRows": 2,
+      "chartPolicy": "bar",
+      "interpretationIncludes": ["Period comparison", "Net Sales"]
+    }
+  },
+  {
+    "id": "mtd_quantity_kpi",
+    "query": "Total quantity sold month to date",
+    "expect": { "intent": "kpi", "minRows": 1, "chartPolicy": "kpi_card" }
+  }
+]

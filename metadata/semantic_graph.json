@@ -1,0 +1,65 @@
+{
+  "version": "1.0",
+  "base_tables": {
+    "sales": "dbo.VwAISalesData",
+    "items": "dbo.VwMstItems",
+    "branch": "dbo.VwMstBranchEntry"
+  },
+  "metrics": {
+    "revenue": {
+      "expression": "SUM(ISNULL(s.SaleNetAmount,0))",
+      "base_table": "sales",
+      "default_time_column": "s.InvoiceDt",
+      "joins": [
+        {
+          "table": "items",
+          "on": "s.ItemId = d.ItemId",
+          "alias": "d"
+        }
+      ]
+    },
+    "quantity": {
+      "expression": "SUM(ISNULL(s.Quantity,0))",
+      "base_table": "sales",
+      "default_time_column": "s.InvoiceDt",
+      "joins": []
+    },
+    "invoice_count": {
+      "expression": "COUNT(DISTINCT s.InvoiceNo)",
+      "base_table": "sales",
+      "default_time_column": "s.InvoiceDt",
+      "joins": []
+    }
+  },
+  "dimensions": {
+    "product": {
+      "table": "items",
+      "column": "Description",
+      "fallback_columns": ["ArticleShortName", "ArticleNo"]
+    },
+    "category": {
+      "table": "items",
+      "column": "CategoryShortName",
+      "fallback_columns": ["Category", "DepartmentShortName"]
+    },
+    "branch": {
+      "table": "branch",
+      "column": "BranchAlias",
+      "fallback_columns": ["BranchName", "BranchId"]
+    },
+    "department": {
+      "table": "sales",
+      "column": "DepartmentShortName",
+      "fallback_columns": []
+    },
+    "date_day": {
+      "table": "sales",
+      "expression": "CAST(s.InvoiceDt AS date)"
+    },
+    "date_month": {
+      "table": "sales",
+      "expression": "FORMAT(s.InvoiceDt, 'MMM yyyy')",
+      "order_by": "YEAR(s.InvoiceDt), MONTH(s.InvoiceDt)"
+    }
+  }
+}

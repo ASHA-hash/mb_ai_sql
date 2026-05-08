@@ -1,0 +1,6130 @@
+{
+  "database": "zRetailHQ0",
+  "generated_at_utc": "2026-05-06T12:33:04.426459+00:00",
+  "counts": {
+    "tables": 0,
+    "views": 28,
+    "total_objects": 28
+  },
+  "tables": {},
+  "views": {
+    "dbo.VW_MB_POWERBI_APP_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_APP_REPORT",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Category": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 20,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 21,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnNo": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 24,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnDtMonth": {
+          "ordinal_position": 25,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "AppQty": {
+          "ordinal_position": 26,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MrpValue": {
+          "ordinal_position": 27,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "CostValue": {
+          "ordinal_position": 28,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CGSTAmount": {
+          "ordinal_position": 30,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SGSTAmount": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "IGSTAmount": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "BillCount": {
+          "ordinal_position": 33,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_APR_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_APR_REPORT",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Category": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 20,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 21,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnNo": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 24,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnDtMonth": {
+          "ordinal_position": 25,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "AppQty": {
+          "ordinal_position": 26,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MrpValue": {
+          "ordinal_position": 27,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "CostValue": {
+          "ordinal_position": 28,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "BillCount": {
+          "ordinal_position": 30,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_BRANCH_LIST": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_BRANCH_LIST",
+      "type": "view",
+      "columns": {
+        "BranchId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Locality": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "City": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "State": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Country": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PinCode": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 10,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ActiveStatus": {
+          "ordinal_position": 10,
+          "data_type": "bit",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "IsWarehouse": {
+          "ordinal_position": 11,
+          "data_type": "bit",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_CATEGORY_MASTER": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_CATEGORY_MASTER",
+      "type": "view",
+      "columns": {
+        "InvSubCategoryId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvSubCategoryName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvSubCategoryShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryId": {
+          "ordinal_position": 4,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvDepartmentId": {
+          "ordinal_position": 7,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvDepartmentName": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvDepartmentShortName": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_CBS_WITH_GIT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_CBS_WITH_GIT",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryName": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 13,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "MRP": {
+          "ordinal_position": 14,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurInvoiceDt": {
+          "ordinal_position": 19,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "GitQty": {
+          "ordinal_position": 20,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "GitCostValue": {
+          "ordinal_position": 21,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 6,
+          "datetime_precision": null
+        },
+        "StockQty": {
+          "ordinal_position": 22,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "CbsCostValue": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 6,
+          "datetime_precision": null
+        },
+        "CbsMrpValue": {
+          "ordinal_position": 24,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 6,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA",
+      "type": "view",
+      "columns": {
+        "XnMemoDate_MONTH": {
+          "ordinal_position": 1,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnMemoDate": {
+          "ordinal_position": 10,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnMemoDate_MONTHNAME": {
+          "ordinal_position": 11,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "NetSlsQty": {
+          "ordinal_position": 12,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetSlsCostValue": {
+          "ordinal_position": 13,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 14,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetAmountBeforeTax": {
+          "ordinal_position": 15,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "MrpValue": {
+          "ordinal_position": 16,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_PRODUCT_MASTER": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_PRODUCT_MASTER",
+      "type": "view",
+      "columns": {
+        "ItemId": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubCategoryName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubCategoryShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Colour": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "size": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 10,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printypework": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierUID": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "FabricShortName": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabricShortName": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Collection": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubConceptShortName": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Dupatta": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DupattaShortName": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Silhoutte": {
+          "ordinal_position": 24,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Bottom": {
+          "ordinal_position": 25,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "NECKLINE": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SleeveType": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Look": {
+          "ordinal_position": 28,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "INVENTORYTYPE": {
+          "ordinal_position": 29,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurDate": {
+          "ordinal_position": 30,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "PurInvNo": {
+          "ordinal_position": 31,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurInvDt": {
+          "ordinal_position": 32,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "PurChallanNo": {
+          "ordinal_position": 33,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurchasePrice": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ItemWSP": {
+          "ordinal_position": 36,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_PRT_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_PRT_REPORT",
+      "type": "view",
+      "columns": {
+        "PurReturnId": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurReturnDt": {
+          "ordinal_position": 2,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurInvoiceDt": {
+          "ordinal_position": 3,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "PurInvoiceNo": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Name": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Name": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 14,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 19,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Name": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PrtQty": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_PUR_QTY_WITH_COST",
+      "type": "view",
+      "columns": {
+        "PurchaseDt": {
+          "ordinal_position": 1,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurQty": {
+          "ordinal_position": 6,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "PurCost": {
+          "ordinal_position": 7,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_PUR_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_PUR_REPORT",
+      "type": "view",
+      "columns": {
+        "PurchaseId": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurchaseDt": {
+          "ordinal_position": 2,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurInvoiceDt": {
+          "ordinal_position": 3,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurInvoiceNo": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Name": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Name": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 14,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 19,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Name": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurQty": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_PURXNS_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_PURXNS_REPORT",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryName": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurRefNo1": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurRefNo2": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnType": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 19,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurInvDate": {
+          "ordinal_position": 20,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "PurInvNo": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurChallanDt": {
+          "ordinal_position": 22,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurChallanNo": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemCode": {
+          "ordinal_position": 24,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 25,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 26,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 28,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 29,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 30,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurQty": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "PurCostValue": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "PurNetAmount": {
+          "ordinal_position": 33,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "PurMrpValue": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "PurCGSTAmount": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "PurSGSTAmount": {
+          "ordinal_position": 36,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "PurIGSTAmount": {
+          "ordinal_position": 37,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "PrtQty": {
+          "ordinal_position": 38,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "PrtCostValue": {
+          "ordinal_position": 39,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "PrtNetAmount": {
+          "ordinal_position": 40,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "PrtMrpValue": {
+          "ordinal_position": 41,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "PrtCGSTAmount": {
+          "ordinal_position": 42,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "PrtSGSTAmount": {
+          "ordinal_position": 43,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "PrtIGSTAmount": {
+          "ordinal_position": 44,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "NetPurQty": {
+          "ordinal_position": 45,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetPurCost": {
+          "ordinal_position": 46,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetPurNetAmount": {
+          "ordinal_position": 47,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetPurCGSTAmount": {
+          "ordinal_position": 48,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "NetPurSGSTAmount": {
+          "ordinal_position": 49,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "NetPurIGSTAmount": {
+          "ordinal_position": 50,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SLS_ARTICLE_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SLS_ARTICLE_REPORT",
+      "type": "view",
+      "columns": {
+        "CategoryShortName": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnMemoDate": {
+          "ordinal_position": 3,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "Fabric": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleMRP": {
+          "ordinal_position": 6,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "NetSlsQty": {
+          "ordinal_position": 8,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 9,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetSlsCostValue": {
+          "ordinal_position": 10,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SLS_BILLCOUNT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SLS_BILLCOUNT",
+      "type": "view",
+      "columns": {
+        "BranchId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CashmemoDt": {
+          "ordinal_position": 2,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "BillCount": {
+          "ordinal_position": 3,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchCity": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchState": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchRegion": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 20,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CountryRegion": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAreaManager": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CashmemoDt": {
+          "ordinal_position": 8,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "CashmemoNo": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerMobileNumber": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerName": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 201,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerId": {
+          "ordinal_position": 12,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CreatedOn": {
+          "ordinal_position": 13,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "SalesPersonName": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SalespersonEmpId": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ColourName": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContrastName": {
+          "ordinal_position": 24,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SizeName": {
+          "ordinal_position": 25,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PrintTypeWork": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SalesQuantity": {
+          "ordinal_position": 28,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SalesCost": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 30,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetAmountBeforeTax": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 32,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SalesNetAmount": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SLS_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SLS_REPORT",
+      "type": "view",
+      "columns": {
+        "XnMemoDate": {
+          "ordinal_position": 1,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Name": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Name": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 11,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 16,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Name": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurDate": {
+          "ordinal_position": 20,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "NetSlsQty": {
+          "ordinal_position": 21,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 22,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetSlsCostValue": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "SlsExtCostValue": {
+          "ordinal_position": 24,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SLSXNS_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SLSXNS_REPORT",
+      "type": "view",
+      "columns": {
+        "BranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Category": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 20,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 21,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnNo": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 24,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnDtMonth": {
+          "ordinal_position": 25,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SlsQty": {
+          "ordinal_position": 26,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SlsMrpValue": {
+          "ordinal_position": 27,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "SlsCostValue": {
+          "ordinal_position": 28,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "SlsNetAmount": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SlrQty": {
+          "ordinal_position": 30,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SlrMrpValue": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "SlrCostValue": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "SlrNetAmount": {
+          "ordinal_position": 33,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetSlsQty": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "NetSlsMrpValue": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "NetSlsCostValue": {
+          "ordinal_position": 36,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetSlsNetAmount": {
+          "ordinal_position": 37,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CGSTAmount": {
+          "ordinal_position": 38,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SGSTAmount": {
+          "ordinal_position": 39,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "IGSTAmount": {
+          "ordinal_position": 40,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "BillCount": {
+          "ordinal_position": 41,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_STI_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_STI_REPORT",
+      "type": "view",
+      "columns": {
+        "SourceBranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SourceBranchId": {
+          "ordinal_position": 2,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TargetBranchAlias": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TargetBranchId": {
+          "ordinal_position": 4,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Category": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 24,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 25,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnNo": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 27,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnDtMonth": {
+          "ordinal_position": 28,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "StiQty": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MrpValue": {
+          "ordinal_position": 30,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "CostValue": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CGSTAmount": {
+          "ordinal_position": 33,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SGSTAmount": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "IGSTAmount": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "BillCount": {
+          "ordinal_position": 36,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_STO_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_STO_REPORT",
+      "type": "view",
+      "columns": {
+        "SourceBranchAlias": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SourceBranchId": {
+          "ordinal_position": 2,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TargetBranchAlias": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TargetBranchId": {
+          "ordinal_position": 4,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Department": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DepartmentShortName": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Category": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierState": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Color": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Size": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printtypework": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Itemcode": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CostPrice": {
+          "ordinal_position": 24,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "XnId": {
+          "ordinal_position": 25,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnNo": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "XnDt": {
+          "ordinal_position": 27,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "XnDtMonth": {
+          "ordinal_position": 28,
+          "data_type": "nvarchar",
+          "is_nullable": true,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "StoQty": {
+          "ordinal_position": 29,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MrpValue": {
+          "ordinal_position": 30,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 4,
+          "datetime_precision": null
+        },
+        "CostValue": {
+          "ordinal_position": 31,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 7,
+          "datetime_precision": null
+        },
+        "NetAmount": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "CGSTAmount": {
+          "ordinal_position": 33,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SGSTAmount": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "IGSTAmount": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "BillCount": {
+          "ordinal_position": 36,
+          "data_type": "int",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_STOCK_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_STOCK_REPORT",
+      "type": "view",
+      "columns": {
+        "DepartmentShortName": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierCity": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Name": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Name": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 10,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Fabric": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabric": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 15,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Name": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurInvoiceDt": {
+          "ordinal_position": 19,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "StockQty": {
+          "ordinal_position": 20,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
+      "type": "view",
+      "columns": {
+        "DepartmentShortName": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CategoryShortName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubCategoryName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubCategoryShortName": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Colour": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "size": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Index": {
+          "ordinal_position": 8,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "Contrast": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Printypework": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierUID": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchAlias": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "FabricShortName": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubFabricShortName": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Property": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Collection": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Concept": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SubConceptShortName": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Dupatta": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "DupattaShortName": {
+          "ordinal_position": 22,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Silhoutte": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Bottom": {
+          "ordinal_position": 24,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "NECKLINE": {
+          "ordinal_position": 25,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SleeveType": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Look": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "INVENTORYTYPE": {
+          "ordinal_position": 28,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurDate": {
+          "ordinal_position": 29,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurInvNo": {
+          "ordinal_position": 30,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurInvDt": {
+          "ordinal_position": 31,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "PurRefNo1": {
+          "ordinal_position": 32,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurRefNo2": {
+          "ordinal_position": 33,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurChallanNo": {
+          "ordinal_position": 34,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 35,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurchasePrice": {
+          "ordinal_position": 36,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 37,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ItemWSP": {
+          "ordinal_position": 38,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "PurQty": {
+          "ordinal_position": 39,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VW_MB_POWERBI_VENDOR_MASTER": {
+      "schema": "dbo",
+      "name": "VW_MB_POWERBI_VENDOR_MASTER",
+      "type": "view",
+      "columns": {
+        "PartyId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PartyName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PartyAlias": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ExtAddress": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 1532,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BusinessName": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Locality": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "LocalityCity": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 402,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "LocalityGroup": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PinCode": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 10,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "District": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "City": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "State": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Country": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactEmail1": {
+          "ordinal_position": 16,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactEmail2": {
+          "ordinal_position": 17,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactPhone1": {
+          "ordinal_position": 18,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactPhone2": {
+          "ordinal_position": 19,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactWebsite": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CreatedOn": {
+          "ordinal_position": 21,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "CreditDays": {
+          "ordinal_position": 22,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 3,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "CreditLimit": {
+          "ordinal_position": 23,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "DiscountPercentage": {
+          "ordinal_position": 24,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "FreightPercentage": {
+          "ordinal_position": 25,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "GstClassification": {
+          "ordinal_position": 26,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "GstClassificationStr": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 18,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "GstEffectiveDt": {
+          "ordinal_position": 28,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "GstStateCode": {
+          "ordinal_position": 29,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 20,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "IntlGLNNo": {
+          "ordinal_position": 30,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "LocalityId": {
+          "ordinal_position": 31,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "MarginPercentage": {
+          "ordinal_position": 32,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MarkupEXP": {
+          "ordinal_position": 33,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MarkupMRP": {
+          "ordinal_position": 34,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MarkupWSP": {
+          "ordinal_position": 35,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "MSMEBizType": {
+          "ordinal_position": 36,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "MSMEBizTypeStr": {
+          "ordinal_position": 37,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 16,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "MSMECategory": {
+          "ordinal_position": 38,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "MSMECategoryStr": {
+          "ordinal_position": 39,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 13,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "MSMERegDt": {
+          "ordinal_position": 40,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "MSMERegNo": {
+          "ordinal_position": 41,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PartyGroupName": {
+          "ordinal_position": 42,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TaxGSTINNo": {
+          "ordinal_position": 43,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TaxPanNo": {
+          "ordinal_position": 44,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TdsFullName": {
+          "ordinal_position": 45,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 203,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TdsId": {
+          "ordinal_position": 46,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TdsName": {
+          "ordinal_position": 47,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "TdsPercentage": {
+          "ordinal_position": 48,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwAIBranch": {
+      "schema": "dbo",
+      "name": "VwAIBranch",
+      "type": "view",
+      "columns": {
+        "BranchId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Locality": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PinCode": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 10,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "City": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "State": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Country": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwAICustomerDetails": {
+      "schema": "dbo",
+      "name": "VwAICustomerDetails",
+      "type": "view",
+      "columns": {
+        "CustomerId": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 19,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerFirstName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerLastName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerTitle": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactMobile": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ContactEmail": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address2": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Locality": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "City": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "State": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Country": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PinCode": {
+          "ordinal_position": 13,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 10,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerGroupName": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchName": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": true,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BirthdayDt": {
+          "ordinal_position": 16,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "AnniversaryDt": {
+          "ordinal_position": 17,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "CreditLimit": {
+          "ordinal_position": 18,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ActiveStatus": {
+          "ordinal_position": 19,
+          "data_type": "bit",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CreatedOn": {
+          "ordinal_position": 20,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "LastUpdate": {
+          "ordinal_position": 21,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        }
+      }
+    },
+    "dbo.VwAISalesData": {
+      "schema": "dbo",
+      "name": "VwAISalesData",
+      "type": "view",
+      "columns": {
+        "InvoiceDt": {
+          "ordinal_position": 1,
+          "data_type": "date",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 0
+        },
+        "InvoiceId": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvoiceNo": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchId": {
+          "ordinal_position": 4,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "CustomerId": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 19,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SalesPrice": {
+          "ordinal_position": 7,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "Quantity": {
+          "ordinal_position": 8,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SaleAmountBeforeTax": {
+          "ordinal_position": 9,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 15,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "TaxAmount": {
+          "ordinal_position": 10,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 16,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SaleNetAmount": {
+          "ordinal_position": 11,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "SalesPersonId": {
+          "ordinal_position": 12,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwAISalesPerson": {
+      "schema": "dbo",
+      "name": "VwAISalesPerson",
+      "type": "view",
+      "columns": {
+        "SalesPersonId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SalesPersonName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SalesPersonShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 30,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwAIStockData": {
+      "schema": "dbo",
+      "name": "VwAIStockData",
+      "type": "view",
+      "columns": {
+        "ItemId": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "BranchId": {
+          "ordinal_position": 2,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 3,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "StockQty": {
+          "ordinal_position": 3,
+          "data_type": "numeric",
+          "is_nullable": true,
+          "character_maximum_length": null,
+          "numeric_precision": 38,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwAISupplier": {
+      "schema": "dbo",
+      "name": "VwAISupplier",
+      "type": "view",
+      "columns": {
+        "PurPartyId": {
+          "ordinal_position": 1,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PartyName": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ShortName": {
+          "ordinal_position": 3,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PartyAlias": {
+          "ordinal_position": 4,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Address": {
+          "ordinal_position": 5,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Locality": {
+          "ordinal_position": 6,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PinCode": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 10,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "City": {
+          "ordinal_position": 8,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "State": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Country": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 200,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    },
+    "dbo.VwMstItems": {
+      "schema": "dbo",
+      "name": "VwMstItems",
+      "type": "view",
+      "columns": {
+        "Itemcode": {
+          "ordinal_position": 1,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemId": {
+          "ordinal_position": 2,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ItemMRP": {
+          "ordinal_position": 3,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ItemWSP": {
+          "ordinal_position": 4,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "ItemEXP": {
+          "ordinal_position": 5,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 2,
+          "datetime_precision": null
+        },
+        "PurchasePrice": {
+          "ordinal_position": 6,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 12,
+          "numeric_scale": 5,
+          "datetime_precision": null
+        },
+        "SKU": {
+          "ordinal_position": 7,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleId": {
+          "ordinal_position": 8,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleNo": {
+          "ordinal_position": 9,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Description": {
+          "ordinal_position": 10,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ExtDescription": {
+          "ordinal_position": 11,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 500,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ArticleShortName": {
+          "ordinal_position": 12,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "UomId": {
+          "ordinal_position": 13,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "UomName": {
+          "ordinal_position": 14,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 20,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "GstUQC": {
+          "ordinal_position": 15,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "UomType": {
+          "ordinal_position": 16,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "CodingType": {
+          "ordinal_position": 17,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 1,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "ArticleStockType": {
+          "ordinal_position": 18,
+          "data_type": "numeric",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 1,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "InvDepartmentId": {
+          "ordinal_position": 19,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvDepartmentName": {
+          "ordinal_position": 20,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvDepartmentShortName": {
+          "ordinal_position": 21,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryId": {
+          "ordinal_position": 22,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryName": {
+          "ordinal_position": 23,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvCategoryShortName": {
+          "ordinal_position": 24,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvSubCategoryId": {
+          "ordinal_position": 25,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvSubCategoryName": {
+          "ordinal_position": 26,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "InvSubCategoryShortName": {
+          "ordinal_position": 27,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Id": {
+          "ordinal_position": 28,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1Name": {
+          "ordinal_position": 29,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para1ShortName": {
+          "ordinal_position": 30,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Id": {
+          "ordinal_position": 31,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2Name": {
+          "ordinal_position": 32,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para2ShortName": {
+          "ordinal_position": 33,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Id": {
+          "ordinal_position": 34,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3Name": {
+          "ordinal_position": 35,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para3ShortName": {
+          "ordinal_position": 36,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Id": {
+          "ordinal_position": 37,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4Name": {
+          "ordinal_position": 38,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "Para4ShortName": {
+          "ordinal_position": 39,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "ExtCategoryName": {
+          "ordinal_position": 40,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 306,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurPartyId": {
+          "ordinal_position": 41,
+          "data_type": "char",
+          "is_nullable": false,
+          "character_maximum_length": 15,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierName": {
+          "ordinal_position": 42,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 150,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierShortName": {
+          "ordinal_position": 43,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "SupplierAlias": {
+          "ordinal_position": 44,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 100,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "GstClassification": {
+          "ordinal_position": 45,
+          "data_type": "int",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": 10,
+          "numeric_scale": 0,
+          "datetime_precision": null
+        },
+        "HSNCode": {
+          "ordinal_position": 46,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurInvoiceDt": {
+          "ordinal_position": 47,
+          "data_type": "datetime",
+          "is_nullable": false,
+          "character_maximum_length": null,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": 3
+        },
+        "PurInvoiceNo": {
+          "ordinal_position": 48,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 50,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        },
+        "PurchaseId": {
+          "ordinal_position": 49,
+          "data_type": "varchar",
+          "is_nullable": false,
+          "character_maximum_length": 40,
+          "numeric_precision": null,
+          "numeric_scale": null,
+          "datetime_precision": null
+        }
+      }
+    }
+  }
+}
