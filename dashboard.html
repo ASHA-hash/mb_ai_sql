@@ -2557,6 +2557,7 @@ function SalesPeriodPanel({ auth }) {
   const [period,        setPeriod]      = useState('mtd');
   const [loading,       setLoading]     = useState(false);
   const [rows,          setRows]        = useState(null);     // flat dataset rows (kept for KPI stats)
+  const [periodMeta,    setPeriodMeta]  = useState(null);     // server period window (source of truth)
   const [kpiTotal,      setKpiTotal]    = useState(0);
   const [kpiTxCount,    setKpiTxCount]  = useState(0);
   const [trendAiRows,   setTrendAiRows]  = useState(null);   // AI trend rows (daily or monthly)
@@ -2596,67 +2597,45 @@ function SalesPeriodPanel({ auth }) {
     return keys.find(k => /invoicedt|date|dt|day|created/i.test(k)) || null;
   }, [rows]);
 
-  /* Helper: call AI query, return data array or [] on failure */
-  function aiQ(question) {
-    return apiFetch('/api/query/adaptive', {
-      method: 'POST',
-      body: { question, tableHint: 'dbo.VwAISalesData' },
-      token: auth.token,
-    }).then(resp => Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [])
-      .catch(() => []);
-  }
-
-  /* ── Load ALL data: trend AI + branch AI + dept AI + cat AI ── */
+  /* Home Sales panel should use deterministic analytics API, not AI-generated SQL. */
   async function loadAll(p) {
     if (!salesDataset) return;
     const activePeriod = p || period;
     setLoading(true); setError('');
     setKpiTotal(0); setKpiTxCount(0);
+    setPeriodMeta(null);
     setRows(null); setTrendAiRows(null); setBranchAiRows(null); setDeptAiRows(null); setCatAiRows(null);
     const { from, to } = getPeriodRange(activePeriod);
     try {
-      // Flat dataset — for KPI summary stats only (no date filter needed)
+      // Flat dataset retained only as fallback shape source.
       const params = new URLSearchParams({ limit: '2000', from, to });
       const flatPromise = apiFetch(
         `/api/dataset/${encodeURIComponent(salesDataset.key)}?${params}`,
         { token: auth.token }
       ).then(d => Array.isArray(d) ? d : []).catch(() => []);
+      const dashboardPromise = apiFetch('/api/analytics/dashboard', {
+        method: 'POST',
+        token: auth.token,
+        body: { period: activePeriod, dataset: 'sales', compact: true },
+      }).catch(() => null);
 
-      // Trend AI query — daily for MTD, monthly for QTD/YTD/6M, none for Today
-      const useMonthlyTrend = ['qtd', 'ytd', '6m'].includes(activePeriod);
-      const trendKey = activePeriod === 'today' ? null : (useMonthlyTrend ? 'trend_monthly' : 'trend_daily');
-      const trendPromise = trendKey
-        ? aiQ(buildAIGroupQuestion(trendKey, from, to))
-        : Promise.resolve([]);
-
-      // Full-period KPI aggregate (not affected by flat dataset 2k row cap)
-      const kpiPromise = aiQ(buildAIGroupQuestion('kpi_total', from, to));
-
-      // Branch AI query (BranchAlias via JOIN with VwMstBranchEntry)
-      const branchPromise = aiQ(buildAIGroupQuestion('branch', from, to));
-
-      // Dept AI query
-      const deptPromise = aiQ(buildAIGroupQuestion('dept', from, to));
-
-      // Cat AI query
-      const catPromise = aiQ(buildAIGroupQuestion('cat', from, to));
-
-      const [flatData, trendData, branchData, deptData, catData, kpiData] =
-        await Promise.all([flatPromise, trendPromise, branchPromise, deptPromise, catPromise, kpiPromise]);
-
+      const [flatData, dash] = await Promise.all([flatPromise, dashboardPromise]);
       setRows(flatData);
-      setTrendAiRows(trendData);
-      setBranchAiRows(branchData);
-      setDeptAiRows(deptData);
-      setCatAiRows(catData);
-      const kpiRow = Array.isArray(kpiData) && kpiData.length ? kpiData[0] : null;
-      if (kpiRow) {
-        const keys = Object.keys(kpiRow);
-        const totalKey = keys.find(k => /totalsales|saleamount|salenetamount|netsales|revenue|amount/i.test(k));
-        const txKey = keys.find(k => /transactioncount|txcount|rowcount|count/i.test(k));
-        setKpiTotal(parseFloat(totalKey ? kpiRow[totalKey] : 0) || 0);
-        setKpiTxCount(parseFloat(txKey ? kpiRow[txKey] : 0) || 0);
+
+      if (!dash || !dash.kpi || !dash.widgets) {
+        throw new Error('analytics_dashboard_unavailable');
       }
+
+      const k = dash.kpi || {};
+      const pMeta = dash.period || null;
+      const w = dash.widgets || {};
+      setPeriodMeta(pMeta);
+      setKpiTotal(parseFloat(k.totalSales) || 0);
+      setKpiTxCount(parseInt(String(k.txnCount), 10) || 0);
+      setTrendAiRows(w.byTrend && Array.isArray(w.byTrend.rows) ? w.byTrend.rows : []);
+      setBranchAiRows(w.byBranch && Array.isArray(w.byBranch.rows) ? w.byBranch.rows : []);
+      setDeptAiRows(w.byDepartment && Array.isArray(w.byDepartment.rows) ? w.byDepartment.rows : []);
+      setCatAiRows(w.byCategory && Array.isArray(w.byCategory.rows) ? w.byCategory.rows : []);
     } catch(e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -2668,10 +2647,12 @@ function SalesPeriodPanel({ auth }) {
   /* Total from flat rows */
   const total = kpiTotal;
 
-  const periodLabel = PERIODS.find(p => p.key === period)?.label || period;
-  const { from, to } = getPeriodRange(period);
+  const periodLabel = PERIODS.find(p => p.key === period)?.label || String(period || '').toUpperCase();
+  const fallbackRange = getPeriodRange(period);
+  const from = (periodMeta && periodMeta.from) || fallbackRange.from;
+  const to = (periodMeta && periodMeta.to) || fallbackRange.to;
   const txCount = kpiTxCount ? kpiTxCount.toLocaleString() + ' transactions' : '';
-  const displayValueCol = valueCol || 'SaleNetAmount';
+  const displayValueCol = 'SaleNetAmount';
 
   /* Pill style helper */
   const pill = (active) => ({
@@ -2682,9 +2663,8 @@ function SalesPeriodPanel({ auth }) {
     boxShadow: active ? '0 2px 8px rgba(99,102,241,.3)' : 'none',
   });
 
-  /* Build chart rows for branch — prefer AI rows (BranchAlias), fall back to flat data */
+  /* Build chart rows for branch from analytics dashboard rows. */
   const branchChartRows = useMemo(() => {
-    // Prefer AI JOIN result (has BranchAlias)
     if (branchAiRows?.length) {
       const labelCol = pickAILabelCol(branchAiRows, 'branch');
       const valCol   = pickAIValueCol(branchAiRows);
@@ -2695,7 +2675,7 @@ function SalesPeriodPanel({ auth }) {
         .slice(0, 30)
         .map(r => ({ label: r.label, SaleNetAmount: r._v }));
     }
-    // Fallback: flat dataset with BranchId
+    // Flat fallback if dashboard payload is temporarily unavailable.
     if (!rows?.length || !valueCol) return [];
     const branchOpt = GROUP_OPTIONS.find(o => o.key === 'branch');
     const col = resolveGroupCol(rows, branchOpt);
@@ -2703,7 +2683,7 @@ function SalesPeriodPanel({ auth }) {
     return aggregateBy(rows, col, valueCol).slice(0, 30).map(r => ({ label: r.label, [valueCol]: r.value }));
   }, [branchAiRows, rows, valueCol]);
 
-  /* Trend chart rows — prefer AI time-series query, fallback to flat dataset aggregation */
+  /* Trend chart rows from analytics dashboard byTrend rows. */
   const trendChartRows = useMemo(() => {
     if (trendAiRows?.length) {
       const keys = Object.keys(trendAiRows[0]);
@@ -2724,7 +2704,7 @@ function SalesPeriodPanel({ auth }) {
         });
     }
 
-    // Fallback path: derive trend from flat rows if AI trend returns empty
+    // Flat fallback path if dashboard trend is unavailable.
     if (!rows?.length || !valueCol || !dateCol) return [];
     const base = (period === 'mtd')
       ? aggregateByDate(rows, dateCol, valueCol)
@@ -2732,7 +2712,7 @@ function SalesPeriodPanel({ auth }) {
     return base.map(r => ({ label: r.label, TotalSales: parseFloat(r.value) || 0 }));
   }, [trendAiRows, rows, valueCol, dateCol, period]);
 
-  /* Build AI chart rows for dept */
+  /* Build department chart rows from analytics dashboard rows. */
   const deptChartRows = useMemo(() => {
     if (!deptAiRows?.length) return [];
     const labelCol = pickAILabelCol(deptAiRows, 'dept');
@@ -2745,7 +2725,7 @@ function SalesPeriodPanel({ auth }) {
       .map(r => ({ label: r.label, SaleNetAmount: r._v }));
   }, [deptAiRows]);
 
-  /* Build AI chart rows for cat */
+  /* Build category chart rows from analytics dashboard rows. */
   const catChartRows = useMemo(() => {
     if (!catAiRows?.length) return [];
     const labelCol = pickAILabelCol(catAiRows, 'cat');
@@ -2768,17 +2748,14 @@ function SalesPeriodPanel({ auth }) {
           <h3 className="font-bold text-base" style={{color:'var(--text-strong)'}}>📈 Sales Analytics</h3>
           <p className="text-xs mt-0.5" style={{color:'var(--text-muted)'}}>
             {from} → {to}{txCount ? ` · ${txCount}` : ''}
-            <span style={{color:'var(--brand)', marginLeft:6, fontWeight:600}}>✨ AI</span>
           </p>
         </div>
-        {total > 0 && (
-          <div style={{textAlign:'right'}}>
-            <div className="font-extrabold text-xl" style={{color:'var(--brand)'}}>
-              {fmtRupee(total)}
-            </div>
-            <div className="text-xs" style={{color:'var(--text-muted)'}}>{periodLabel} — {displayValueCol}</div>
+        <div style={{textAlign:'right'}}>
+          <div className="font-extrabold text-xl" style={{color:'var(--brand)'}}>
+            {fmtRupee(total)}
           </div>
-        )}
+          <div className="text-xs" style={{color:'var(--text-muted)'}}>{periodLabel} — {displayValueCol}</div>
+        </div>
       </div>
 
       {/* Period tabs */}
