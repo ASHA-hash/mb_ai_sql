@@ -124,6 +124,10 @@ function verifyPassword(password, stored) {
   );
 }
 
+
+
+
+
 /**
  * Check password for a user entry.  Falls back to ADMIN_DEFAULT_PASSWORD
  * env var when the user has no passwordHash (first-run setup).
