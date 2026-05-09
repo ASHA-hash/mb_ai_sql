@@ -40,7 +40,13 @@
       "email": "ashakarthikeyan24@gmail.com",
       "role": "admin",
       "name": "Admin",
-      "passwordHash": ""
+      "passwordHash": "123456789"
+    },
+    {
+      "email": "manoj.kumar@mbindia.net",
+      "role": "admin",
+      "name": "Admin",
+      "passwordHash": "123456789"
     },
     {
       "email": "karthikeyanasha24@gmail.com",

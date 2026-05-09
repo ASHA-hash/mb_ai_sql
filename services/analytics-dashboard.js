@@ -39,6 +39,15 @@ function sanitizeTableName(raw) {
   return s;
 }
 
+/**
+ * Returns " WITH (NOLOCK)" when ANALYTICS_NOLOCK=1 is set.
+ * Reduces lock contention on large views; safe for analytics (read-only, dirty reads OK).
+ * Set ANALYTICS_NOLOCK=1 in .env if queries are timing out due to lock waits.
+ */
+function nolock() {
+  return String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
+}
+
 /** Pre-summarized daily grain (SaleDate × branch × dept × category); uses SUM(LineCount) instead of COUNT(*). */
 function rollupLineGrainConfig() {
   const rollupDaily = sanitizeTableName(process.env.ANALYTICS_ROLLUP_DAILY_TABLE || "");
@@ -129,20 +138,22 @@ async function loadDashboardWidgetsPayload(pool, params) {
     ? `CAST(SUM(ISNULL([${rollupGrain.lineCountCol}], 0)) AS BIGINT)`
     : "COUNT(*)";
 
+  const nl = nolock();
+
   const kpiSql = `
     SELECT
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS total_sales,
       ${rowCntAgg} AS txn_count,
       COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
       CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
-    FROM ${table}${whereSql}`;
+    FROM ${table}${nl}${whereSql}`;
 
   const branchSql = `
     SELECT TOP (${topN})
       CAST([${dims.branch}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.branch}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -151,7 +162,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       CAST([${dims.dept}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.dept}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -160,7 +171,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       CAST([${dims.cat}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.cat}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -318,6 +329,8 @@ async function loadDashboardPayload(pool, params, tier = "full") {
     ? `CAST(SUM(ISNULL([${rollupGrain.lineCountCol}], 0)) AS BIGINT)`
     : "COUNT(*)";
 
+  const nl = nolock();
+
   const wmCol = sanitizeColumnName(process.env.SALES_ANALYTICS_WATERMARK_COLUMN || "");
   const wmSelect = wmCol
     ? `, CAST(MAX(CAST([${wmCol}] AS DATETIME2)) AS varchar(40)) AS source_watermark`
@@ -330,14 +343,14 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
       CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
       ${wmSelect}
-    FROM ${table}${whereSql}`;
+    FROM ${table}${nl}${whereSql}`;
 
   const branchSql = `
     SELECT TOP (${topN})
       CAST([${dims.branch}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.branch}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -346,7 +359,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       CAST([${dims.dept}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.dept}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -355,7 +368,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       CAST([${dims.cat}] AS NVARCHAR(500)) AS label,
       CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
       ${rowCntAgg} AS row_cnt
-    FROM ${table}${whereSql}
+    FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.cat}] AS NVARCHAR(500))
     ORDER BY metric_value DESC`;
 
@@ -366,7 +379,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
         CONVERT(varchar(10), CAST([${dateCol}] AS DATE), 23) AS period_label,
         CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
         ${rowCntAgg} AS txn_count
-      FROM ${table}${trendWhereSql}
+      FROM ${table}${nl}${trendWhereSql}
       GROUP BY CAST([${dateCol}] AS DATE)
       ORDER BY period_label`;
   } else {
@@ -375,7 +388,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
         CONCAT(YEAR(CAST([${dateCol}] AS DATE)), '-', RIGHT('0' + CAST(MONTH(CAST([${dateCol}] AS DATE)) AS varchar(2)), 2)) AS period_label,
         CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
         ${rowCntAgg} AS txn_count
-      FROM ${table}${trendWhereSql}
+      FROM ${table}${nl}${trendWhereSql}
       GROUP BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))
       ORDER BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))`;
   }

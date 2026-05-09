@@ -461,9 +461,154 @@
   /* The existing kpi-card gradients still look great — just add a subtle inner border in dark mode */
   :root[data-theme="dark"] .kpi-card { box-shadow: 0 8px 24px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.06); }
 
+  /* Database Explorer — schema table (readable in dark + light) */
+  .explorer-object-head {
+    transition: background-color .15s ease;
+  }
+  .explorer-object-head:hover {
+    background: var(--bg-hover) !important;
+  }
+  .explorer-schema-panel {
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-surface-2);
+    padding: 12px 14px 14px;
+  }
+  .explorer-schema-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-surface);
+  }
+  table.explorer-schema-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 12px;
+  }
+  .explorer-schema-table col.explorer-col-name { width: 46%; }
+  .explorer-schema-table col.explorer-col-type { width: 38%; }
+  .explorer-schema-table col.explorer-col-null { width: 16%; }
+  .explorer-schema-table thead th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-muted);
+    background: var(--bg-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .explorer-schema-table tbody td {
+    padding: 6px 12px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-soft);
+    word-break: break-word;
+  }
+  .explorer-schema-table tbody tr:last-child td { border-bottom: none; }
+  .explorer-schema-table td.explorer-cell-name {
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .explorer-schema-table tbody tr:nth-child(even) td {
+    background: var(--bg-zebra);
+  }
+  .explorer-schema-table tbody tr:hover td {
+    background: var(--bg-hover) !important;
+  }
+  .explorer-type-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.25;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :root[data-theme="dark"] .explorer-type-pill.is-num {
+    background: rgba(52, 211, 153, 0.14);
+    color: #6ee7b7;
+    border-color: rgba(52, 211, 153, 0.25);
+  }
+  :root[data-theme="light"] .explorer-type-pill.is-num {
+    background: #d1fae5;
+    color: #047857;
+    border-color: #a7f3d0;
+  }
+  :root[data-theme="dark"] .explorer-type-pill.is-date {
+    background: rgba(96, 165, 250, 0.14);
+    color: #93c5fd;
+    border-color: rgba(96, 165, 250, 0.28);
+  }
+  :root[data-theme="light"] .explorer-type-pill.is-date {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+  :root[data-theme="dark"] .explorer-type-pill.is-text {
+    background: rgba(148, 163, 184, 0.12);
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.22);
+  }
+  :root[data-theme="light"] .explorer-type-pill.is-text {
+    background: #f1f5f9;
+    color: #334155;
+    border-color: #cbd5e1;
+  }
+  :root[data-theme="dark"] .explorer-type-pill.is-other {
+    background: rgba(167, 139, 250, 0.14);
+    color: #d8b4fe;
+    border-color: rgba(167, 139, 250, 0.28);
+  }
+  :root[data-theme="light"] .explorer-type-pill.is-other {
+    background: #ede9fe;
+    color: #5b21b6;
+    border-color: #c4b5fd;
+  }
+  .explorer-null-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  :root[data-theme="dark"] .explorer-null-pill.is-req {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fcd34d;
+    border: 1px solid rgba(251, 191, 36, 0.28);
+  }
+  :root[data-theme="light"] .explorer-null-pill.is-req {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+  }
+  :root[data-theme="dark"] .explorer-null-pill.is-opt {
+    background: rgba(156, 163, 175, 0.12);
+    color: #d1d5db;
+    border: 1px solid rgba(156, 163, 175, 0.22);
+  }
+  :root[data-theme="light"] .explorer-null-pill.is-opt {
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #d1d5db;
+  }
+
   /* Polish: smoother global transitions for theme swap */
   .card, .chart-wrapper, .input-base, .btn-primary, .btn-ghost, .chip, .data-table th, .data-table td,
-  .quick-action-card, .ds-card, .stat-card-enhanced, header.app-header { transition: background-color .22s ease, color .22s ease, border-color .22s ease, box-shadow .22s ease; }
+  .quick-action-card, .ds-card, .stat-card-enhanced, header.app-header,
+  .explorer-schema-table th, .explorer-schema-table td { transition: background-color .22s ease, color .22s ease, border-color .22s ease, box-shadow .22s ease; }
 </style>
 <script>tailwind.config = {theme:{extend:{colors:{brand:'#6366f1',brandDark:'#4f46e5'}}}}</script>
 </head>
@@ -1258,6 +1403,7 @@ function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, bar
 
   const series = valueCols.map((k, i) => {
     const yIdx = (!horizontal && dualAxis) ? (isCountKey(k) ? 1 : 0) : 0;
+    const isMoneyCol = isSaleValueKey(k);
     return {
       name: k,
       type: 'bar',
@@ -1273,6 +1419,22 @@ function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, bar
           ],
         },
         borderRadius: horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0],
+      },
+      label: {
+        show: true,
+        position: horizontal ? 'right' : 'top',
+        fontSize: 10,
+        fontWeight: 600,
+        color: t.text,
+        formatter: (params) => {
+          const v = typeof params.value === 'number' ? params.value : parseFloat(params.value);
+          if (!Number.isFinite(v) || v === 0) return '';
+          if (isMoneyCol) {
+            if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + 'K L';
+            return v.toFixed(2) + ' L';
+          }
+          return formatCompactNumber(v);
+        },
       },
       emphasis: { focus: 'series', itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,.25)' } },
       barMinHeight: horizontal ? undefined : 3,
@@ -1317,12 +1479,42 @@ function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, bar
     splitLine: { show: false },
   } : null;
 
+  /* Build a bar-chart-specific tooltip that shows "₹ X.XX L" for money columns */
+  const barTooltipFormatter = (params) => {
+    const arr = Array.isArray(params) ? params : [params];
+    if (!arr.length) return '';
+    const rawLabel = arr[0]?.axisValueLabel ?? arr[0]?.axisValue ?? arr[0]?.name ?? '';
+    const label = fmtLabel(rawLabel);
+    const lines = [`<b>${label}</b>`];
+    for (const p of arr) {
+      if (!p) continue;
+      const v = Array.isArray(p.value) ? p.value[p.value.length - 1] : p.value;
+      const key = p.seriesName || '';
+      const isMoney = isSaleValueKey(key);
+      const numV = typeof v === 'number' ? v : parseFloat(v);
+      const fmt = isMoney
+        ? '₹ ' + (Number.isFinite(numV) ? numV.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—') + ' L'
+        : formatCompactNumber(numV);
+      lines.push(`${p.marker || ''}${key}: <b>${fmt}</b>`);
+    }
+    return lines.join('<br/>');
+  };
+
   const opt = {
     ...baseEchartsOption(t, {
       grid: horizontal
         ? { top: 30, right: 28, bottom: showZoom ? 56 : 16, left: 16 }
         : { top: 36, right: dualAxis ? 70 : 18, bottom: showZoom ? 64 : 32, left: 16 },
     }),
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: t.tipBg,
+      borderColor: 'transparent',
+      textStyle: { color: t.tipFg, fontSize: 12 },
+      axisPointer: { type: 'shadow', shadowStyle: { color: t.isDark ? 'rgba(96,165,250,0.10)' : 'rgba(37,99,235,0.06)' } },
+      extraCssText: 'box-shadow:0 8px 24px rgba(0,0,0,.18); border-radius:10px; padding:8px 12px;',
+      formatter: barTooltipFormatter,
+    },
     xAxis: horizontal ? valAxisLeft : catAxis,
     yAxis: horizontal ? catAxis : (dualAxis ? [valAxisLeft, valAxisRight] : valAxisLeft),
     series,
@@ -1534,7 +1726,13 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
       type: 'category',
       data: labelsExt,
       boundaryGap: false,
-      axisLabel: { color: t.text, fontSize: 11, hideOverlap: true, formatter: v => fmtLabel(v) },
+      /* interval:0 = show exactly the ticks that match data points; prevents phantom repeated labels
+         for single-day or small-range views */
+      axisLabel: {
+        color: t.text, fontSize: 11, hideOverlap: true,
+        interval: labelsExt.length <= 4 ? 0 : 'auto',
+        formatter: v => fmtLabel(v),
+      },
       axisLine: { lineStyle: { color: t.gridStrong } },
       axisTick: { show: false },
     },
@@ -1607,6 +1805,10 @@ const PIE_MAX_SLICES = 9; // show this many named slices; everything else → "O
 
 function PieChart({ rows, labelCol, valueCol, title }) {
   const [, force] = useState(0);
+  const [othersModal, setOthersModal] = useState(false);
+  const [othersItems, setOthersItems] = useState([]);
+  const [othersSearch, setOthersSearch] = useState('');
+
   useEffect(() => {
     const fn = () => force(x => x + 1);
     window.addEventListener('erp-theme-change', fn);
@@ -1614,6 +1816,7 @@ function PieChart({ rows, labelCol, valueCol, title }) {
   }, []);
 
   const t = buildEchartsTheme();
+  const isMoney = isSaleValueKey(valueCol);
 
   // Build full data array sorted by value descending
   const allData = rows
@@ -1625,16 +1828,26 @@ function PieChart({ rows, labelCol, valueCol, title }) {
 
   // Group small slices into "Others" when there are too many
   let data = allData;
+  let restItems = [];
   let othersCount = 0;
   let othersNote = null;
   if (allData.length > PIE_MAX_SLICES) {
     const top = allData.slice(0, PIE_MAX_SLICES);
-    const rest = allData.slice(PIE_MAX_SLICES);
-    othersCount = rest.length;
-    const othersVal = rest.reduce((s, d) => s + d.value, 0);
+    restItems = allData.slice(PIE_MAX_SLICES);
+    othersCount = restItems.length;
+    const othersVal = restItems.reduce((s, d) => s + d.value, 0);
     data = [...top, { name: `Others (${othersCount} more)`, value: othersVal, itemStyle: { color: t.textMuted } }];
-    othersNote = `Showing top ${PIE_MAX_SLICES} of ${allData.length} items — ${othersCount} grouped as "Others"`;
+    othersNote = `Showing top ${PIE_MAX_SLICES} of ${allData.length} items — click "Others" slice to see full list`;
   }
+
+  // Handle click on pie slices — open modal when "Others" slice is clicked
+  const handlePieClick = (params) => {
+    if (params && params.name && params.name.startsWith('Others (')) {
+      setOthersItems(restItems);
+      setOthersSearch('');
+      setOthersModal(true);
+    }
+  };
 
   const opt = {
     ...baseEchartsOption(t, { trigger: 'item', grid: { top: 0, right: 0, bottom: 0, left: 0 } }),
@@ -1656,18 +1869,250 @@ function PieChart({ rows, labelCol, valueCol, title }) {
     }],
   };
 
+  const filteredItems = othersSearch.trim()
+    ? othersItems.filter(it => it.name.toLowerCase().includes(othersSearch.trim().toLowerCase()))
+    : othersItems;
+
+  const totalOthersVal = othersItems.reduce((s, d) => s + d.value, 0);
+
   return (
     <div className="fade-in">
       {title && <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{color:'var(--text-muted)'}}>{title}</p>}
-      <EChart option={opt} height={320} />
+      <EChart option={opt} height={320} onPointClick={handlePieClick} />
       {othersNote && (
-        <p style={{
-          fontSize:11, color:'var(--text-muted)', marginTop:6, textAlign:'center',
-          background:'var(--bg-muted,#f1f5f9)', borderRadius:6, padding:'4px 10px',
-          fontStyle:'italic',
-        }}>
-          ℹ️ {othersNote}. Switch to <strong>Bar</strong> chart to see all items.
+        <p
+          onClick={() => { setOthersItems(restItems); setOthersSearch(''); setOthersModal(true); }}
+          style={{
+            fontSize:11, color:'var(--brand,#2563eb)', marginTop:6, textAlign:'center',
+            background:'var(--bg-muted,#f1f5f9)', borderRadius:6, padding:'4px 10px',
+            fontStyle:'italic', cursor:'pointer', textDecoration:'underline dotted',
+          }}
+          title="Click to view all grouped items"
+        >
+          ℹ️ {othersNote}
         </p>
+      )}
+
+      {/* ── Others Modal ── */}
+      {othersModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setOthersModal(false); }}
+          style={{
+            position:'fixed', inset:0, zIndex:9999,
+            background:'rgba(0,0,0,0.65)',
+            backdropFilter:'blur(6px)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            padding:16,
+          }}
+        >
+          <div style={{
+            background:'var(--card,#fff)',
+            borderRadius:20,
+            width:'100%', maxWidth:540,
+            maxHeight:'82vh',
+            display:'flex', flexDirection:'column',
+            boxShadow:'0 32px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)',
+            overflow:'hidden',
+          }}>
+            {/* ── Gradient Header ── */}
+            <div style={{
+              background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 50%,#9333ea 100%)',
+              padding:'18px 20px 16px',
+              position:'relative', overflow:'hidden',
+            }}>
+              {/* Decorative blobs */}
+              <div style={{position:'absolute',top:-30,right:-20,width:100,height:100,borderRadius:'50%',background:'rgba(255,255,255,0.07)'}}/>
+              <div style={{position:'absolute',bottom:-40,left:-10,width:80,height:80,borderRadius:'50%',background:'rgba(255,255,255,0.05)'}}/>
+
+              <div style={{position:'relative', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12}}>
+                <div>
+                  <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                    <span style={{fontSize:18}}>📋</span>
+                    <h2 style={{margin:0, fontSize:17, fontWeight:800, color:'#fff', letterSpacing:'-0.3px'}}>
+                      Others — {othersItems.length} items
+                    </h2>
+                  </div>
+                  <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                    <span style={{
+                      fontSize:12, fontWeight:700, color:'rgba(255,255,255,0.85)',
+                      background:'rgba(255,255,255,0.15)', padding:'3px 10px', borderRadius:12,
+                    }}>
+                      Total: {isMoney ? '₹ ' + totalOthersVal.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' L' : totalOthersVal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    </span>
+                    <span style={{
+                      fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.6)',
+                    }}>
+                      Ranked #{PIE_MAX_SLICES + 1} – #{PIE_MAX_SLICES + othersItems.length}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setOthersModal(false)}
+                  style={{
+                    border:'1.5px solid rgba(255,255,255,0.3)',
+                    background:'rgba(255,255,255,0.12)',
+                    borderRadius:10, width:34, height:34,
+                    fontSize:18, cursor:'pointer', color:'rgba(255,255,255,0.85)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    flexShrink:0, lineHeight:1, transition:'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.22)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; }}
+                >×</button>
+              </div>
+            </div>
+
+            {/* ── Search box ── */}
+            <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border,#e2e8f0)'}}>
+              <div style={{position:'relative'}}>
+                <span style={{
+                  position:'absolute', left:11, top:'50%', transform:'translateY(-50%)',
+                  fontSize:14, color:'var(--text-muted,#94a3b8)', pointerEvents:'none',
+                }}>🔍</span>
+                <input
+                  type="text"
+                  value={othersSearch}
+                  onChange={e => setOthersSearch(e.target.value)}
+                  placeholder={`Search ${othersItems.length} items…`}
+                  autoFocus
+                  style={{
+                    width:'100%', boxSizing:'border-box',
+                    border:'1.5px solid var(--border,#e2e8f0)',
+                    borderRadius:12, padding:'8px 12px 8px 34px',
+                    fontSize:13, outline:'none',
+                    color:'var(--text)', background:'var(--bg,#fff)',
+                    transition:'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#6366f1'; }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border,#e2e8f0)'; }}
+                />
+                {othersSearch && (
+                  <button
+                    onClick={() => setOthersSearch('')}
+                    style={{
+                      position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
+                      border:'none', background:'var(--bg-muted,#f1f5f9)', borderRadius:'50%',
+                      width:20, height:20, fontSize:12, cursor:'pointer',
+                      color:'var(--text-muted)', display:'flex', alignItems:'center', justifyContent:'center',
+                    }}
+                  >✕</button>
+                )}
+              </div>
+              {othersSearch && (
+                <p style={{margin:'6px 0 0', fontSize:11, color:'var(--text-muted)', fontWeight:500}}>
+                  {filteredItems.length} of {othersItems.length} match
+                </p>
+              )}
+            </div>
+
+            {/* ── Table ── */}
+            <div style={{overflowY:'auto', flex:1}}>
+              {filteredItems.length === 0 ? (
+                <div style={{padding:32, textAlign:'center'}}>
+                  <p style={{fontSize:28, marginBottom:8}}>🔍</p>
+                  <p style={{fontSize:13, color:'var(--text-muted)', fontWeight:600}}>No items match "{othersSearch}"</p>
+                </div>
+              ) : (
+                <table style={{width:'100%', borderCollapse:'collapse'}}>
+                  <thead>
+                    <tr style={{background:'var(--bg-muted,#f8fafc)', borderBottom:'2px solid var(--border,#e2e8f0)'}}>
+                      <th style={{textAlign:'center', padding:'8px 10px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:36}}>#</th>
+                      <th style={{textAlign:'left', padding:'8px 12px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em'}}>Name</th>
+                      <th style={{textAlign:'right', padding:'8px 12px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap'}}>Value</th>
+                      <th style={{textAlign:'right', padding:'8px 14px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:90}}>Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item, idx) => {
+                      const sharePct = totalOthersVal > 0 ? (item.value / totalOthersVal) * 100 : 0;
+                      const shareStr = sharePct.toFixed(1);
+                      const valFmt = isMoney
+                        ? '₹ ' + item.value.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' L'
+                        : item.value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                      const rankColor = sharePct >= 7 ? '#4f46e5' : sharePct >= 4 ? '#059669' : 'var(--text-muted)';
+                      return (
+                        <tr key={idx} style={{
+                          borderBottom:'1px solid var(--border,#f1f5f9)',
+                          transition:'background 0.1s',
+                        }}
+                          onMouseEnter={e => { e.currentTarget.style.background='var(--bg-muted,rgba(99,102,241,0.04))'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background='transparent'; }}
+                        >
+                          {/* Rank */}
+                          <td style={{padding:'9px 10px', textAlign:'center'}}>
+                            <span style={{
+                              fontSize:11, fontWeight:700,
+                              color:'var(--text-muted)',
+                              background:'var(--bg-muted,#f1f5f9)',
+                              borderRadius:6, padding:'2px 6px',
+                              display:'inline-block', minWidth:24, textAlign:'center',
+                            }}>
+                              {PIE_MAX_SLICES + idx + 1}
+                            </span>
+                          </td>
+                          {/* Name */}
+                          <td style={{padding:'9px 12px'}}>
+                            <span style={{fontSize:13, fontWeight:600, color:'var(--text)'}}>{item.name}</span>
+                          </td>
+                          {/* Value */}
+                          <td style={{padding:'9px 12px', textAlign:'right'}}>
+                            <span style={{
+                              fontSize:13, fontWeight:700, color:'var(--text-strong)',
+                              fontVariantNumeric:'tabular-nums',
+                            }}>{valFmt}</span>
+                          </td>
+                          {/* Share % with mini bar */}
+                          <td style={{padding:'9px 14px 9px 8px', textAlign:'right'}}>
+                            <div style={{display:'flex', alignItems:'center', gap:6, justifyContent:'flex-end'}}>
+                              {/* Mini bar */}
+                              <div style={{
+                                width:40, height:5, borderRadius:3,
+                                background:'var(--border,#e2e8f0)', overflow:'hidden', flexShrink:0,
+                              }}>
+                                <div style={{
+                                  width:`${Math.min(sharePct * 2, 100)}%`, height:'100%', borderRadius:3,
+                                  background: sharePct >= 7 ? 'linear-gradient(90deg,#6366f1,#8b5cf6)' : sharePct >= 4 ? '#10b981' : '#94a3b8',
+                                  transition:'width 0.3s ease',
+                                }}/>
+                              </div>
+                              <span style={{
+                                fontSize:12, fontWeight:800, color: rankColor,
+                                minWidth:36, textAlign:'right',
+                              }}>{shareStr}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div style={{
+              padding:'10px 16px', borderTop:'1px solid var(--border,#e2e8f0)',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              background:'var(--bg-muted,#f8fafc)',
+            }}>
+              <p style={{margin:0, fontSize:11, color:'var(--text-muted)', fontWeight:500}}>
+                Tap any row to highlight · shares are within "Others" group
+              </p>
+              <button
+                onClick={() => setOthersModal(false)}
+                style={{
+                  border:'1px solid var(--border)', background:'var(--card,#fff)',
+                  borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700,
+                  cursor:'pointer', color:'var(--text)', transition:'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#6366f1'; e.currentTarget.style.color='#6366f1'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--text)'; }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1858,33 +2303,62 @@ function SmartChart({ rows, label, chartPolicyHint, columnTags }) {
 /* ═══════════════════════════════════════════════
    ChartWithToggle — Bar/Line/Pie toggle, default=line
 ═══════════════════════════════════════════════ */
-function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon }) {
-  const [chartType, setChartType] = useState('line');
+function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon, defaultChartType = 'bar' }) {
+  const [chartType, setChartType] = useState(defaultChartType);
   const pieCol = valueCol || (valueCols && valueCols[0]);
   if (!rows || rows.length === 0) return null;
+
+  const allCols = valueCols || (valueCol ? [valueCol] : []);
+  const primaryCol = allCols[0];
+
+  // Compute per-column totals and top performer for the summary strip
+  const colSummaries = allCols.map(col => {
+    const vals = rows.map(r => parseFloat(r[col]) || 0).filter(v => v > 0);
+    const total = vals.reduce((s, v) => s + v, 0);
+    const isMoney = isSaleValueKey(col);
+    const fmt = isMoney
+      ? (total >= 1000 ? (total / 1000).toFixed(1) + 'K L' : total.toFixed(2) + ' L')
+      : total >= 1e6 ? (total / 1e6).toFixed(1) + 'M' : total >= 1000 ? (total / 1000).toFixed(1) + 'K' : total.toFixed(0);
+    return { col, total, fmt, isMoney };
+  }).filter(s => s.total > 0);
+
+  // Top performer for primary col
+  const topPerf = (() => {
+    if (!primaryCol || rows.length < 2) return null;
+    const sorted = [...rows].sort((a, b) => (parseFloat(b[primaryCol]) || 0) - (parseFloat(a[primaryCol]) || 0));
+    const top = sorted[0];
+    const topVal = parseFloat(top[primaryCol]) || 0;
+    const total = colSummaries.find(s => s.col === primaryCol)?.total || 0;
+    const pct = total > 0 ? ((topVal / total) * 100).toFixed(1) : '0';
+    return { label: String(top[labelCol] || '—'), pct };
+  })();
+
   const typeOpts = [
     { v: 'bar',  icon: '📊', label: 'Bar'  },
     { v: 'line', icon: '📈', label: 'Line' },
     { v: 'pie',  icon: '🥧', label: 'Pie'  },
   ];
+
+  // Legend dots for multi-series
+  const seriesColors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+
   return (
-    <div style={{ marginBottom: 28 }}>
-      {/* header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10, flexWrap:'wrap', gap:8 }}>
+    <div style={{ marginBottom: 24 }}>
+      {/* ── Title row ── */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8, flexWrap:'wrap', gap:8 }}>
         <p style={{ fontWeight:700, fontSize:14, color:'var(--text-strong)', margin:0 }}>
           {icon && <span style={{ marginRight:6 }}>{icon}</span>}{title}
         </p>
-        {/* Chart type toggle pill */}
         <div style={{
-          display:'flex', gap:2, background:'var(--surface2)', borderRadius:10,
+          display:'flex', gap:2, background:'var(--surface2,rgba(100,116,139,0.08))', borderRadius:10,
           padding:3, border:'1px solid var(--border)',
         }}>
           {typeOpts.map(({ v, icon: ic, label }) => (
             <button key={v} onClick={() => setChartType(v)} style={{
               padding:'4px 12px', borderRadius:8, border:'none', cursor:'pointer',
               fontSize:11, fontWeight:700, display:'flex', alignItems:'center', gap:4,
-              background: chartType === v ? 'var(--brand)' : 'transparent',
-              color:      chartType === v ? '#fff' : 'var(--text-muted)',
+              background: chartType === v ? 'var(--brand,#6366f1)' : 'transparent',
+              color:      chartType === v ? '#fff' : 'var(--text-muted,#64748b)',
               transition: 'all 0.15s ease',
               boxShadow:  chartType === v ? '0 1px 6px rgba(124,58,237,.4)' : 'none',
             }}>
@@ -1893,32 +2367,78 @@ function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon }) {
           ))}
         </div>
       </div>
-      {/* chart */}
+
+      {/* ── Data summary strip ── */}
+      {colSummaries.length > 0 && (
+        <div style={{
+          display:'flex', alignItems:'center', flexWrap:'wrap', gap:6, marginBottom:10,
+        }}>
+          {/* Per-column totals */}
+          {colSummaries.map((s, i) => (
+            <div key={s.col} style={{
+              display:'inline-flex', alignItems:'center', gap:5,
+              padding:'4px 10px', borderRadius:20,
+              background: i === 0 ? 'rgba(99,102,241,0.1)' : 'var(--bg-muted,rgba(100,116,139,0.08))',
+              border: i === 0 ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
+            }}>
+              <span style={{
+                width:8, height:8, borderRadius:'50%', flexShrink:0,
+                background: seriesColors[i % seriesColors.length],
+                boxShadow: `0 0 4px ${seriesColors[i % seriesColors.length]}88`,
+              }}/>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted,#64748b)' }}>
+                {s.col.replace(/([A-Z])/g, ' $1').trim()}
+              </span>
+              <span style={{
+                fontSize:12, fontWeight:800,
+                color: i === 0 ? 'var(--brand,#6366f1)' : 'var(--text-strong)',
+              }}>
+                {s.isMoney ? '₹ ' : ''}{s.fmt}
+              </span>
+            </div>
+          ))}
+
+          {/* Divider */}
+          {topPerf && colSummaries.length > 0 && (
+            <span style={{color:'var(--border)', fontSize:14}}>·</span>
+          )}
+
+          {/* Items count */}
+          <div style={{
+            display:'inline-flex', alignItems:'center', gap:4,
+            padding:'4px 10px', borderRadius:20,
+            background:'var(--bg-muted,rgba(100,116,139,0.08))',
+            border:'1px solid var(--border)',
+          }}>
+            <span style={{ fontSize:11, color:'var(--text-muted,#64748b)', fontWeight:600 }}>
+              {rows.length} {rows.length === 1 ? 'item' : 'items'}
+            </span>
+          </div>
+
+          {/* Top performer */}
+          {topPerf && (
+            <div style={{
+              display:'inline-flex', alignItems:'center', gap:5,
+              padding:'4px 10px', borderRadius:20,
+              background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)',
+            }}>
+              <span style={{ fontSize:11 }}>🏆</span>
+              <span style={{ fontSize:11, color:'var(--text-muted,#64748b)', fontWeight:600 }}>Top:</span>
+              <span style={{ fontSize:11, fontWeight:800, color:'#059669', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {topPerf.label}
+              </span>
+              <span style={{ fontSize:11, color:'var(--text-muted,#64748b)', fontWeight:600 }}>
+                {topPerf.pct}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Chart ── */}
       {chartType === 'bar'  && <BarChart  rows={rows} labelCol={labelCol} valueCols={valueCols || [valueCol]} title={title} barOrientation="vertical" />}
       {chartType === 'line' && <LineChart rows={rows} labelCol={labelCol} valueCols={valueCols || [valueCol]} title={title} />}
       {chartType === 'pie'  && <PieChart  rows={rows} labelCol={labelCol} valueCol={pieCol}                   title={title} />}
-      {/* top performer */}
-      {rows.length > 0 && (() => {
-        const sorted = [...rows].sort((a,b) => {
-          const valA = parseFloat(a[valueCols?.[0] || valueCol] || 0);
-          const valB = parseFloat(b[valueCols?.[0] || valueCol] || 0);
-          return valB - valA;
-        });
-        const top = sorted[0];
-        const topLabel = top[labelCol] || '—';
-        const topVal = parseFloat(top[valueCols?.[0] || valueCol] || 0);
-        const total = rows.reduce((s,r) => s + parseFloat(r[valueCols?.[0] || valueCol] || 0), 0);
-        const pct = total > 0 ? ((topVal / total) * 100).toFixed(1) : '0';
-        return (
-          <div style={{
-            marginTop:8, padding:'6px 12px', borderRadius:8,
-            background:'var(--brand-soft)', border:'1px solid var(--brand-light)',
-            fontSize:11, color:'var(--text-strong)', fontWeight:600, display:'inline-flex', alignItems:'center', gap:6,
-          }}>
-            🏆 Top: <strong style={{color:'var(--brand)'}}>{topLabel}</strong> — {pct}% of total
-          </div>
-        );
-      })()}
     </div>
   );
 }
@@ -2561,6 +3081,8 @@ function SalesPeriodPanel({ auth }) {
   const [kpiTotal,      setKpiTotal]    = useState(0);
   const [kpiTxCount,    setKpiTxCount]  = useState(0);
   const [trendAiRows,   setTrendAiRows]  = useState(null);   // AI trend rows (daily or monthly)
+  const [pyTrendRows,   setPyTrendRows]  = useState(null);   // prior-year trend rows (YoY comparison)
+  const [pyKpiTotal,    setPyKpiTotal]   = useState(null);   // prior-year total sales
   const [branchAiRows,  setBranchAiRows] = useState(null);   // AI branch rows (BranchAlias)
   const [deptAiRows,    setDeptAiRows]  = useState(null);    // AI dept rows
   const [catAiRows,     setCatAiRows]   = useState(null);    // AI cat rows
@@ -2597,13 +3119,22 @@ function SalesPeriodPanel({ auth }) {
     return keys.find(k => /invoicedt|date|dt|day|created/i.test(k)) || null;
   }, [rows]);
 
+  /* Compute prior-year date range by subtracting 1 year from dd.mm.yyyy strings */
+  function priorYearRange(fromDMY, toDMY) {
+    function shiftYear(dmy, delta) {
+      const [d, m, y] = dmy.split('.');
+      return `${d}.${m}.${parseInt(y, 10) + delta}`;
+    }
+    return { from: shiftYear(fromDMY, -1), to: shiftYear(toDMY, -1) };
+  }
+
   /* Home Sales panel should use deterministic analytics API, not AI-generated SQL. */
   async function loadAll(p) {
     if (!salesDataset) return;
     const activePeriod = p || period;
     setLoading(true); setError('');
     setKpiTotal(0); setKpiTxCount(0);
-    setPeriodMeta(null);
+    setPeriodMeta(null); setPyTrendRows(null); setPyKpiTotal(null);
     setRows(null); setTrendAiRows(null); setBranchAiRows(null); setDeptAiRows(null); setCatAiRows(null);
     const { from, to } = getPeriodRange(activePeriod);
     try {
@@ -2619,7 +3150,16 @@ function SalesPeriodPanel({ auth }) {
         body: { period: activePeriod, dataset: 'sales', compact: true },
       }).catch(() => null);
 
-      const [flatData, dash] = await Promise.all([flatPromise, dashboardPromise]);
+      /* Prior-year comparison — fire in parallel, silent failure is OK */
+      const { from: pyFrom, to: pyTo } = priorYearRange(from, to);
+      const pyPromise = activePeriod !== 'today'
+        ? apiFetch('/api/analytics/dashboard', {
+            method: 'POST', token: auth.token,
+            body: { customFrom: pyFrom, customTo: pyTo, dataset: 'sales', loadPhase: 'critical', compact: true },
+          }).catch(() => null)
+        : Promise.resolve(null);
+
+      const [flatData, dash, pyDash] = await Promise.all([flatPromise, dashboardPromise, pyPromise]);
       setRows(flatData);
 
       if (!dash || !dash.kpi || !dash.widgets) {
@@ -2636,6 +3176,13 @@ function SalesPeriodPanel({ auth }) {
       setBranchAiRows(w.byBranch && Array.isArray(w.byBranch.rows) ? w.byBranch.rows : []);
       setDeptAiRows(w.byDepartment && Array.isArray(w.byDepartment.rows) ? w.byDepartment.rows : []);
       setCatAiRows(w.byCategory && Array.isArray(w.byCategory.rows) ? w.byCategory.rows : []);
+
+      /* Prior year */
+      if (pyDash && pyDash.kpi) {
+        setPyKpiTotal(parseFloat(pyDash.kpi.totalSales) || 0);
+        const pw = pyDash.widgets || {};
+        setPyTrendRows(pw.byTrend && Array.isArray(pw.byTrend.rows) ? pw.byTrend.rows : []);
+      }
     } catch(e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -2683,34 +3230,57 @@ function SalesPeriodPanel({ auth }) {
     return aggregateBy(rows, col, valueCol).slice(0, 30).map(r => ({ label: r.label, [valueCol]: r.value }));
   }, [branchAiRows, rows, valueCol]);
 
-  /* Trend chart rows from analytics dashboard byTrend rows. */
+  /* Helper: extract metric_value from an analytics byTrend rows array */
+  function extractTrendSeries(aiRows) {
+    if (!aiRows?.length) return [];
+    const keys = Object.keys(aiRows[0]);
+    const labelCol = keys.find(k => /period_label|date|month|day/i.test(k)) || keys[0];
+    const salesCol = keys.find(k => /metric_value|totalsales|saleamount|salenetamount|netsales/i.test(k))
+                  || keys.find(k => /sales|amount|net|revenue/i.test(k) && !/count/i.test(k))
+                  || keys[1];
+    if (!labelCol || !salesCol) return [];
+    return aiRows.filter(r => r[labelCol] != null).map(r => ({
+      label: String(r[labelCol]),
+      value: parseFloat(r[salesCol]) || 0,
+    }));
+  }
+
+  /* Trend chart rows from analytics dashboard byTrend rows.
+     Includes prior-year series for YoY comparison. */
   const trendChartRows = useMemo(() => {
+    let currentRows = [];
     if (trendAiRows?.length) {
       const keys = Object.keys(trendAiRows[0]);
-      const labelCol = keys.find(k => /date|month|day|saledate|salemonth/i.test(k)) || keys[0];
-      const salesCol = keys.find(k => /totalsales|saleamount|salenetamount|netsales/i.test(k))
+      const labelCol = keys.find(k => /period_label|date|month|day|saledate|salemonth/i.test(k)) || keys[0];
+      const salesCol = keys.find(k => /metric_value|totalsales|saleamount|salenetamount|netsales/i.test(k))
                     || keys.find(k => /sales|amount|net|revenue/i.test(k) && !/count/i.test(k))
                     || keys[1];
-      const invoiceCountCol = keys.find(k => /invoicecount|invoice.*count/i.test(k));
-      const customerCountCol = keys.find(k => /customercount|customer.*count/i.test(k));
-      if (!labelCol || !salesCol) return [];
-      return trendAiRows
-        .filter(r => r[labelCol] != null)
-        .map(r => {
+      const invoiceCountCol = keys.find(k => /invoicecount|invoice.*count|txn_count/i.test(k));
+      if (labelCol && salesCol) {
+        currentRows = trendAiRows.filter(r => r[labelCol] != null).map(r => {
           const row = { label: String(r[labelCol]), TotalSales: parseFloat(r[salesCol]) || 0 };
           if (invoiceCountCol) row.InvoiceCount = parseFloat(r[invoiceCountCol]) || 0;
-          if (customerCountCol) row.CustomerCount = parseFloat(r[customerCountCol]) || 0;
           return row;
         });
+      }
+    } else if (rows?.length && valueCol && dateCol) {
+      // Flat fallback
+      const base = (period === 'mtd')
+        ? aggregateByDate(rows, dateCol, valueCol)
+        : aggregateByMonth(rows, dateCol, valueCol);
+      currentRows = base.map(r => ({ label: r.label, TotalSales: parseFloat(r.value) || 0 }));
     }
 
-    // Flat fallback path if dashboard trend is unavailable.
-    if (!rows?.length || !valueCol || !dateCol) return [];
-    const base = (period === 'mtd')
-      ? aggregateByDate(rows, dateCol, valueCol)
-      : aggregateByMonth(rows, dateCol, valueCol);
-    return base.map(r => ({ label: r.label, TotalSales: parseFloat(r.value) || 0 }));
-  }, [trendAiRows, rows, valueCol, dateCol, period]);
+    /* Merge prior-year sales as "PY_TotalSales" — align by relative index (period position) */
+    if (pyTrendRows?.length && currentRows.length) {
+      const pySeries = extractTrendSeries(pyTrendRows);
+      return currentRows.map((r, i) => ({
+        ...r,
+        PY_TotalSales: pySeries[i] ? pySeries[i].value : null,
+      }));
+    }
+    return currentRows;
+  }, [trendAiRows, pyTrendRows, rows, valueCol, dateCol, period]);
 
   /* Build department chart rows from analytics dashboard rows. */
   const deptChartRows = useMemo(() => {
@@ -2754,7 +3324,13 @@ function SalesPeriodPanel({ auth }) {
           <div className="font-extrabold text-xl" style={{color:'var(--brand)'}}>
             {fmtRupee(total)}
           </div>
-          <div className="text-xs" style={{color:'var(--text-muted)'}}>{periodLabel} — {displayValueCol}</div>
+          <div className="text-xs" style={{color:'var(--text-muted)'}}>{periodLabel} — ₹ Net Sales</div>
+          {pyKpiTotal !== null && pyKpiTotal > 0 && (
+            <div className="text-xs mt-0.5" style={{color: total >= pyKpiTotal ? '#10b981' : '#ef4444', fontWeight:600}}>
+              {total >= pyKpiTotal ? '▲' : '▼'} vs LY: {fmtRupee(pyKpiTotal)}
+              {' '}({total > 0 ? ((((total - pyKpiTotal) / pyKpiTotal) * 100)).toFixed(1) : '0'}%)
+            </div>
+          )}
         </div>
       </div>
 
@@ -2776,9 +3352,31 @@ function SalesPeriodPanel({ auth }) {
         </div>
       )}
 
+      {/* Today's KPI summary box (shown instead of trend chart for 'today') */}
+      {!loading && period === 'today' && kpiTotal > 0 && (
+        <div style={{
+          display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px,1fr))', gap:12, marginTop:4
+        }}>
+          {[
+            { icon:'💰', val: fmtRupee(kpiTotal),      lbl: "Today's Sales",       color:'#6366f1' },
+            { icon:'🧾', val: kpiTxCount.toLocaleString('en-IN'), lbl: 'Bills (Invoices)',    color:'#10b981' },
+            ...(pyKpiTotal ? [{ icon:'📅', val: fmtRupee(pyKpiTotal), lbl: 'Last Year (Same Day)', color:'#f59e0b' }] : []),
+          ].map((t,i) => (
+            <div key={i} style={{
+              background:'var(--surface2)', borderRadius:12, padding:'12px 14px',
+              border:'1px solid var(--border)', textAlign:'center',
+            }}>
+              <div style={{fontSize:20}}>{t.icon}</div>
+              <div style={{fontSize:18, fontWeight:800, color:t.color, marginTop:4}}>{t.val}</div>
+              <div style={{fontSize:11, color:'var(--text-muted)', marginTop:2}}>{t.lbl}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!loading && hasAnyData && (
         <div className="space-y-5">
-          {/* Trend chart — show for non-Today periods (dual series: TotalSales + InvoiceCount) */}
+          {/* Trend chart — show for non-Today periods (dual series: TotalSales + PY_TotalSales + InvoiceCount) */}
           {period !== 'today' && trendChartRows.length > 0 && (
             <div className="chart-wrapper">
               <ChartWithToggle
@@ -2786,19 +3384,20 @@ function SalesPeriodPanel({ auth }) {
                 labelCol="label"
                 valueCols={[
                   'TotalSales',
+                  ...(trendChartRows[0]?.PY_TotalSales != null ? ['PY_TotalSales'] : []),
                   ...(trendChartRows[0]?.InvoiceCount != null ? ['InvoiceCount'] : []),
-                  ...(trendChartRows[0]?.CustomerCount != null ? ['CustomerCount'] : []),
                 ]}
                 title={
                   period === 'mtd'
-                    ? 'MTD Date-wise — Sales & Invoice Count'
+                    ? '📅 MTD — Day-wise Sales (Current vs Last Year)'
                     : period === 'qtd'
-                      ? 'QTD Month-wise — Sales & Invoice Count'
+                      ? '📅 QTD — Month-wise Sales (Current vs Last Year)'
                       : period === 'ytd'
-                        ? 'YTD Month-wise — Sales & Invoice Count'
-                        : 'Last 6 Months — Month-wise Sales & Invoice Count'
+                        ? '📅 YTD — Month-wise Sales (Current vs Last Year)'
+                        : '📅 Last 6M — Month-wise Sales (Current vs Last Year)'
                 }
-                icon="📅"
+                icon=""
+                defaultChartType="bar"
               />
             </div>
           )}
@@ -2855,6 +3454,9 @@ function SalesPeriodPanel({ auth }) {
 
 function HomePanel({ auth, onNavigate }) {
   const [connectorConfig, setConnectorConfig] = useState(null);
+  const [todayKpi,  setTodayKpi]  = useState(null);   // {totalSales, txnCount, activeDays}
+  const [mtdKpi,    setMtdKpi]    = useState(null);
+  const [kpiErr,    setKpiErr]    = useState(false);
   const history = useMemo(() => { try { return JSON.parse(localStorage.getItem("erp_ai_history") || "[]"); } catch { return []; } }, []);
   const { mobile } = useBreakpoint();
 
@@ -2865,9 +3467,24 @@ function HomePanel({ auth, onNavigate }) {
   }, [auth.token]);
 
   const features = auth.features || [];
-  const datasetCount = connectorConfig?.datasets?.length ?? "—";
-  const queryCount   = history.length;
-  const featureCount = features.length;
+
+  /* Fetch today + MTD KPIs for the home page summary tiles — independent calls so one
+     failure/timeout doesn't block the other tile from rendering.                      */
+  useEffect(() => {
+    if (!features.includes('data')) return;
+    const mkOpts = (period) => ({
+      method: 'POST', token: auth.token,
+      body: { period, dataset: 'sales', compact: true },
+    });
+    // Today — independent; fall back to zeros so tile shows "₹ 0 L" not "…"
+    apiFetch('/api/analytics/dashboard', mkOpts('today'))
+      .then(d => setTodayKpi(d && d.kpi ? d.kpi : { totalSales: 0, txnCount: 0 }))
+      .catch(() => setTodayKpi({ totalSales: 0, txnCount: 0 }));
+    // MTD — independent; fall back gracefully
+    apiFetch('/api/analytics/dashboard', mkOpts('mtd'))
+      .then(d => { if (d && d.kpi) setMtdKpi(d.kpi); else setMtdKpi({ totalSales: 0, txnCount: 0 }); })
+      .catch(() => setMtdKpi({ totalSales: 0, txnCount: 0 }));
+  }, [auth.token]);
 
   const now = new Date();
   const hour = now.getHours();
@@ -2880,8 +3497,8 @@ function HomePanel({ auth, onNavigate }) {
       key: "ai", color: "#6366f1", bg: "rgba(99,102,241,0.09)", border: "rgba(99,102,241,0.2)"
     },
     features.includes("data") && {
-      icon: "📊", label: "Load Dataset", desc: "Browse, filter, and export any of your registered ERP datasets",
-      key: "data", color: "#10b981", bg: "rgba(16,185,129,0.09)", border: "rgba(16,185,129,0.2)"
+      icon: "📊", label: "Analytics", desc: "Period-wise sales breakdowns, branch/dept/category charts and trend analysis",
+      key: "analytics", color: "#10b981", bg: "rgba(16,185,129,0.09)", border: "rgba(16,185,129,0.2)"
     },
     features.includes("explorer") && {
       icon: "🔍", label: "DB Explorer", desc: "Inspect database tables and views, preview data, ask AI about any table",
@@ -2893,10 +3510,25 @@ function HomePanel({ auth, onNavigate }) {
     },
   ].filter(Boolean);
 
-  const kpiCards = [
-    { val: datasetCount, lbl: "Datasets Available", icon: "🗄", grad: "kpi-blue"    },
-    { val: queryCount,   lbl: "AI Queries Made",    icon: "✨", grad: "kpi-emerald" },
-    { val: featureCount, lbl: "Features Enabled",   icon: "⚡", grad: "kpi-amber"   },
+  /* Business KPI cards — sales-first when data feature is on */
+  const kpiCards = features.includes('data') ? [
+    {
+      val: todayKpi ? fmtRupee(todayKpi.totalSales || 0) : (kpiErr ? '—' : '…'),
+      lbl: "Today's Sales", icon: "💰", grad: "kpi-blue",
+    },
+    {
+      val: todayKpi ? (todayKpi.txnCount || 0).toLocaleString('en-IN') : (kpiErr ? '—' : '…'),
+      lbl: "Bills Today", icon: "🧾", grad: "kpi-emerald",
+    },
+    {
+      val: mtdKpi ? fmtRupee(mtdKpi.totalSales || 0) : (kpiErr ? '—' : '…'),
+      lbl: "MTD Sales", icon: "📈", grad: "kpi-amber",
+    },
+    { val: auth.role?.toUpperCase() || "—", lbl: "Your Role", icon: "🎖", grad: "kpi-rose" },
+  ] : [
+    { val: connectorConfig?.datasets?.length ?? "—", lbl: "Datasets Available", icon: "🗄", grad: "kpi-blue" },
+    { val: history.length, lbl: "AI Queries Made", icon: "✨", grad: "kpi-emerald" },
+    { val: features.length, lbl: "Features Enabled", icon: "⚡", grad: "kpi-amber" },
     { val: auth.role?.toUpperCase() || "—", lbl: "Your Role", icon: "🎖", grad: "kpi-rose" },
   ];
 
@@ -2922,9 +3554,9 @@ function HomePanel({ auth, onNavigate }) {
             <span style={{fontSize:12,opacity:.55}}>{auth.email}</span>
           </div>
           <div style={{display:"flex",gap:mobile?16:32,marginTop:20,paddingTop:18,borderTop:"1px solid rgba(255,255,255,0.12)",flexWrap:"wrap"}}>
-            {kpiCards.slice(0,3).map((k,i) => (
+            {kpiCards.slice(0, 3).map((k, i) => (
               <div key={i}>
-                <div style={{fontSize:mobile?22:28,fontWeight:800,lineHeight:1}}>{k.val}</div>
+                <div style={{fontSize:mobile?18:22,fontWeight:800,lineHeight:1}}>{k.icon} {k.val}</div>
                 <div style={{fontSize:11,opacity:.6,marginTop:3}}>{k.lbl}</div>
               </div>
             ))}
@@ -3197,12 +3829,12 @@ function ExplorerPanel({ auth, onAskAI }) {
     } catch { setPreview({ key, data: [], loading: false }); }
   }
 
-  function dtBadge(dt) {
+  function dtBadgeClass(dt) {
     const d = (dt || "").toLowerCase();
-    if (/int|decimal|numeric|float|real|money/.test(d)) return "bg-emerald-100 text-emerald-700";
-    if (/date|time/.test(d)) return "bg-blue-100 text-blue-700";
-    if (/char|varchar|text/.test(d)) return "bg-slate-100 text-slate-600";
-    return "bg-purple-100 text-purple-700";
+    if (/int|decimal|numeric|float|real|money/.test(d)) return "explorer-type-pill is-num";
+    if (/date|time/.test(d)) return "explorer-type-pill is-date";
+    if (/char|varchar|text|nchar|nvarchar/.test(d)) return "explorer-type-pill is-text";
+    return "explorer-type-pill is-other";
   }
 
   const q = filter.toLowerCase();
@@ -3236,13 +3868,13 @@ function ExplorerPanel({ auth, onAskAI }) {
           {typeFilter !== "tables" && views.length > 0 && (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">📋 Views ({views.length})</p>
-              {views.map(v => <ObjectCard key={`${v.schema}.${v.name}`} obj={v} type="VIEW" auth={auth} cols={cols} expanded={expanded} onToggle={toggleObj} onPreview={loadPreview} onAskAI={onAskAI} dtBadge={dtBadge} />)}
+              {views.map(v => <ObjectCard key={`${v.schema}.${v.name}`} obj={v} type="VIEW" auth={auth} cols={cols} expanded={expanded} onToggle={toggleObj} onPreview={loadPreview} onAskAI={onAskAI} dtBadgeClass={dtBadgeClass} />)}
             </div>
           )}
           {typeFilter !== "views" && tables.length > 0 && (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🗂 Tables ({tables.length})</p>
-              {tables.map(t => <ObjectCard key={`${t.schema}.${t.name}`} obj={t} type="TABLE" auth={auth} cols={cols} expanded={expanded} onToggle={toggleObj} onPreview={loadPreview} onAskAI={onAskAI} dtBadge={dtBadge} />)}
+              {tables.map(t => <ObjectCard key={`${t.schema}.${t.name}`} obj={t} type="TABLE" auth={auth} cols={cols} expanded={expanded} onToggle={toggleObj} onPreview={loadPreview} onAskAI={onAskAI} dtBadgeClass={dtBadgeClass} />)}
             </div>
           )}
         </div>
@@ -3269,38 +3901,60 @@ function ExplorerPanel({ auth, onAskAI }) {
   );
 }
 
-function ObjectCard({ obj, type, auth, cols, expanded, onToggle, onPreview, onAskAI, dtBadge }) {
+function ObjectCard({ obj, type, auth, cols, expanded, onToggle, onPreview, onAskAI, dtBadgeClass }) {
   const key = `${obj.schema}.${obj.name}`;
   const isOpen = !!expanded[key];
   const colList = cols[key];
   return (
     <div className="card mb-2 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50/70 transition-colors" onClick={() => onToggle(obj.schema, obj.name)}>
+      <div className="explorer-object-head flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => onToggle(obj.schema, obj.name)}>
         <span className="text-base">{type === "VIEW" ? "📋" : "🗂"}</span>
-        <span className="flex-1 font-medium text-sm text-slate-700">{obj.name}</span>
-        <span className={`badge ${type === "VIEW" ? "bg-blue-100 text-blue-600" : "bg-rose-100 text-rose-600"}`}>{type}</span>
-        <span className={`text-slate-400 text-xs transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}>▶</span>
+        <span className="flex-1 font-medium text-sm text-slate-700 min-w-0 truncate" title={obj.name}>{obj.name}</span>
+        <span className={`badge shrink-0 ${type === "VIEW" ? "bg-blue-100 text-blue-600" : "bg-rose-100 text-rose-600"}`}>{type}</span>
+        <span className={`text-slate-500 text-xs transition-transform duration-200 shrink-0 ${isOpen ? "rotate-90" : ""}`}>▶</span>
       </div>
       {isOpen && (
-        <div className="border-t border-slate-100 px-4 py-3 bg-slate-50/50">
+        <div className="explorer-schema-panel">
           {!colList
-            ? <div className="flex items-center gap-2 text-slate-400 text-xs"><Spinner size={12}/>Loading columns…</div>
+            ? <div className="flex items-center gap-2 text-slate-500 text-xs"><Spinner size={12}/>Loading columns…</div>
             : colList.length === 0
-              ? <p className="text-slate-400 text-xs">No columns found.</p>
+              ? <p className="text-slate-500 text-xs">No columns found.</p>
               : (
                 <>
-                  <table className="w-full text-xs mb-3">
-                    <thead><tr className="text-slate-400"><th className="text-left pb-1.5">Column</th><th className="text-left pb-1.5">Type</th><th className="text-left pb-1.5">Nullable</th></tr></thead>
-                    <tbody>
-                      {colList.map(c => (
-                        <tr key={c.column_name} className="border-t border-slate-100">
-                          <td className="py-1.5 font-mono font-medium text-slate-700">{c.column_name}</td>
-                          <td className="py-1.5"><span className={`badge ${dtBadge(c.data_type)}`}>{c.data_type}</span></td>
-                          <td className="py-1.5 text-slate-400">{c.is_nullable === "YES" ? "null" : "not null"}</td>
+                  <div className="explorer-schema-scroll mb-3">
+                    <table className="explorer-schema-table">
+                      <colgroup>
+                        <col className="explorer-col-name" />
+                        <col className="explorer-col-type" />
+                        <col className="explorer-col-null" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>Column</th>
+                          <th>Type</th>
+                          <th>Null</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {colList.map(c => {
+                          const nullable = String(c.is_nullable || "").toUpperCase() === "YES";
+                          return (
+                            <tr key={c.column_name}>
+                              <td className="explorer-cell-name">{c.column_name}</td>
+                              <td>
+                                <span className={dtBadgeClass(c.data_type)} title={c.data_type}>{c.data_type}</span>
+                              </td>
+                              <td>
+                                <span className={`explorer-null-pill ${nullable ? "is-opt" : "is-req"}`}>
+                                  {nullable ? "Optional" : "Required"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   <div className="flex gap-2 flex-wrap">
                     <button onClick={() => onPreview(obj.schema, obj.name)} className="btn-primary text-xs px-3 py-1.5">📥 Preview 15 rows</button>
                     <button onClick={() => onAskAI(`${obj.schema}.${obj.name}`, obj.name)} className="btn-ghost text-xs px-3 py-1.5">✨ Ask AI about this</button>
@@ -3983,10 +4637,7 @@ function AnalyticsPanel({ auth }) {
             </span>
             <span>· computed {data.computedAt && new Date(data.computedAt).toLocaleString()}</span>
             <span>
-              · SSE + 60s backup · checksum {qual && qual.checksumKpi ? qual.checksumKpi : "—"}
-              {qual && qual.compositeFingerprint && (
-                <span> · verify {qual.compositeFingerprint.slice(0, 12)}</span>
-              )}
+              · SSE + 60s backup · Σ {data && data.compositeFingerprint ? data.compositeFingerprint.slice(0, 10) : "—"}
             </span>
           </div>
           {data.period && data.period.fyContextNote && (
@@ -4081,8 +4732,10 @@ function AnalyticsPanel({ auth }) {
             </div>
             <div className="kpi-card kpi-rose">
               <span className="kpi-icon">✓</span>
-              <div className="kpi-val" style={{ fontSize: "18px", marginTop: 8 }}>
-                {(qual && qual.checksumKpi) || "—"}
+              <div className="kpi-val" style={{ fontSize: "13px", marginTop: 8, letterSpacing: "-0.5px", wordBreak: "break-all" }}>
+                {data && data.compositeFingerprint
+                  ? data.compositeFingerprint.slice(0, 10)
+                  : (qual && qual.checksumKpi) || "—"}
               </div>
               <div className="kpi-lbl">Checksum (Σ)</div>
             </div>
@@ -4689,6 +5342,10 @@ function AIQueryPanel({ auth, initialContext }) {
 
       {result && (
         <div className="space-y-4 fade-in">
+
+          {/* ── KPI stat cards — ALWAYS first, regardless of query type ── */}
+          {result.data && result.data.length > 0 && <StatsBar rows={result.data} />}
+
           {result.salesDashboard && (() => {
             const dash = result.salesDashboard;
             const allRows = Array.isArray(result.data) ? result.data : [];
@@ -5086,9 +5743,6 @@ function AIQueryPanel({ auth, initialContext }) {
               )}
             </div>
           )}
-
-          {/* Stats bar */}
-          {result.data && result.data.length > 0 && <StatsBar rows={result.data} />}
 
           {/* Chart — only if data is chartable and contract passed */}
           {result.data && result.data.length > 1 && !result.salesDashboard && result.contractPassed !== false && (
