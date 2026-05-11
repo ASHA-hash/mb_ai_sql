@@ -924,10 +924,23 @@ function formatCompactNumber(n) {
   const x = parseFloat(n);
   if (isNaN(x)) return String(n ?? '');
   const abs = Math.abs(x);
-  if (abs >= 1e7) return (x/1e7).toFixed(2) + ' Cr';
-  if (abs >= 1e5) return (x/1e5).toFixed(2) + ' L';
-  if (abs >= 1e3) return (x/1e3).toFixed(1) + 'K';
+  /* Always show in Lakhs — never convert to Crore (user requirement) */
+  if (abs >= 1e5) return (x / 1e5).toFixed(2) + ' L';
+  if (abs >= 1e3) return (x / 1e3).toFixed(1) + 'K';
   return x % 1 === 0 ? String(x) : x.toFixed(2);
+}
+
+/**
+ * Formatter for chart Y-axes whose values are ALREADY scaled to ₹ Lakhs
+ * (i.e. after scaleSaleValue). Shows compact Lakhs notation: 1578.86 → "1578.9 L",
+ * 15788 → "15.8K L".
+ */
+function fmtLakhsAxis(v) {
+  if (!Number.isFinite(v)) return '';
+  const abs = Math.abs(v);
+  if (abs >= 1000) return (v / 1000).toFixed(1) + 'K L';
+  if (abs >= 1)    return v.toFixed(1) + ' L';
+  return v.toFixed(2) + ' L';
 }
 
 function formatNum(n, key = '') {
@@ -1453,11 +1466,12 @@ function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, bar
     axisTick: { show: false },
     inverse: horizontal,
   };
+  const hasMoneyColBar = valueCols.some(c => isSaleValueKey(c));
   const valAxisLeft = {
     type: 'value',
     name: dualAxis ? '₹ Lakhs' : '',
     nameTextStyle: { color: t.textMuted, fontSize: 10 },
-    axisLabel: { color: t.textMuted, fontSize: 11, formatter: v => formatNum(v) },
+    axisLabel: { color: t.textMuted, fontSize: 11, formatter: hasMoneyColBar ? fmtLakhsAxis : v => formatNum(v) },
     axisLine: { show: false },
     splitLine: { lineStyle: { color: t.grid, type: 'dashed' } },
   };
@@ -1627,7 +1641,15 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
   const moneyColIdx = valueCols.findIndex((k) => isSaleValueKey(k));
   const forecastTargetCol = moneyColIdx >= 0 ? valueCols[moneyColIdx] : valueCols[0];
 
-  const labels = rows.map(r => fmtLabel(String(r[labelCol] ?? '')));
+  /* Deduplicate labels — if the DB returned two rows for the same date,
+     the second occurrence gets "(2)" to prevent a flat repeated X-axis. */
+  const seenLineLabels = new Map();
+  const labels = rows.map(r => {
+    const fmt = fmtLabel(String(r[labelCol] ?? ''));
+    const cnt = (seenLineLabels.get(fmt) || 0) + 1;
+    seenLineLabels.set(fmt, cnt);
+    return cnt > 1 ? `${fmt} (${cnt})` : fmt;
+  });
   const labelsExt = fc
     ? [...labels, ...fc.periodLabels.map((L) => fmtLabel(String(L)))]
     : labels;
@@ -1635,11 +1657,15 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
 
   const nullPad = (arr) => (fc ? [...arr, ...new Array(fN).fill(null)] : arr);
 
+  const hasMoneyColLine = valueCols.some(c => isSaleValueKey(c));
   const series = [];
   valueCols.forEach((k, i) => {
     const color = t.series[i % t.series.length];
     const yIdx = dualAxis ? (isCountKey(k) ? 1 : 0) : 0;
+    const isMoneySeries = isSaleValueKey(k);
     const histData = rows.map(r => scaleSaleValue(r[k], k) || 0);
+    /* Show inline labels when dataset is small enough to be readable (≤ 45 points) */
+    const showLabels = n <= 45 && !fc;
     series.push({
       name: k,
       type: 'line',
@@ -1650,6 +1676,21 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
       sampling: rows.length > 200 ? 'lttb' : undefined,
       lineStyle: { width: 2.4, color, type: yIdx === 1 ? 'dashed' : 'solid' },
       itemStyle: { color, borderColor: t.bg, borderWidth: 2 },
+      label: showLabels ? {
+        show: true,
+        position: 'top',
+        fontSize: 10,
+        fontWeight: 600,
+        color: t.text,
+        formatter: (params) => {
+          const v = typeof params.value === 'number' ? params.value : parseFloat(params.value);
+          if (!Number.isFinite(v) || v === 0) return '';
+          if (isMoneySeries) {
+            return Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K L' : v.toFixed(1) + ' L';
+          }
+          return formatCompactNumber(v);
+        },
+      } : { show: false },
       areaStyle: yIdx === 0 && !fc ? {
         color: {
           type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
@@ -1698,7 +1739,7 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
     type: 'value',
     name: dualAxis ? '₹ Lakhs' : '',
     nameTextStyle: { color: t.textMuted, fontSize: 10 },
-    axisLabel: { color: t.textMuted, fontSize: 11, formatter: v => formatNum(v) },
+    axisLabel: { color: t.textMuted, fontSize: 11, formatter: hasMoneyColLine ? fmtLakhsAxis : v => formatNum(v) },
     axisLine: { show: false },
     splitLine: { lineStyle: { color: t.grid, type: 'dashed' } },
   };
@@ -2935,10 +2976,13 @@ function detectSalesDashboardIntent(question) {
     hasCompareOperator ||
     // Multiple specific dates in one query => must go to deterministic compare path
     hasDatePointSetCompare ||
-    // Explicit column/metric questions: "customer count", "invoice count", "stock"
-    /\b(customer\s+count|invoice\s+count|transaction\s+count|stock|purchase|return)\b/.test(q) ||
-    // Ranking / top-N
+    // Ranking / top-N, or stock/purchase/supplier queries → AI engine
     /\btop\s+\d+\b/.test(q) ||
+    /\b(stock|purchase|return|supplier|vendor|product|item)\b/.test(q) ||
+    // Unique / distinct count → needs COUNT DISTINCT SQL, send to AI engine
+    /\b(unique|distinct)\s+\w/.test(q) ||
+    // Explicit count-metric questions about a specific dimension → AI engine
+    /\b(customer\s+count|invoice\s+count|transaction\s+count)\b/.test(q) ||
     // Specific named locations or values in quotes
     /["'][^"']{2,}["']/.test(q);
 
@@ -3128,6 +3172,14 @@ function SalesPeriodPanel({ auth }) {
     return { from: shiftYear(fromDMY, -1), to: shiftYear(toDMY, -1) };
   }
 
+  /* Convert dd.mm.yyyy → yyyy-mm-dd (ISO) for backend custom period */
+  function dmyToISO(dmy) {
+    const parts = String(dmy || '').split('.');
+    if (parts.length !== 3) return '';
+    const [d, m, y] = parts;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
   /* Home Sales panel should use deterministic analytics API, not AI-generated SQL. */
   async function loadAll(p) {
     if (!salesDataset) return;
@@ -3137,45 +3189,58 @@ function SalesPeriodPanel({ auth }) {
     setPeriodMeta(null); setPyTrendRows(null); setPyKpiTotal(null);
     setRows(null); setTrendAiRows(null); setBranchAiRows(null); setDeptAiRows(null); setCatAiRows(null);
     const { from, to } = getPeriodRange(activePeriod);
+
+    /* Long periods (QTD / YTD / 6M) use the two-phase approach:
+       phase 1 → critical (KPI + trend only, fast)
+       phase 2 → widgets (branch / dept / category, background)
+       This prevents a single massive query from timing out at 120 s and
+       crashing the whole panel with "dashboard_unavailable". */
+    const isLongPeriod = ['qtd', 'ytd', '6m', 'last_180d'].includes(activePeriod);
+
     try {
-      // Flat dataset retained only as fallback shape source.
+      /* ── Phase 1: Critical (KPI + trend) ─────────────────────────── */
       const params = new URLSearchParams({ limit: '2000', from, to });
       const flatPromise = apiFetch(
         `/api/dataset/${encodeURIComponent(salesDataset.key)}?${params}`,
         { token: auth.token }
       ).then(d => Array.isArray(d) ? d : []).catch(() => []);
-      const dashboardPromise = apiFetch('/api/analytics/dashboard', {
-        method: 'POST',
-        token: auth.token,
-        body: { period: activePeriod, dataset: 'sales', compact: true },
-      }).catch(() => null);
 
-      /* Prior-year comparison — fire in parallel, silent failure is OK */
+      /* Prior-year comparison — uses period:'custom' + ISO dates so the backend
+         doesn't silently fall back to MTD (which was the root cause of identical LY/CY). */
       const { from: pyFrom, to: pyTo } = priorYearRange(from, to);
       const pyPromise = activePeriod !== 'today'
         ? apiFetch('/api/analytics/dashboard', {
             method: 'POST', token: auth.token,
-            body: { customFrom: pyFrom, customTo: pyTo, dataset: 'sales', loadPhase: 'critical', compact: true },
+            body: {
+              period: 'custom',
+              custom: { from: dmyToISO(pyFrom), to: dmyToISO(pyTo) },
+              dataset: 'sales', loadPhase: 'critical', compact: true,
+            },
           }).catch(() => null)
         : Promise.resolve(null);
 
-      const [flatData, dash, pyDash] = await Promise.all([flatPromise, dashboardPromise, pyPromise]);
+      const criticalPromise = apiFetch('/api/analytics/dashboard', {
+        method: 'POST',
+        token: auth.token,
+        body: { period: activePeriod, dataset: 'sales', loadPhase: 'critical', compact: true },
+      }).catch(() => null);
+
+      const [flatData, critical, pyDash] = await Promise.all([flatPromise, criticalPromise, pyPromise]);
       setRows(flatData);
 
-      if (!dash || !dash.kpi || !dash.widgets) {
+      if (!critical || !critical.kpi) {
         throw new Error('analytics_dashboard_unavailable');
       }
 
-      const k = dash.kpi || {};
-      const pMeta = dash.period || null;
-      const w = dash.widgets || {};
+      const k = critical.kpi || {};
+      const pMeta = critical.period || null;
       setPeriodMeta(pMeta);
       setKpiTotal(parseFloat(k.totalSales) || 0);
       setKpiTxCount(parseInt(String(k.txnCount), 10) || 0);
-      setTrendAiRows(w.byTrend && Array.isArray(w.byTrend.rows) ? w.byTrend.rows : []);
-      setBranchAiRows(w.byBranch && Array.isArray(w.byBranch.rows) ? w.byBranch.rows : []);
-      setDeptAiRows(w.byDepartment && Array.isArray(w.byDepartment.rows) ? w.byDepartment.rows : []);
-      setCatAiRows(w.byCategory && Array.isArray(w.byCategory.rows) ? w.byCategory.rows : []);
+
+      /* Trend from critical payload */
+      const wCrit = critical.widgets || {};
+      setTrendAiRows(wCrit.byTrend && Array.isArray(wCrit.byTrend.rows) ? wCrit.byTrend.rows : []);
 
       /* Prior year */
       if (pyDash && pyDash.kpi) {
@@ -3183,8 +3248,30 @@ function SalesPeriodPanel({ auth }) {
         const pw = pyDash.widgets || {};
         setPyTrendRows(pw.byTrend && Array.isArray(pw.byTrend.rows) ? pw.byTrend.rows : []);
       }
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
+
+      /* Widgets are now visible with placeholder, can clear loading spinner early */
+      setLoading(false);
+
+      /* ── Phase 2: Widgets (branch / dept / cat) ───────────────────── */
+      /* Fire separately — if this times out, KPIs + trend are already shown */
+      try {
+        const widgets = await apiFetch('/api/analytics/dashboard', {
+          method: 'POST',
+          token: auth.token,
+          body: { period: activePeriod, dataset: 'sales', loadPhase: 'widgets', compact: true },
+        });
+        if (widgets && widgets.widgets) {
+          const w = widgets.widgets;
+          setBranchAiRows(w.byBranch && Array.isArray(w.byBranch.rows) ? w.byBranch.rows : []);
+          setDeptAiRows(w.byDepartment && Array.isArray(w.byDepartment.rows) ? w.byDepartment.rows : []);
+          setCatAiRows(w.byCategory && Array.isArray(w.byCategory.rows) ? w.byCategory.rows : []);
+        }
+      } catch (widgetErr) {
+        /* Widget timeout is non-fatal — KPIs + trend are already displayed */
+        console.warn('[SalesPeriodPanel] widgets phase timed out or failed:', widgetErr.message);
+      }
+
+    } catch(e) { setError(e.message); setLoading(false); }
   }
 
   useEffect(() => { if (salesDataset) loadAll(period); }, [salesDataset]);
@@ -5001,6 +5088,90 @@ function AIQueryPanel({ auth, initialContext }) {
   const [conversation, setConversation] = useState([]);       // [{ role: "user"|"ai", text }]
   const followEndRef = React.useRef(null);
 
+  /* ── SQL Templates: user-saved named queries ─────────────────────────────── */
+  const [sqlTemplates, setSqlTemplates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('erp_sql_templates') || '[]'); } catch { return []; }
+  });
+  const [showTplModal, setShowTplModal] = useState(false);
+  const [tplName,      setTplName]      = useState('');
+  const [tplSql,       setTplSql]       = useState('');
+  const [tplDesc,      setTplDesc]      = useState('');
+  const [tplEditIdx,   setTplEditIdx]   = useState(null); // null = new, number = edit existing
+
+  function saveSqlTemplates(next) {
+    setSqlTemplates(next);
+    try { localStorage.setItem('erp_sql_templates', JSON.stringify(next)); } catch {}
+  }
+
+  function openNewTplModal() {
+    setTplName(''); setTplSql(''); setTplDesc(''); setTplEditIdx(null);
+    setShowTplModal(true);
+  }
+
+  function openEditTplModal(idx) {
+    const t = sqlTemplates[idx];
+    if (!t) return;
+    setTplName(t.name); setTplSql(t.sql); setTplDesc(t.desc || '');
+    setTplEditIdx(idx); setShowTplModal(true);
+  }
+
+  function saveTplModal() {
+    if (!tplName.trim() || !tplSql.trim()) return;
+    const entry = { name: tplName.trim(), sql: tplSql.trim(), desc: tplDesc.trim(), createdAt: Date.now() };
+    let next;
+    if (tplEditIdx !== null) {
+      next = sqlTemplates.map((t, i) => i === tplEditIdx ? entry : t);
+    } else {
+      next = [entry, ...sqlTemplates];
+    }
+    saveSqlTemplates(next);
+    setShowTplModal(false);
+  }
+
+  function deleteTpl(idx) {
+    saveSqlTemplates(sqlTemplates.filter((_, i) => i !== idx));
+  }
+
+  /* Run a saved SQL template as if typed in the AI query box */
+  async function runSqlTemplate(tpl) {
+    setQuestion(tpl.name);
+    setResult(null); setError(''); setConversation([]);
+    setLoading(true);
+    const abortCtl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let _timeoutId;
+    if (abortCtl) {
+      _timeoutId = setTimeout(() => abortCtl.abort(), AI_QUERY_CLIENT_TIMEOUT_MS);
+    }
+    try {
+      const body = { question: tpl.name, rawSql: tpl.sql };
+      if (totals) body.includeTotals = true;
+      const data = await apiFetch('/api/query/adaptive', {
+        method: 'POST', token: auth.token, body,
+        signal: abortCtl ? abortCtl.signal : undefined,
+      });
+      if (data?.clarificationNeeded) { setError(data.clarificationQuestion || 'Needs clarification.'); return; }
+      setResult({ ...data, _question: tpl.name, _ts: Date.now(), _confidence: 'high', _isSqlTemplate: true });
+      addHistory(tpl.name);
+    } catch (err) {
+      setError(err.name === 'AbortError' ? 'Query timed out. Try a narrower date range.' : err.message);
+    } finally {
+      if (_timeoutId) clearTimeout(_timeoutId);
+      setAiProgress(prev => ({ ...prev, pct: 100 }));
+      setLoading(false);
+    }
+  }
+
+  /* Save the current result's SQL as a new template */
+  function saveCurrentSqlAsTemplate() {
+    const sql = result?.sql || result?.generatedSql || '';
+    if (!sql) return;
+    setTplName(result?._question || '');
+    setTplSql(sql);
+    setTplDesc('');
+    setTplEditIdx(null);
+    setShowTplModal(true);
+  }
+
   useEffect(() => { if (initialContext) setContext(initialContext); }, [initialContext?.table]);
 
   useEffect(() => {
@@ -5889,6 +6060,134 @@ function AIQueryPanel({ auth, initialContext }) {
                 Clear conversation
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── SQL Templates section ──────────────────────────────────────── */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">📋 Saved SQL Queries</p>
+          <button
+            type="button"
+            onClick={openNewTplModal}
+            className="btn-ghost text-xs py-1 px-3"
+            title="Create a new named SQL template"
+          >+ New Template</button>
+        </div>
+
+        {sqlTemplates.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">
+            No saved queries yet.{' '}
+            <button type="button" className="text-indigo-500 underline" onClick={openNewTplModal}>
+              Create one
+            </button>{' '}
+            — paste your SQL + give it a name, and it appears here as a one-click chip.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {sqlTemplates.map((tpl, idx) => (
+              <div key={idx} className="flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 overflow-hidden">
+                <button
+                  type="button"
+                  title={tpl.desc || tpl.sql.slice(0, 120)}
+                  onClick={() => runSqlTemplate(tpl)}
+                  style={{
+                    fontSize: 12, fontWeight: 600, color: '#3730a3',
+                    padding: '4px 12px', background: 'transparent', border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {tpl.name.length > 40 ? tpl.name.slice(0, 37) + '…' : tpl.name}
+                </button>
+                <button
+                  type="button"
+                  title="Edit template"
+                  onClick={(e) => { e.stopPropagation(); openEditTplModal(idx); }}
+                  style={{ fontSize: 11, padding: '2px 6px 2px 0', background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1' }}
+                >✏️</button>
+                <button
+                  type="button"
+                  title="Delete template"
+                  onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete template "${tpl.name}"?`)) deleteTpl(idx); }}
+                  style={{ fontSize: 11, padding: '2px 8px 2px 0', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Show "Save current result as template" when SQL is available */}
+        {result && (result.sql || result.generatedSql) && (
+          <button
+            type="button"
+            onClick={saveCurrentSqlAsTemplate}
+            className="mt-3 text-xs text-indigo-600 font-medium underline hover:text-indigo-800"
+          >
+            💾 Save this query's SQL as a template
+          </button>
+        )}
+      </div>
+
+      {/* ── SQL Template modal ─────────────────────────────────────────── */}
+      {showTplModal && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center"
+          style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowTplModal(false)}
+        >
+          <div
+            className="card p-5 space-y-3 w-full max-w-lg mx-4"
+            style={{ borderRadius: 18 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', borderRadius: 12, padding: '14px 18px', marginBottom: 8 }}>
+              <h3 className="text-white font-bold text-sm">{tplEditIdx !== null ? '✏️ Edit SQL Template' : '📋 New SQL Template'}</h3>
+              <p className="text-indigo-200 text-xs mt-1">Give it a name and paste your SQL. Click the chip to run it instantly.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Template Name *</label>
+              <input
+                type="text"
+                value={tplName}
+                onChange={e => setTplName(e.target.value)}
+                placeholder="e.g. Top 5 Purchase Orders"
+                className="input-base text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">SQL Query *</label>
+              <textarea
+                value={tplSql}
+                onChange={e => setTplSql(e.target.value)}
+                placeholder={"SELECT TOP 5\n  InvoiceNo, BranchAlias, SaleNetAmount\nFROM dbo.VwAISalesData\nORDER BY SaleNetAmount DESC"}
+                rows={7}
+                className="input-base font-mono text-xs resize-y"
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Description (optional)</label>
+              <input
+                type="text"
+                value={tplDesc}
+                onChange={e => setTplDesc(e.target.value)}
+                placeholder="Short description shown on hover"
+                className="input-base text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
+              <button type="button" onClick={() => setShowTplModal(false)} className="btn-ghost text-xs py-2 px-4">Cancel</button>
+              <button
+                type="button"
+                onClick={saveTplModal}
+                disabled={!tplName.trim() || !tplSql.trim()}
+                className="btn-primary text-xs py-2 px-5"
+              >
+                {tplEditIdx !== null ? 'Update' : 'Save Template'}
+              </button>
+            </div>
           </div>
         </div>
       )}

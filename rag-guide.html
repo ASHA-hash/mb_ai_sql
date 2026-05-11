@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RAG Memory Guide — Smart ERP Dashboard</title>
+<style>
+  :root {
+    --indigo: #4f46e5;
+    --indigo-light: #eef2ff;
+    --indigo-mid: #818cf8;
+    --emerald: #10b981;
+    --emerald-light: #ecfdf5;
+    --amber: #f59e0b;
+    --amber-light: #fffbeb;
+    --rose: #f43f5e;
+    --rose-light: #fff1f2;
+    --slate-900: #0f172a;
+    --slate-700: #334155;
+    --slate-500: #64748b;
+    --slate-300: #cbd5e1;
+    --slate-100: #f1f5f9;
+    --white: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc;
+    color: var(--slate-700);
+    line-height: 1.65;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4338ca 100%);
+    color: white;
+    padding: 56px 32px 48px;
+    text-align: center;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 100px; padding: 6px 16px;
+    font-size: 12px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; margin-bottom: 20px;
+    color: #a5b4fc;
+  }
+  .hero h1 { font-size: clamp(28px,5vw,48px); font-weight: 900; line-height: 1.15; margin-bottom: 16px; }
+  .hero h1 span { color: #a5b4fc; }
+  .hero p { font-size: 17px; color: #c7d2fe; max-width: 640px; margin: 0 auto; }
+  .hero-status {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(16,185,129,0.18); border: 1px solid rgba(16,185,129,0.4);
+    border-radius: 100px; padding: 8px 20px; margin-top: 28px;
+    font-size: 13px; font-weight: 700; color: #6ee7b7;
+  }
+  .hero-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #34d399; display: inline-block; animation: pulse 1.8s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Layout ── */
+  .page { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ── Section headers ── */
+  .section-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--indigo); background: var(--indigo-light);
+    border-radius: 6px; padding: 4px 10px; margin-bottom: 12px;
+  }
+  h2 { font-size: 26px; font-weight: 800; color: var(--slate-900); margin-bottom: 8px; }
+  h3 { font-size: 18px; font-weight: 700; color: var(--slate-900); margin-bottom: 6px; }
+  p { margin-bottom: 12px; }
+
+  /* ── Cards ── */
+  .card {
+    background: white; border-radius: 16px;
+    border: 1px solid #e2e8f0; padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media(max-width:640px) { .card-row { grid-template-columns: 1fr; } }
+
+  /* ── Analogy box ── */
+  .analogy-box {
+    border-radius: 16px; padding: 24px 28px; margin: 8px 0 20px;
+    position: relative; overflow: hidden;
+  }
+  .analogy-box.bad  { background: #fef2f2; border: 1.5px solid #fca5a5; }
+  .analogy-box.good { background: #f0fdf4; border: 1.5px solid #86efac; }
+  .analogy-box h4 { font-size: 14px; font-weight: 800; margin-bottom: 8px; }
+  .analogy-box.bad  h4 { color: #dc2626; }
+  .analogy-box.good h4 { color: #16a34a; }
+
+  /* ── Steps ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 18px; position: relative; padding-bottom: 28px;
+  }
+  .step:last-child { padding-bottom: 0; }
+  .step-line {
+    position: absolute; left: 19px; top: 44px; bottom: 0;
+    width: 2px; background: linear-gradient(180deg, #6366f1 0%, #c7d2fe 100%);
+  }
+  .step:last-child .step-line { display: none; }
+  .step-num {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 900; z-index: 1;
+    background: var(--indigo); color: white;
+    box-shadow: 0 0 0 4px #e0e7ff;
+  }
+  .step-body { flex: 1; padding-top: 6px; }
+  .step-body h4 { font-size: 15px; font-weight: 700; color: var(--slate-900); margin-bottom: 4px; }
+  .step-body p  { font-size: 14px; color: var(--slate-500); margin: 0; }
+
+  /* ── How-to card (numbered instructions) ── */
+  .how-to-item {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 16px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .how-to-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .how-to-num {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    background: var(--indigo); color: white;
+    font-size: 13px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+  }
+  .how-to-body { flex: 1; }
+  .how-to-body strong { display: block; font-size: 14px; color: var(--slate-900); margin-bottom: 3px; }
+  .how-to-body span  { font-size: 13px; color: var(--slate-500); }
+
+  /* ── Screenshot mock ── */
+  .screen-mock {
+    background: #0f172a; border-radius: 12px; padding: 16px;
+    font-family: 'SF Mono', Consolas, monospace; font-size: 12px;
+    color: #94a3b8; line-height: 1.7; margin: 12px 0;
+    overflow-x: auto;
+  }
+  .screen-mock .kw  { color: #a78bfa; }
+  .screen-mock .str { color: #34d399; }
+  .screen-mock .cmt { color: #475569; }
+  .screen-mock .num { color: #fb923c; }
+
+  /* ── Tab preview ── */
+  .tab-preview {
+    border: 1.5px solid #e2e8f0; border-radius: 14px; overflow: hidden;
+    margin: 16px 0;
+  }
+  .tab-bar {
+    display: flex; background: #f8fafc;
+    border-bottom: 1.5px solid #e2e8f0; padding: 0 16px;
+  }
+  .tab-btn {
+    padding: 10px 16px; font-size: 13px; font-weight: 600;
+    border: none; background: none; cursor: default; color: var(--slate-500);
+  }
+  .tab-btn.active {
+    color: var(--indigo); border-bottom: 2.5px solid var(--indigo);
+    background: #eef2ff; border-radius: 6px 6px 0 0;
+  }
+  .tab-body { background: white; padding: 20px 24px; }
+  .tab-body p { font-size: 13.5px; margin-bottom: 8px; color: var(--slate-700); }
+
+  /* ── Chip ── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    border: 1.5px solid #c7d2fe; background: var(--indigo-light);
+    color: var(--indigo); border-radius: 100px;
+    padding: 4px 12px; font-size: 12px; font-weight: 700;
+    margin: 3px;
+  }
+
+  /* ── Feature pills ── */
+  .feature-pill {
+    display: flex; align-items: flex-start; gap: 14px;
+    background: var(--indigo-light); border: 1px solid #c7d2fe;
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .feature-pill .icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+  .feature-pill h5 { font-size: 14px; font-weight: 700; color: var(--slate-900); margin-bottom: 3px; }
+  .feature-pill p  { font-size: 13px; color: var(--slate-500); margin: 0; }
+
+  /* ── Callout ── */
+  .callout {
+    display: flex; gap: 14px;
+    background: var(--amber-light); border: 1.5px solid #fcd34d;
+    border-radius: 12px; padding: 16px 20px; margin: 20px 0;
+  }
+  .callout-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .callout p  { margin: 0; font-size: 14px; color: #78350f; }
+  .callout strong { color: #92400e; }
+
+  /* ── Q&A table ── */
+  .qa-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .qa-table th { background: #f8fafc; padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--slate-500); border-bottom: 2px solid #e2e8f0; }
+  .qa-table td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .qa-table td:first-child { font-weight: 600; color: var(--slate-900); width: 35%; }
+  .qa-table tr:last-child td { border-bottom: none; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: #e2e8f0; margin: 40px 0; }
+
+  /* ── Footer ── */
+  footer { text-align: center; padding: 28px; font-size: 12px; color: var(--slate-500); background: white; border-top: 1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+
+<!-- ══ HERO ══════════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-badge">🧠 Smart ERP Dashboard</div>
+  <h1>Understanding <span>RAG Memory</span><br/>in Your Dashboard</h1>
+  <p>A plain-English guide to what RAG is, how it makes AI queries smarter, and how to use it — with real examples from your ERP system.</p>
+  <div class="hero-status">✓ RAG is Active in Your Dashboard</div>
+</div>
+
+<!-- ══ PAGE ══════════════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- ━━ SECTION 1: What is RAG ━━ -->
+  <div class="section-label">📖 Part 1 — The Concept</div>
+  <h2>What is RAG?</h2>
+  <p style="font-size:16px; color:#475569; margin-bottom:24px;">
+    RAG stands for <strong>Retrieval-Augmented Generation</strong>. It is a method that makes AI give you <strong>accurate, specific answers</strong> instead of guessing — by letting the AI <em>look up the right information first</em> before answering.
+  </p>
+
+  <!-- Analogy cards -->
+  <div class="card-row">
+    <div class="analogy-box bad">
+      <h4>❌ Standard AI (No RAG) — Closed-Book Exam</h4>
+      <p style="font-size:14px;color:#7f1d1d;">The AI only knows what it was trained on months ago. If you ask about your business data, your column names, or your business terms — it guesses. It may give wrong answers or say "I don't know."</p>
+      <p style="font-size:13px;color:#991b1b;font-style:italic;">Like a librarian who can't look at any books before answering.</p>
+    </div>
+    <div class="analogy-box good">
+      <h4>✅ RAG-Powered AI — Open-Book Exam</h4>
+      <p style="font-size:14px;color:#14532d;">Before answering, the AI quickly searches a private library of <em>your</em> data — your database tables, your business terms, past successful queries. Then it answers based on what it found.</p>
+      <p style="font-size:13px;color:#166534;font-style:italic;">Like a librarian who grabs the right book first, then answers.</p>
+    </div>
+  </div>
+
+  <!-- ━━ SECTION 2: How it works ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">⚙️ Part 2 — How It Works</div>
+  <h2>Step-by-Step Flow</h2>
+  <p style="color:#475569; margin-bottom:28px;">Here is exactly what happens every time you type a question in the AI Query panel:</p>
+
+  <div class="card" style="padding:32px 36px;">
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>You type a question</h4>
+          <p>e.g. <em>"What is the MTD net sales for Branch Delhi?"</em></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>RAG searches the memory library</h4>
+          <p>The system searches three stores: <strong>Schema chunks</strong> (your 28 database views and their columns), <strong>Query Examples</strong> (past successful question→SQL pairs), and <strong>Glossary Terms</strong> (your business definitions like "Net Sales = SaleNetAmount").</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>The most relevant context is retrieved</h4>
+          <p>The system finds, for example: the <code>VwAISalesData</code> view with columns <code>SaleNetAmount</code>, <code>BranchAlias</code>, <code>SaleDate</code>, plus a past example of a similar MTD query.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>Context is attached to your question</h4>
+          <p>The AI receives: your question <strong>+</strong> the relevant columns <strong>+</strong> the business definition of "MTD" <strong>+</strong> a similar past SQL as a guide.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>AI generates a precise SQL query</h4>
+          <p>Instead of guessing column names, the AI writes correct SQL using the exact columns from your schema. Result: accurate data, no hallucination.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example walkthrough -->
+  <div class="card" style="border-left: 4px solid var(--indigo);">
+    <p class="section-label" style="margin-bottom:10px;">🔍 Real Example</p>
+    <p><strong>Your Question:</strong> "Show me unique customer count this month"</p>
+
+    <div class="screen-mock">
+<span class="cmt">-- RAG retrieved this schema context automatically:</span>
+<span class="cmt">-- View: dbo.VwAISalesData</span>
+<span class="cmt">--   CustomerCode   VARCHAR   (unique customer identifier)</span>
+<span class="cmt">--   SaleDate       DATETIME</span>
+<span class="cmt">--   SaleNetAmount  DECIMAL</span>
+<span class="cmt">-- Glossary: MTD = 1st of current month to today</span>
+<span class="cmt">-- Past example: "customer count MTD" → COUNT(DISTINCT CustomerCode)</span>
+
+<span class="kw">SELECT</span> <span class="kw">COUNT</span>(<span class="kw">DISTINCT</span> CustomerCode) <span class="kw">AS</span> <span class="str">UniqueCustomers</span>
+<span class="kw">FROM</span>   dbo.VwAISalesData
+<span class="kw">WHERE</span>  SaleDate &gt;= <span class="str">'2026-05-01'</span>
+  <span class="kw">AND</span>  SaleDate &lt;= <span class="str">'2026-05-11'</span>
+    </div>
+    <p style="font-size:13px;color:#166534;background:#f0fdf4;border-radius:8px;padding:10px 14px;margin-top:8px;">
+      ✅ <strong>Result:</strong> Accurate answer using the right column name — because RAG told the AI exactly which view and column to use.
+    </p>
+  </div>
+
+  <!-- ━━ SECTION 3: RAG Memory panel ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">🗂 Part 3 — The Three Memory Stores</div>
+  <h2>What Gets Stored in RAG Memory?</h2>
+  <p style="color:#475569; margin-bottom:20px;">Open the <strong>🧠 RAG Memory</strong> tab in your dashboard. You will see three tabs:</p>
+
+  <div class="tab-preview">
+    <div class="tab-bar">
+      <div class="tab-btn active">📚 Examples</div>
+      <div class="tab-btn">📖 Glossary</div>
+      <div class="tab-btn">🗄 Schema</div>
+    </div>
+    <div class="tab-body">
+      <p><strong>Query Examples</strong> — Question + SQL pairs that teach the AI how YOUR business queries look. Every successful AI Query auto-saves here. You can also add your own manually.</p>
+      <p style="color:#64748b;font-size:13px;">Example: Question = <em>"Top 5 branches by net sales this month"</em> → SQL = <code>SELECT TOP 5 BranchAlias, SUM(SaleNetAmount)…</code></p>
+    </div>
+  </div>
+
+  <div class="tab-preview" style="margin-top:0;">
+    <div class="tab-bar">
+      <div class="tab-btn">📚 Examples</div>
+      <div class="tab-btn active">📖 Glossary</div>
+      <div class="tab-btn">🗄 Schema</div>
+    </div>
+    <div class="tab-body">
+      <p><strong>Glossary Terms</strong> — Business-specific words that the AI must understand correctly. You define the term and what it means in your database.</p>
+      <p style="color:#64748b;font-size:13px;margin-bottom:6px;">Pre-loaded starters you can add with one click:</p>
+      <span class="chip">Net Sales</span>
+      <span class="chip">MTD</span>
+      <span class="chip">YTD</span>
+      <span class="chip">QTD</span>
+      <span class="chip">Branch</span>
+    </div>
+  </div>
+
+  <div class="tab-preview" style="margin-top:0;">
+    <div class="tab-bar">
+      <div class="tab-btn">📚 Examples</div>
+      <div class="tab-btn">📖 Glossary</div>
+      <div class="tab-btn active">🗄 Schema</div>
+    </div>
+    <div class="tab-body">
+      <p><strong>Schema Chunks</strong> — Descriptions of your 28 database views and their columns. These are pre-indexed by the system. The AI uses this to know which table and column to query for any business question.</p>
+      <p style="color:#64748b;font-size:13px;">You do not need to manage this — it is automatically maintained.</p>
+    </div>
+  </div>
+
+  <!-- ━━ SECTION 4: How to USE it ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">✋ Part 4 — How to Use RAG Memory</div>
+  <h2>Step-by-Step User Guide</h2>
+
+  <div class="card">
+    <h3 style="margin-bottom:18px; color: var(--indigo);">📌 Opening RAG Memory</h3>
+    <div class="how-to-item">
+      <div class="how-to-num">1</div>
+      <div class="how-to-body">
+        <strong>Log in to the Smart ERP Dashboard</strong>
+        <span>Open <code>dashboard.html</code> and sign in with your credentials.</span>
+      </div>
+    </div>
+    <div class="how-to-item">
+      <div class="how-to-num">2</div>
+      <div class="how-to-body">
+        <strong>Click the "🧠 RAG Memory" tab</strong>
+        <span>It is in the left navigation panel, below "🤖 AI Query". You will see three stat tiles: Query Examples, Glossary Terms, and Schema Chunks.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:18px; color: #16a34a;">➕ Adding a Glossary Term</h3>
+    <p style="font-size:14px;color:#475569;margin-bottom:18px;">Use this when the AI doesn't understand your internal business language — like what "Net Sales", "PY", "LY", or "Branch" means in your context.</p>
+    <div class="how-to-item">
+      <div class="how-to-num">1</div>
+      <div class="how-to-body">
+        <strong>Go to the 📖 Glossary tab</strong>
+        <span>Inside RAG Memory, click the "Glossary" tab.</span>
+      </div>
+    </div>
+    <div class="how-to-item">
+      <div class="how-to-num">2</div>
+      <div class="how-to-body">
+        <strong>Type the Term and its Definition</strong>
+        <span>Term: <em>LY Sales</em> — Definition: <em>Last Year Sales — same period last year using SaleNetAmount</em></span>
+      </div>
+    </div>
+    <div class="how-to-item">
+      <div class="how-to-num">3</div>
+      <div class="how-to-body">
+        <strong>Click "Add Term"</strong>
+        <span>It is saved immediately. The next AI Query you run will use this definition automatically.</span>
+      </div>
+    </div>
+    <div class="how-to-item" style="background:#f0fdf4; border-radius:8px; border-bottom:none; padding:14px;">
+      <div class="how-to-num" style="background:#16a34a;">💡</div>
+      <div class="how-to-body">
+        <strong>Tip: Use the Quick-Add buttons</strong>
+        <span>Common terms like MTD, YTD, QTD, Net Sales, and Branch are already written out for you. Just click the chip to pre-fill the form, then click "Add Term".</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:18px; color: #7c3aed;">📚 Adding a Query Example</h3>
+    <p style="font-size:14px;color:#475569;margin-bottom:18px;">Examples are the most powerful thing you can add. When the AI sees a question similar to one it has seen before, it uses the stored SQL as a guide and gets the answer right almost every time.</p>
+    <div class="how-to-item">
+      <div class="how-to-num">A</div>
+      <div class="how-to-body">
+        <strong>Automatic (Recommended)</strong>
+        <span>Every time you run a successful query in AI Query, it is automatically saved as an example. You do not need to do anything. Over time, the AI gets smarter about your specific questions.</span>
+      </div>
+    </div>
+    <div class="how-to-item">
+      <div class="how-to-num">B</div>
+      <div class="how-to-body">
+        <strong>Manual — Go to the 📚 Examples tab</strong>
+        <span>Type the question, paste the correct SQL, and optionally add a note (e.g. "Use SaleNetAmount, not SaleGrossAmount").</span>
+      </div>
+    </div>
+    <div class="how-to-item" style="border-bottom:none;">
+      <div class="how-to-num">C</div>
+      <div class="how-to-body">
+        <strong>From an AI result — click "💾 Save as Template"</strong>
+        <span>After running a query in AI Query, look for the <em>"Save this query's SQL as a template"</em> link at the bottom. One click saves it to both SQL Templates and RAG Memory.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━ SECTION 5: Why it matters ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">📊 Part 5 — Why It Matters</div>
+  <h2>What Improves With RAG?</h2>
+
+  <div class="feature-pill">
+    <div class="icon">🎯</div>
+    <div>
+      <h5>Accuracy on your specific data</h5>
+      <p>The AI knows your exact column names (e.g. <code>SaleNetAmount</code>, <code>BranchAlias</code>, <code>CustomerCode</code>). It stops guessing and starts querying correctly.</p>
+    </div>
+  </div>
+  <div class="feature-pill">
+    <div class="icon">🔁</div>
+    <div>
+      <h5>Gets smarter over time (auto-learning)</h5>
+      <p>Every successful AI Query saves to memory. After 20–30 queries, the AI has seen most of your common question patterns and answers them instantly and correctly.</p>
+    </div>
+  </div>
+  <div class="feature-pill">
+    <div class="icon">🏢</div>
+    <div>
+      <h5>Understands your business language</h5>
+      <p>Add glossary terms like "PY = Prior Year", "LY = Last Year", "Net Sales = SaleNetAmount after discount". The AI stops misinterpreting your internal vocabulary.</p>
+    </div>
+  </div>
+  <div class="feature-pill">
+    <div class="icon">⚡</div>
+    <div>
+      <h5>Faster and more reliable answers</h5>
+      <p>When a relevant past example is found, the AI uses it as a template instead of generating SQL from scratch — reducing errors and response time.</p>
+    </div>
+  </div>
+
+  <!-- ━━ SECTION 6: FAQs ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">❓ Part 6 — Common Questions</div>
+  <h2>FAQs</h2>
+
+  <div class="card" style="padding:0;">
+    <table class="qa-table">
+      <thead>
+        <tr><th>Question</th><th>Answer</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Do I need to set RAG up myself?</td>
+          <td>No. The schema has already been indexed automatically (28 database views). RAG Memory is active the moment you start using AI Query. You only need to add Glossary terms to teach the AI your business vocabulary.</td>
+        </tr>
+        <tr>
+          <td>How many examples should I add?</td>
+          <td>Start with the 5 quick-add glossary chips (MTD, YTD, QTD, Net Sales, Branch). After that, let the auto-save do the work. If you notice the AI repeatedly getting something wrong, manually add an example for that pattern.</td>
+        </tr>
+        <tr>
+          <td>Does RAG store my actual sales data?</td>
+          <td>No. RAG only stores <em>question → SQL</em> pairs, column descriptions, and glossary definitions. It never stores rows of your sales or customer data.</td>
+        </tr>
+        <tr>
+          <td>What if the AI gives a wrong answer?</td>
+          <td>If you know the correct SQL, go to RAG Memory → 📚 Examples, and add it manually with the right SQL. The next time a similar question is asked, the AI will use your correct version instead.</td>
+        </tr>
+        <tr>
+          <td>Can I delete an example that's wrong?</td>
+          <td>Yes. Each example in the 📚 Examples tab has an ✕ button. Click it to remove. The AI will no longer use that example as a reference.</td>
+        </tr>
+        <tr>
+          <td>Is RAG the same as the SQL Templates?</td>
+          <td>They are related but different. <strong>RAG</strong> quietly runs in the background to make every AI query more accurate. <strong>SQL Templates</strong> (📋 Saved SQL Queries in AI Query) are named shortcuts you click to run a specific SQL instantly — no AI generation needed.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ━━ CALLOUT ━━ -->
+  <div class="callout">
+    <div class="callout-icon">💡</div>
+    <p><strong>Recommended First Steps:</strong> Go to <strong>🧠 RAG Memory → 📖 Glossary</strong> and click all five quick-add chips (Net Sales, MTD, YTD, QTD, Branch). This alone will make AI Query significantly more accurate for sales analytics questions.</p>
+  </div>
+
+  <!-- ━━ SECTION 7: Summary ━━ -->
+  <div class="divider"></div>
+  <div class="section-label">✅ Summary</div>
+  <h2>In One Sentence</h2>
+  <div class="card" style="background: linear-gradient(135deg, #eef2ff, #f0fdf4); border: 1.5px solid #c7d2fe; text-align:center;">
+    <p style="font-size:18px; font-weight:700; color: #1e1b4b; line-height:1.5; margin:0;">
+      RAG Memory is like giving the AI an <em>open-book exam</em> using <em>your own business books</em> — so every answer is grounded in your real data, not a guess.
+    </p>
+  </div>
+
+  <div class="card-row" style="margin-top:20px;">
+    <div class="card" style="background:#eef2ff; border-color:#c7d2fe; margin-bottom:0;">
+      <p style="font-size:28px; margin-bottom:8px;">🗄</p>
+      <h3 style="font-size:15px; color:#3730a3;">Schema — auto-indexed</h3>
+      <p style="font-size:13px;color:#4338ca;">28 database views, all columns already in memory. No action needed.</p>
+    </div>
+    <div class="card" style="background:#f0fdf4; border-color:#86efac; margin-bottom:0;">
+      <p style="font-size:28px; margin-bottom:8px;">📖</p>
+      <h3 style="font-size:15px; color:#166534;">Glossary — you control</h3>
+      <p style="font-size:13px;color:#15803d;">Add business terms to teach the AI your language. Start with the 5 quick-add chips.</p>
+    </div>
+  </div>
+  <div class="card" style="background:#fffbeb; border-color:#fcd34d; margin-top:16px;">
+    <p style="font-size:28px; margin-bottom:8px;">📚</p>
+    <h3 style="font-size:15px; color:#92400e;">Query Examples — grows automatically</h3>
+    <p style="font-size:13px;color:#b45309;margin:0;">Every successful AI query auto-saves. The more you use it, the smarter it gets. Add manual examples for anything you want to pin down precisely.</p>
+  </div>
+
+</div><!-- /page -->
+
+<footer>
+  Smart ERP Dashboard — RAG Memory Guide &nbsp;·&nbsp; Powered by Anthropic Claude &amp; OpenAI &nbsp;·&nbsp; Indian Financial Year (April–March)
+</footer>
+
+</body>
+</html>

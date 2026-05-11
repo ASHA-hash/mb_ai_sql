@@ -2243,6 +2243,52 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     }
   }
 
+  // ── Raw SQL short-circuit: execute user-provided SQL directly, skip AI ──────
+  const rawSql = String(req.body?.rawSql ?? "").trim();
+  if (rawSql) {
+    let rawPool;
+    try { rawPool = await getPool(); } catch (err) {
+      return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
+    }
+    try {
+      const rawResult = await rawPool.request().query(rawSql);
+      const data = rowsForJson(rawResult.recordset || []);
+      const tags = tagColumnsByValues(data);
+      const intent = classifyQueryIntent(question);
+      const shape = detectResultShape(data, tags);
+      const intentType = reconcileIntentTypeForResponse(question, intent.type, data);
+      const chartPolicyBase = shape.chartType || intent.chartPolicy || "auto";
+      const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
+      return res.json({
+        sql: rawSql,
+        rowCount: data.length,
+        data,
+        mode: "raw_sql_template",
+        tableHint: null,
+        summary: null,
+        intentType,
+        intentDescription: "User-saved SQL template — executed directly",
+        chartPolicy,
+        resultShape: shape.shape,
+        dataSource: "raw_sql",
+        contractPassed: data.length >= 0,
+        contractIssues: [],
+        contractWarnings: [],
+        columnTags: tags,
+        confidence: "high",
+        confidenceNote: "Executed saved SQL template verbatim — no AI generation",
+        retryCount: 0,
+      });
+    } catch (rawErr) {
+      console.error("[adaptive] rawSql execution error:", rawErr.message);
+      return res.status(400).json({
+        error: "raw_sql_error",
+        message: String(rawErr.message),
+        sql: rawSql,
+      });
+    }
+  }
+
   let pool;
   try {
     pool = await getPool();

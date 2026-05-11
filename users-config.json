@@ -53,6 +53,12 @@
       "role": "manager",
       "name": "Manager",
       "passwordHash": "pbkdf2:e386d3d60e97d73d9751958371050044:3cae9f185ab5dbe47dbbcc9cba5975cb6fb13d39944b585d71deefefce704ddd"
+    },
+    {
+      "email": "asha24workofficial@gmail.com",
+      "role": "admin",
+      "name": "Asha",
+      "passwordHash": "123456789"
     }
   ]
 }
