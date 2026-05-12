@@ -189,11 +189,63 @@ function remove(id) {
   return false;
 }
 
+/**
+ * Update an existing example by id (re-embeds with new text).
+ * Returns the updated doc (without embedding) or null if not found.
+ */
+async function updateExample(id, question, sql, note = "") {
+  const idx = docs.findIndex(d => d.id === id && d.metadata.type === "example");
+  if (idx < 0) return null;
+  const existing = docs[idx];
+  const text =
+    `QUERY EXAMPLE\nQuestion: ${question}\nSQL: ${sql}` +
+    (note ? `\nNote: ${note}` : "");
+  const embedding = await _embed(text);
+  docs[idx] = {
+    ...existing,
+    text,
+    embedding,
+    metadata: { ...existing.metadata, question, sql, note },
+    updatedAt: new Date().toISOString(),
+  };
+  save();
+  const { embedding: _emb, ...safe } = docs[idx];
+  return safe;
+}
+
+/**
+ * Thumbs-up an example — marks it verified=true.
+ * Returns true if found and updated.
+ */
+function thumbsUp(id) {
+  const idx = docs.findIndex(d => d.id === id && d.metadata.type === "example");
+  if (idx < 0) return false;
+  docs[idx].metadata.verified  = true;
+  docs[idx].metadata.thumbsUp  = (docs[idx].metadata.thumbsUp || 0) + 1;
+  docs[idx].metadata.thumbsDown = 0;
+  save();
+  return true;
+}
+
+/**
+ * Thumbs-down an example — removes it from the store.
+ * Returns true if removed.
+ */
+function thumbsDown(id) {
+  return remove(id);
+}
+
 /** List all docs of a given type (without embeddings). */
 function listByType(type) {
   return docs
     .filter(d => d.metadata.type === type)
-    .map(({ id, text, metadata, addedAt }) => ({ id, text, metadata, addedAt }));
+    .map(({ id, text, metadata, addedAt, updatedAt }) => ({ id, text, metadata, addedAt, updatedAt }))
+    .sort((a, b) => {
+      // Verified first, then newest first
+      if (a.metadata.verified && !b.metadata.verified) return -1;
+      if (!a.metadata.verified && b.metadata.verified) return 1;
+      return new Date(b.addedAt) - new Date(a.addedAt);
+    });
 }
 
 /** Summary counts. */
@@ -215,6 +267,9 @@ module.exports = {
   addGlossary,
   addSchemaChunk,
   remove,
+  updateExample,
+  thumbsUp,
+  thumbsDown,
   listByType,
   stats,
   load,

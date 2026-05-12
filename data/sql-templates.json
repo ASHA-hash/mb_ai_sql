@@ -1,0 +1,11 @@
+[
+  {
+    "id": "tpl_1778553703695_c7pqv",
+    "name": "Show me top 5 branches by net sales this month, sorted highest first",
+    "sql": "SELECT TOP 5\n    b.BranchShortName          AS Branch,\n    SUM(s.SaleNetAmount)       AS NetSales\nFROM  dbo.VwAISalesData  s\nJOIN  dbo.VwAIBranch     b  ON s.BranchId = b.BranchId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY b.BranchShortName\nORDER BY NetSales DESC",
+    "desc": "",
+    "createdAt": "2026-05-12T02:41:43.695Z",
+    "updatedAt": "2026-05-12T02:41:43.695Z",
+    "createdBy": "karthikeyanasha24@gmail.com"
+  }
+]

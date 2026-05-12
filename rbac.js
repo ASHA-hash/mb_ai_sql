@@ -237,6 +237,24 @@ function requireAdminApi(req, res, next) {
   return requireFeature("admin")(req, res, next);
 }
 
+/**
+ * RAG memory, SQL templates, and similar "train the AI" writes — Manager + Admin only.
+ * When RBAC is off, allows all (local dev); when on, requires JWT / X-User-Email role.
+ */
+function requireManagerOrAdminApi(req, res, next) {
+  if (!rbacEnabled()) {
+    return next();
+  }
+  const rk = String((req.rbac && (req.rbac.roleKey || req.rbac.role)) || "").toLowerCase();
+  if (rk === "admin" || rk === "manager") {
+    return next();
+  }
+  return res.status(403).json({
+    error: "role_denied",
+    message: "Only Manager or Admin can add, edit, or delete this.",
+  });
+}
+
 function filterDatasets(datasets, rbacCtx) {
   if (!rbacEnabled() || !rbacCtx) {
     return datasets;
@@ -358,6 +376,7 @@ module.exports = {
   rbacMiddleware,
   requireFeature,
   requireAdminApi,
+  requireManagerOrAdminApi,
   filterDatasets,
   assertDatasetAllowed,
   getRoleForEmail,

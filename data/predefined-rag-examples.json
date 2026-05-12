@@ -1,0 +1,132 @@
+[
+  {
+    "question": "What is today's total net sales?",
+    "sql": "SELECT\n  SUM(SaleNetAmount)          AS TodaySales,\n  COUNT(DISTINCT InvoiceId)   AS Bills,\n  COUNT(DISTINCT CustomerId)  AS UniqueCustomers\nFROM dbo.VwAISalesData\nWHERE InvoiceDt = CAST(GETDATE() AS date)",
+    "note": "Use InvoiceDt from VwAISalesData. SaleNetAmount is net sales after tax."
+  },
+  {
+    "question": "What is MTD net sales?",
+    "sql": "SELECT\n  SUM(SaleNetAmount)          AS MTDNetSales,\n  COUNT(DISTINCT InvoiceId)   AS Bills,\n  COUNT(DISTINCT CustomerId)  AS UniqueCustomers\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND InvoiceDt <= CAST(GETDATE() AS date)",
+    "note": "MTD = 1st of current month to today. InvoiceDt is the sale date."
+  },
+  {
+    "question": "What is YTD net sales?",
+    "sql": "SELECT\n  SUM(SaleNetAmount)        AS YTDNetSales,\n  COUNT(DISTINCT InvoiceId) AS Bills\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEFROMPARTS(\n    CASE WHEN MONTH(GETDATE()) >= 4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE()) - 1 END,\n    4, 1)\n  AND InvoiceDt <= CAST(GETDATE() AS date)",
+    "note": "YTD uses Indian FY: April 1 of current or previous year depending on current month."
+  },
+  {
+    "question": "What is QTD net sales?",
+    "sql": "SELECT\n  SUM(SaleNetAmount)        AS QTDNetSales,\n  COUNT(DISTINCT InvoiceId) AS Bills\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= CASE\n    WHEN MONTH(GETDATE()) IN (4,5,6)    THEN DATEFROMPARTS(YEAR(GETDATE()), 4,  1)\n    WHEN MONTH(GETDATE()) IN (7,8,9)    THEN DATEFROMPARTS(YEAR(GETDATE()), 7,  1)\n    WHEN MONTH(GETDATE()) IN (10,11,12) THEN DATEFROMPARTS(YEAR(GETDATE()), 10, 1)\n    ELSE DATEFROMPARTS(YEAR(GETDATE()), 1, 1)\n  END\n  AND InvoiceDt <= CAST(GETDATE() AS date)",
+    "note": "QTD uses Indian FY quarters: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar."
+  },
+  {
+    "question": "Show me top 5 branches by net sales this month",
+    "sql": "SELECT TOP 5\n  b.BranchShortName       AS Branch,\n  SUM(s.SaleNetAmount)    AS NetSales,\n  COUNT(DISTINCT s.InvoiceId) AS Bills\nFROM dbo.VwAISalesData s\nJOIN dbo.VwAIBranch     b ON s.BranchId = b.BranchId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY b.BranchShortName\nORDER BY NetSales DESC",
+    "note": "VwAISalesData has BranchId not BranchAlias — always JOIN VwAIBranch ON BranchId for branch name."
+  },
+  {
+    "question": "Net sales by all branches this month",
+    "sql": "SELECT\n  b.BranchShortName       AS Branch,\n  SUM(s.SaleNetAmount)    AS NetSales,\n  COUNT(DISTINCT s.InvoiceId)  AS Bills,\n  COUNT(DISTINCT s.CustomerId) AS Customers\nFROM dbo.VwAISalesData s\nJOIN dbo.VwAIBranch     b ON s.BranchId = b.BranchId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY b.BranchShortName\nORDER BY NetSales DESC",
+    "note": "All branches ranked. BranchShortName from VwAIBranch is the display name."
+  },
+  {
+    "question": "Compare this month vs last month sales by branch",
+    "sql": "SELECT\n  b.BranchShortName AS Branch,\n  SUM(CASE\n    WHEN s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n     AND s.InvoiceDt <= CAST(GETDATE() AS date)\n    THEN s.SaleNetAmount ELSE 0 END) AS ThisMonth,\n  SUM(CASE\n    WHEN s.InvoiceDt >= DATEADD(MONTH,-1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n     AND s.InvoiceDt <  DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n    THEN s.SaleNetAmount ELSE 0 END) AS LastMonth\nFROM dbo.VwAISalesData s\nJOIN dbo.VwAIBranch     b ON s.BranchId = b.BranchId\nGROUP BY b.BranchShortName\nORDER BY ThisMonth DESC",
+    "note": "Side-by-side MTD vs full previous month comparison using conditional SUM."
+  },
+  {
+    "question": "How many unique customers bought this month?",
+    "sql": "SELECT COUNT(DISTINCT CustomerId) AS UniqueCustomers\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND InvoiceDt <= CAST(GETDATE() AS date)",
+    "note": "Unique customer count = COUNT(DISTINCT CustomerId) from VwAISalesData."
+  },
+  {
+    "question": "How many unique customers bought today?",
+    "sql": "SELECT COUNT(DISTINCT CustomerId) AS UniqueCustomers\nFROM dbo.VwAISalesData\nWHERE InvoiceDt = CAST(GETDATE() AS date)",
+    "note": "Today's unique buyers."
+  },
+  {
+    "question": "What is the daily sales trend this month?",
+    "sql": "SELECT\n  InvoiceDt                    AS SaleDate,\n  SUM(SaleNetAmount)           AS NetSales,\n  COUNT(DISTINCT InvoiceId)    AS Bills,\n  COUNT(DISTINCT CustomerId)   AS Customers\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY InvoiceDt\nORDER BY InvoiceDt",
+    "note": "Day-by-day trend for current month. Good for line chart."
+  },
+  {
+    "question": "Show monthly sales trend for last 6 months",
+    "sql": "SELECT\n  FORMAT(InvoiceDt,'MMM yyyy')              AS Month,\n  YEAR(InvoiceDt)*100 + MONTH(InvoiceDt)   AS SortKey,\n  SUM(SaleNetAmount)                        AS NetSales,\n  COUNT(DISTINCT InvoiceId)                 AS Bills\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEADD(MONTH,-6,\n        DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1))\n  AND InvoiceDt < DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)\nGROUP BY FORMAT(InvoiceDt,'MMM yyyy'), YEAR(InvoiceDt)*100 + MONTH(InvoiceDt)\nORDER BY SortKey",
+    "note": "Last 6 complete months trend. SortKey ensures correct chronological order."
+  },
+  {
+    "question": "Top 10 customers by net sales this month",
+    "sql": "SELECT TOP 10\n  c.CustomerFirstName + ' ' + c.CustomerLastName AS CustomerName,\n  c.ContactMobile   AS Mobile,\n  c.City,\n  SUM(s.SaleNetAmount)        AS NetSales,\n  COUNT(DISTINCT s.InvoiceId) AS Bills\nFROM dbo.VwAISalesData        s\nJOIN dbo.VwAICustomerDetails  c ON s.CustomerId = c.CustomerId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY c.CustomerFirstName, c.CustomerLastName, c.ContactMobile, c.City\nORDER BY NetSales DESC",
+    "note": "Join VwAISalesData with VwAICustomerDetails on CustomerId for customer name and contact."
+  },
+  {
+    "question": "Net sales by category this month",
+    "sql": "SELECT\n  i.InvCategoryName    AS Category,\n  SUM(s.SaleNetAmount) AS NetSales,\n  SUM(s.Quantity)      AS Qty\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems    i ON s.ItemId = i.ItemId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY i.InvCategoryName\nORDER BY NetSales DESC",
+    "note": "Join VwAISalesData with VwMstItems on ItemId to get category. InvCategoryName is the category column."
+  },
+  {
+    "question": "Net sales by department this month",
+    "sql": "SELECT\n  i.InvDepartmentName  AS Department,\n  SUM(s.SaleNetAmount) AS NetSales,\n  SUM(s.Quantity)      AS Qty\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems    i ON s.ItemId = i.ItemId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY i.InvDepartmentName\nORDER BY NetSales DESC",
+    "note": "InvDepartmentName from VwMstItems is the department. Join on ItemId."
+  },
+  {
+    "question": "Top 10 best-selling items by quantity this month",
+    "sql": "SELECT TOP 10\n  i.ArticleNo,\n  i.InvCategoryName  AS Category,\n  i.SupplierAlias    AS Supplier,\n  i.ItemMRP          AS MRP,\n  SUM(s.Quantity)    AS QtySold,\n  SUM(s.SaleNetAmount) AS NetSales\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems    i ON s.ItemId = i.ItemId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY i.ArticleNo, i.InvCategoryName, i.SupplierAlias, i.ItemMRP\nORDER BY QtySold DESC",
+    "note": "Use VwMstItems.ArticleNo for article number. SupplierAlias is the supplier short name."
+  },
+  {
+    "question": "Top 10 suppliers by net sales this month",
+    "sql": "SELECT TOP 10\n  i.SupplierAlias    AS Supplier,\n  SUM(s.SaleNetAmount) AS NetSales,\n  SUM(s.Quantity)      AS Qty\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems    i ON s.ItemId = i.ItemId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY i.SupplierAlias\nORDER BY NetSales DESC",
+    "note": "SupplierAlias from VwMstItems. Join on ItemId."
+  },
+  {
+    "question": "Sales by salesperson this month",
+    "sql": "SELECT\n  sp.SalesPersonName          AS SalesPerson,\n  SUM(s.SaleNetAmount)        AS NetSales,\n  COUNT(DISTINCT s.InvoiceId) AS Bills,\n  COUNT(DISTINCT s.CustomerId)AS Customers\nFROM dbo.VwAISalesData   s\nJOIN dbo.VwAISalesPerson sp ON s.SalesPersonId = sp.SalesPersonId\nWHERE s.InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND s.InvoiceDt <= CAST(GETDATE() AS date)\nGROUP BY sp.SalesPersonName\nORDER BY NetSales DESC",
+    "note": "Join VwAISalesData with VwAISalesPerson on SalesPersonId. SalesPersonName is the display name."
+  },
+  {
+    "question": "What is the average bill value this month?",
+    "sql": "SELECT\n  SUM(SaleNetAmount) / NULLIF(COUNT(DISTINCT InvoiceId),0) AS AvgBillValue,\n  COUNT(DISTINCT InvoiceId)   AS TotalBills,\n  SUM(SaleNetAmount)          AS TotalSales\nFROM dbo.VwAISalesData\nWHERE InvoiceDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND InvoiceDt <= CAST(GETDATE() AS date)",
+    "note": "Average bill value = Total sales / Count of distinct invoices. NULLIF prevents divide-by-zero."
+  },
+  {
+    "question": "Show me YTD vs last year same period net sales",
+    "sql": "SELECT\n  SUM(CASE\n    WHEN InvoiceDt >= DATEFROMPARTS(\n        CASE WHEN MONTH(GETDATE())>=4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE())-1 END, 4, 1)\n     AND InvoiceDt <= CAST(GETDATE() AS date)\n    THEN SaleNetAmount ELSE 0 END) AS YTD_Sales,\n  SUM(CASE\n    WHEN InvoiceDt >= DATEFROMPARTS(\n        CASE WHEN MONTH(GETDATE())>=4 THEN YEAR(GETDATE())-1 ELSE YEAR(GETDATE())-2 END, 4, 1)\n     AND InvoiceDt <= DATEADD(YEAR,-1, CAST(GETDATE() AS date))\n    THEN SaleNetAmount ELSE 0 END) AS LY_YTD_Sales\nFROM dbo.VwAISalesData",
+    "note": "YTD = April 1 current FY to today. LY = same FY period one year back. Indian FY April start."
+  },
+  {
+    "question": "Total stock quantity and MRP value by branch",
+    "sql": "SELECT\n  b.BranchShortName              AS Branch,\n  SUM(st.StockQty)               AS TotalQty,\n  SUM(st.StockQty * i.ItemMRP)   AS MRPValue\nFROM dbo.VwAIStockData  st\nJOIN dbo.VwAIBranch     b  ON st.BranchId = b.BranchId\nJOIN dbo.VwMstItems     i  ON st.ItemId   = i.ItemId\nGROUP BY b.BranchShortName\nORDER BY MRPValue DESC",
+    "note": "VwAIStockData has StockQty per item per branch. Multiply by ItemMRP for value."
+  },
+  {
+    "question": "Stock quantity and value by category",
+    "sql": "SELECT\n  i.InvCategoryName              AS Category,\n  SUM(st.StockQty)               AS TotalQty,\n  SUM(st.StockQty * i.ItemMRP)   AS MRPValue\nFROM dbo.VwAIStockData st\nJOIN dbo.VwMstItems    i  ON st.ItemId = i.ItemId\nGROUP BY i.InvCategoryName\nORDER BY MRPValue DESC",
+    "note": "Stock summary by category. VwAIStockData has current live stock; ItemMRP from VwMstItems."
+  },
+  {
+    "question": "Which items are out of stock?",
+    "sql": "SELECT\n  i.ArticleNo,\n  i.InvCategoryName  AS Category,\n  i.SupplierAlias    AS Supplier,\n  i.ItemMRP          AS MRP,\n  SUM(st.StockQty)   AS StockQty\nFROM dbo.VwAIStockData st\nJOIN dbo.VwMstItems    i ON st.ItemId = i.ItemId\nGROUP BY i.ArticleNo, i.InvCategoryName, i.SupplierAlias, i.ItemMRP\nHAVING SUM(st.StockQty) <= 0\nORDER BY i.InvCategoryName, i.ArticleNo",
+    "note": "Items with zero or negative total stock across all branches."
+  },
+  {
+    "question": "How many new customers were added this month?",
+    "sql": "SELECT\n  COUNT(*) AS NewCustomers\nFROM dbo.VwAICustomerDetails\nWHERE CreatedOn >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CreatedOn <  DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))",
+    "note": "New customers = CreatedOn in current month from VwAICustomerDetails."
+  },
+  {
+    "question": "Bill count by branch today",
+    "sql": "SELECT\n  b.BranchShortName           AS Branch,\n  COUNT(DISTINCT s.InvoiceId) AS Bills,\n  SUM(s.SaleNetAmount)        AS NetSales\nFROM dbo.VwAISalesData s\nJOIN dbo.VwAIBranch    b ON s.BranchId = b.BranchId\nWHERE s.InvoiceDt = CAST(GETDATE() AS date)\nGROUP BY b.BranchShortName\nORDER BY Bills DESC",
+    "note": "Today's bill count per branch. COUNT(DISTINCT InvoiceId) = number of bills."
+  },
+  {
+    "question": "Net sales by category for last 3 months trend",
+    "sql": "SELECT\n  FORMAT(s.InvoiceDt,'MMM yyyy')            AS Month,\n  YEAR(s.InvoiceDt)*100 + MONTH(s.InvoiceDt) AS SortKey,\n  i.InvCategoryName                          AS Category,\n  SUM(s.SaleNetAmount)                       AS NetSales\nFROM dbo.VwAISalesData s\nJOIN dbo.VwMstItems    i ON s.ItemId = i.ItemId\nWHERE s.InvoiceDt >= DATEADD(MONTH,-3,\n        DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1))\n  AND s.InvoiceDt < DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)\nGROUP BY FORMAT(s.InvoiceDt,'MMM yyyy'),\n         YEAR(s.InvoiceDt)*100+MONTH(s.InvoiceDt),\n         i.InvCategoryName\nORDER BY SortKey, NetSales DESC",
+    "note": "Month-wise breakdown by category for last 3 complete months."
+  },
+  {
+    "question": "Which branch had the highest sales today?",
+    "sql": "SELECT TOP 1\n  b.BranchShortName    AS Branch,\n  SUM(s.SaleNetAmount) AS NetSales,\n  COUNT(DISTINCT s.InvoiceId) AS Bills\nFROM dbo.VwAISalesData s\nJOIN dbo.VwAIBranch    b ON s.BranchId = b.BranchId\nWHERE s.InvoiceDt = CAST(GETDATE() AS date)\nGROUP BY b.BranchShortName\nORDER BY NetSales DESC",
+    "note": "TOP 1 branch for today. Use TOP 5 for top 5 branches."
+  }
+]

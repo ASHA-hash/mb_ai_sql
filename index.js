@@ -699,6 +699,11 @@ app.get("/dashboard.html", (_req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
+/** RAG / connector guide (static HTML next to this file). Not under /api/ — skips API key + RBAC. */
+app.get("/rag-guide.html", (_req, res) => {
+  res.sendFile(path.join(__dirname, "rag-guide.html"));
+});
+
 /**
  * Google Search Console HTML file verification. Must be at site root, public (no API key).
  * If Search Console gives a new file name, add that file next to this script (do not change contents).
@@ -3096,6 +3101,83 @@ app.post("/api/admin/semantic-dictionary", rbac.requireAdminApi, (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────
+   SQL TEMPLATES — server-side CRUD
+   Stored in data/sql-templates.json, shared across all users.
+   Each template: { id, name, sql, desc, createdAt, updatedAt }
+   ───────────────────────────────────────────────────────────── */
+const SQL_TEMPLATES_PATH = path.join(rootDir, "data", "sql-templates.json");
+
+function readSqlTemplates() {
+  try {
+    const dir = path.dirname(SQL_TEMPLATES_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(SQL_TEMPLATES_PATH)) return [];
+    return JSON.parse(fs.readFileSync(SQL_TEMPLATES_PATH, "utf8") || "[]");
+  } catch { return []; }
+}
+
+function writeSqlTemplates(templates) {
+  const dir = path.dirname(SQL_TEMPLATES_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(SQL_TEMPLATES_PATH, JSON.stringify(templates, null, 2) + "\n", "utf8");
+}
+
+/** GET /api/sql-templates — list all (auth: global rbacMiddleware on /api/*) */
+app.get("/api/sql-templates", (req, res) => {
+  res.json({ ok: true, templates: readSqlTemplates() });
+});
+
+/** POST /api/sql-templates — create */
+app.post("/api/sql-templates", rbac.requireManagerOrAdminApi, (req, res) => {
+  const name = String(req.body?.name ?? "").trim();
+  const sql  = String(req.body?.sql  ?? "").trim();
+  const desc = String(req.body?.desc ?? "").trim();
+  if (!name || !sql) {
+    return res.status(400).json({ error: "missing_fields", message: "name and sql are required" });
+  }
+  const templates = readSqlTemplates();
+  const entry = {
+    id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name, sql, desc,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: (req.rbac && req.rbac.email) || "unknown",
+  };
+  templates.unshift(entry);
+  writeSqlTemplates(templates);
+  res.json({ ok: true, template: entry });
+});
+
+/** PUT /api/sql-templates/:id — update */
+app.put("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, (req, res) => {
+  const { id } = req.params;
+  const name = String(req.body?.name ?? "").trim();
+  const sql  = String(req.body?.sql  ?? "").trim();
+  const desc = String(req.body?.desc ?? "").trim();
+  if (!name || !sql) {
+    return res.status(400).json({ error: "missing_fields", message: "name and sql are required" });
+  }
+  const templates = readSqlTemplates();
+  const idx = templates.findIndex(t => t.id === id);
+  if (idx < 0) return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
+  templates[idx] = { ...templates[idx], name, sql, desc, updatedAt: new Date().toISOString() };
+  writeSqlTemplates(templates);
+  res.json({ ok: true, template: templates[idx] });
+});
+
+/** DELETE /api/sql-templates/:id — delete */
+app.delete("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, (req, res) => {
+  const { id } = req.params;
+  const templates = readSqlTemplates();
+  const next = templates.filter(t => t.id !== id);
+  if (next.length === templates.length) {
+    return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
+  }
+  writeSqlTemplates(next);
+  res.json({ ok: true });
+});
+
+/* ─────────────────────────────────────────────────────────────
    GLOBAL JSON ERROR HANDLER
    Ensures Express never sends HTML error pages to API clients.
    ───────────────────────────────────────────────────────────── */
@@ -3282,19 +3364,23 @@ app.get("/api/rag/stats", (req, res) => {
 
 /** GET /api/rag/examples — list saved query examples */
 app.get("/api/rag/examples", (req, res) => {
-  const examples = ragStore.listByType("example").map(({ id, metadata, addedAt }) => ({
+  const examples = ragStore.listByType("example").map(({ id, metadata, addedAt, updatedAt }) => ({
     id,
-    question:  metadata.question || "",
-    sql:       metadata.sql || "",
-    note:      metadata.note || "",
-    autoSaved: metadata.autoSaved || false,
     addedAt,
+    updatedAt: updatedAt || null,
+    question: String(metadata.question || ""),
+    sql: String(metadata.sql || ""),
+    note: String(metadata.note || ""),
+    autoSaved: !!metadata.autoSaved,
+    verified: !!metadata.verified,
+    /** Full metadata — dashboard filters/cards use ex.metadata.* */
+    metadata: { ...metadata, type: "example" },
   }));
   res.json({ ok: true, examples });
 });
 
 /** POST /api/rag/example — manually save a query example */
-app.post("/api/rag/example", async (req, res) => {
+app.post("/api/rag/example", rbac.requireManagerOrAdminApi, async (req, res) => {
   try {
     const { question, sql, note } = req.body || {};
     if (!question || !sql) return res.status(400).json({ ok: false, error: "question and sql required" });
@@ -3306,9 +3392,34 @@ app.post("/api/rag/example", async (req, res) => {
 });
 
 /** DELETE /api/rag/example/:id — remove an example */
-app.delete("/api/rag/example/:id", (req, res) => {
+app.delete("/api/rag/example/:id", rbac.requireManagerOrAdminApi, (req, res) => {
   const removed = ragStore.remove(req.params.id);
   res.json({ ok: removed });
+});
+
+/** PUT /api/rag/example/:id — edit question / sql / note of an existing example */
+app.put("/api/rag/example/:id", rbac.requireManagerOrAdminApi, async (req, res) => {
+  try {
+    const { question, sql, note = "" } = req.body || {};
+    if (!question || !sql) return res.status(400).json({ ok: false, error: "question and sql required" });
+    const updated = await ragStore.updateExample(req.params.id, String(question), String(sql), String(note));
+    if (!updated) return res.status(404).json({ ok: false, error: "example not found" });
+    res.json({ ok: true, example: updated });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** POST /api/rag/example/:id/thumbs-up — mark example as verified/correct */
+app.post("/api/rag/example/:id/thumbs-up", rbac.requireManagerOrAdminApi, (req, res) => {
+  const ok = ragStore.thumbsUp(req.params.id);
+  res.json({ ok });
+});
+
+/** POST /api/rag/example/:id/thumbs-down — mark as wrong and remove */
+app.post("/api/rag/example/:id/thumbs-down", rbac.requireManagerOrAdminApi, (req, res) => {
+  const ok = ragStore.thumbsDown(req.params.id);
+  res.json({ ok });
 });
 
 /** GET /api/rag/glossary — list glossary terms */
@@ -3323,7 +3434,7 @@ app.get("/api/rag/glossary", (req, res) => {
 });
 
 /** POST /api/rag/glossary — add a business glossary term */
-app.post("/api/rag/glossary", async (req, res) => {
+app.post("/api/rag/glossary", rbac.requireManagerOrAdminApi, async (req, res) => {
   try {
     const { term, definition } = req.body || {};
     if (!term || !definition) return res.status(400).json({ ok: false, error: "term and definition required" });
@@ -3335,16 +3446,58 @@ app.post("/api/rag/glossary", async (req, res) => {
 });
 
 /** DELETE /api/rag/glossary/:id — remove a glossary term */
-app.delete("/api/rag/glossary/:id", (req, res) => {
+app.delete("/api/rag/glossary/:id", rbac.requireManagerOrAdminApi, (req, res) => {
   const removed = ragStore.remove(req.params.id);
   res.json({ ok: removed });
 });
 
 /** POST /api/rag/index-schema — re-index all schema views */
-app.post("/api/rag/index-schema", async (req, res) => {
+app.post("/api/rag/index-schema", rbac.requireManagerOrAdminApi, async (req, res) => {
   try {
     await ragSchemaIndexer.indexSchema(true);
     res.json({ ok: true, stats: ragStore.stats() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** POST /api/rag/seed-examples — bulk-load predefined starter examples */
+const PREDEFINED_EXAMPLES_PATH = path.join(rootDir, "data", "predefined-rag-examples.json");
+app.post("/api/rag/seed-examples", rbac.requireManagerOrAdminApi, async (req, res) => {
+  try {
+    if (!fs.existsSync(PREDEFINED_EXAMPLES_PATH)) {
+      return res.status(404).json({ ok: false, error: "predefined-rag-examples.json not found" });
+    }
+    const examples = JSON.parse(fs.readFileSync(PREDEFINED_EXAMPLES_PATH, "utf8"));
+    if (!Array.isArray(examples) || !examples.length) {
+      return res.status(400).json({ ok: false, error: "No examples in file" });
+    }
+    const { replace = false } = req.body || {};
+    let added = 0, skipped = 0;
+    const existingExamples = ragStore.listByType("example");
+    const existingQuestions = new Set(
+      existingExamples.map(e => String(e.metadata?.question || "").toLowerCase().trim())
+    );
+    for (const ex of examples) {
+      if (!ex.question || !ex.sql) { skipped++; continue; }
+      const qLow = ex.question.toLowerCase().trim();
+      // If replace=false, skip examples that already exist (same question)
+      if (!replace && existingQuestions.has(qLow)) { skipped++; continue; }
+      try {
+        await ragStore.addExample(ex.question, ex.sql, ex.note || "predefined starter", false);
+        added++;
+      } catch (err) {
+        console.error("[seed-examples] failed:", ex.question, err.message);
+        skipped++;
+      }
+    }
+    res.json({
+      ok: true,
+      added,
+      skipped,
+      total: examples.length,
+      stats: ragStore.stats(),
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
