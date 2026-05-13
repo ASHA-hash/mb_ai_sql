@@ -3397,8 +3397,9 @@ function SalesPeriodPanel({ auth }) {
     return keys.find(k => /invoicedt|date|dt|day|created/i.test(k)) || null;
   }, [rows]);
 
-  /* Prior-year window: calendar-safe (month lengths, leap years) vs naive string year +/-. */
-  function priorYearRange(fromDMY, toDMY) {
+  /* Prior-year window: calendar-safe (month lengths, leap years) vs naive string year +/-.
+     Params must NOT be named `toDMY` — that would shadow the global `toDMY()` formatter. */
+  function priorYearRange(startDMY, endDMY) {
     function parseDMY(dmy) {
       const p = String(dmy || '').split('.');
       if (p.length !== 3) return null;
@@ -3409,8 +3410,8 @@ function SalesPeriodPanel({ auth }) {
       const dt = new Date(yy, mm - 1, dd);
       return isNaN(dt.getTime()) ? null : dt;
     }
-    const a = parseDMY(fromDMY);
-    const b = parseDMY(toDMY);
+    const a = parseDMY(startDMY);
+    const b = parseDMY(endDMY);
     if (a && b) {
       const pf = new Date(a);
       pf.setFullYear(pf.getFullYear() - 1);
@@ -3422,7 +3423,7 @@ function SalesPeriodPanel({ auth }) {
       const [d, m, y] = dmy.split('.');
       return `${d}.${m}.${parseInt(y, 10) + delta}`;
     }
-    return { from: shiftYear(fromDMY, -1), to: shiftYear(toDMY, -1) };
+    return { from: shiftYear(startDMY, -1), to: shiftYear(endDMY, -1) };
   }
 
   /* Home Sales panel should use deterministic analytics API, not AI-generated SQL. */
