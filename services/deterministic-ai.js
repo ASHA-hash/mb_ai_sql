@@ -899,6 +899,9 @@ function dateFilterSql(dateRange, fromDate, toDate) {
       return `${baseCol} >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE())>=4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE())-1 END, 4, 1) AND ${baseCol} <= CAST(GETDATE() AS date)`;
     case "last_30_days":
       return `${baseCol} >= DATEADD(day, -30, CAST(GETDATE() AS date))`;
+    case "last_month":
+      return `${baseCol} >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 1, 0)
+        AND ${baseCol} < DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)`;
     default:
       return "1=1";
   }
@@ -923,10 +926,14 @@ function buildCompoundSalesKpiSql(question, fromDate, toDate) {
   if (wantsNet) parts.push("CAST(SUM(ISNULL(s.SaleNetAmount,0)) AS DECIMAL(38,4)) AS NetSales");
   if (wantsCust) parts.push("COUNT(DISTINCT s.CustomerId) AS UniqueCustomerCount");
   if (wantsInv) parts.push("COUNT(DISTINCT s.InvoiceNo) AS InvoiceCount");
-  if (parts.length < 2) return null;
+  /* Single-metric KPIs (e.g. "MTD Sales", "Unique Customer count") must still hit this fast path. */
+  if (parts.length < 1) return null;
 
-  let dateRange = "all_time";
-  const tb = inferTimeBlock(String(question || ""));
+  const qTrim = String(question || "");
+  let dateRange = /\b(all\s*time|lifetime|since\s+beginning|ever|full\s+history)\b/i.test(qTrim)
+    ? "all_time"
+    : "mtd";
+  const tb = inferTimeBlock(qTrim);
   if (tb.type === "range" && tb.values && tb.values[0]) dateRange = String(tb.values[0]);
   const where = dateFilterSql(dateRange, fromDate, toDate);
   return `SELECT ${parts.join(", ")} FROM dbo.VwAISalesData s WHERE ${where}`;

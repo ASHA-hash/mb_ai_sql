@@ -44,7 +44,7 @@ function indianFyStart(y, m) {
 }
 
 /**
- * @param {string} preset - mtd|qtd|ytd|last_7d|last_30d|last_90d|last_180d|this_month|last_month|custom
+ * @param {string} preset - mtd|qtd|ytd|last_7d|last_30d|last_90d|last_180d|6m|last_6m|this_month|last_month|custom
  * @param {{ from?: string, to?: string }} [custom]
  * @param {Date} [now]
  */
@@ -131,7 +131,8 @@ function resolvePeriodRange(preset, custom, now) {
     };
   }
 
-  if (p === "last_180d" || p === "180d" || p === "6m" || p === "last_6m") {
+  /* Rolling 6 × 30 days — keep distinct from calendar "Last 6M" below. */
+  if (p === "last_180d" || p === "180d") {
     const end = new Date(ref);
     const start = new Date(ref);
     start.setDate(start.getDate() - 179);
@@ -140,6 +141,23 @@ function resolvePeriodRange(preset, custom, now) {
       from: toIso(start.getFullYear(), start.getMonth() + 1, start.getDate()),
       to: toIso(end.getFullYear(), end.getMonth() + 1, end.getDate()),
       days: 180,
+    };
+  }
+
+  /* Last 6 calendar months (current + previous 5), month-aligned — matches Home Sales `getPeriodRange('6m')`. */
+  if (p === "6m" || p === "last_6m") {
+    const end = new Date(ref);
+    const start = new Date(ref);
+    start.setMonth(start.getMonth() - 5);
+    start.setDate(1);
+    return {
+      preset: "6m",
+      from: toIso(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+      to: toIso(end.getFullYear(), end.getMonth() + 1, end.getDate()),
+      days: daysBetweenInclusive(
+        toIso(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+        toIso(end.getFullYear(), end.getMonth() + 1, end.getDate())
+      ),
     };
   }
 

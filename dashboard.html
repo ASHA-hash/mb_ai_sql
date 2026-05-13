@@ -454,6 +454,27 @@
     color: var(--pom-pct-others, #4f46e5) !important;
   }
 
+  /* Home · Recent AI Queries — rows must stay readable on hover (no hard-coded light gray bg + inherited body text) */
+  .recent-ai-query-row {
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .recent-ai-query-row:last-of-type {
+    border-bottom: none;
+  }
+  .recent-ai-query-row:hover {
+    background: var(--bg-hover) !important;
+  }
+  .recent-ai-query-row .recent-ai-query-icon {
+    color: var(--brand) !important;
+    opacity: 0.95;
+  }
+  .recent-ai-query-row .recent-ai-query-text {
+    color: var(--text-strong) !important;
+  }
+  .recent-ai-query-row .recent-ai-query-arrow {
+    color: var(--text-muted) !important;
+  }
+
   /* Sidebar (the existing inline gradient is a deep purple — replace it with token) */
   .sidebar-shell { background: var(--sidebar-bg) !important; }
   .nav-active {
@@ -901,6 +922,15 @@ const AI_QUERY_CLIENT_TIMEOUT_MS = Math.min(
   Math.max(120000, parseInt(String(typeof localStorage !== "undefined" ? localStorage.getItem("erp_ai_timeout_ms") : ""), 10) || 180000)
 );
 
+/** Deterministic analytics (QTD/YTD/custom) — overrides via localStorage `erp_analytics_timeout_ms`. */
+const ERP_ANALYTICS_TIMEOUT_MS = Math.min(
+  720000,
+  Math.max(
+    180000,
+    parseInt(String(typeof localStorage !== "undefined" ? localStorage.getItem("erp_analytics_timeout_ms") : ""), 10) || 360000
+  )
+);
+
 async function apiFetch(path, { method = "GET", body, token, signal, timeoutMs = 0 } = {}) {
   const base = getApiBase();
   const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
@@ -1055,10 +1085,8 @@ function formatCompactNumber(n) {
  */
 function fmtLakhsAxis(v) {
   if (!Number.isFinite(v)) return '';
-  const abs = Math.abs(v);
-  if (abs >= 1000) return (v / 1000).toFixed(1) + 'K L';
-  if (abs >= 1)    return v.toFixed(1) + ' L';
-  return v.toFixed(2) + ' L';
+  /* Lakhs only — Indian grouping, no Crore/K-lakh shortcut (customer requirement). */
+  return `${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 })} L`;
 }
 
 function formatNum(n, key = '') {
@@ -1479,7 +1507,12 @@ function baseEchartsOption(themeTokens, opts = {}) {
 function fmtLabel(v) {
   if (!v) return '';
   const s = String(v);
-  /* ISO date/datetime: 2023-05-16T00:00:00... or 2023-05-16 */
+  /* Calendar yyyy-mm-dd (ignore time + TZ drift from ISO strings like ...T00:00:00.000Z). */
+  if (/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(s)) {
+    const [y, mo, d] = s.slice(0, 10).split('-');
+    if (y && mo && d) return `${d}-${mo}-${y}`;
+  }
+  /* Bare ISO date prefix for odd formats */
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     const f = formatDateDDMMYYYY(s);
     if (f && f !== "Invalid Date") return f;
@@ -1780,7 +1813,7 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
     const isMoneySeries = isSaleValueKey(k);
     const histData = rows.map(r => scaleSaleValue(r[k], k) || 0);
     /* Show inline labels when dataset is small enough to be readable (≤ 45 points) */
-    const showLabels = n <= 45 && !fc;
+    const showLabels = n <= 96 && !fc;
     series.push({
       name: k,
       type: 'line',
@@ -1883,8 +1916,12 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
       /* interval:0 = show exactly the ticks that match data points; prevents phantom repeated labels
          for single-day or small-range views */
       axisLabel: {
-        color: t.text, fontSize: 11, hideOverlap: true,
-        interval: labelsExt.length <= 4 ? 0 : 'auto',
+        color: t.text,
+        fontSize: 11,
+        hideOverlap: true,
+        /* Show every bucket when moderately sparse so trends stay readable */
+        interval: labelsExt.length <= 24 ? 0 : labelsExt.length <= 48 ? 1 : 'auto',
+        rotate: labelsExt.length > 18 ? 32 : 0,
         formatter: v => fmtLabel(v),
       },
       axisLine: { lineStyle: { color: t.gridStrong } },
@@ -3081,6 +3118,40 @@ function priorYearTrendKey(canonicalKey) {
   return null;
 }
 
+/** Combine multiple DB rows sharing the same trend bucket (fixes repeated X-axis labels / double-count visuals). */
+function aggregateTrendChartRows(rows) {
+  if (!rows?.length) return [];
+  const map = new Map();
+  const order = [];
+  for (const r of rows) {
+    const k = canonicalTrendLabelKey(r.label);
+    if (!k) continue;
+    if (!map.has(k)) {
+      order.push(k);
+      map.set(k, {
+        label: String(r.label ?? ''),
+        TotalSales: parseFloat(r.TotalSales) || 0,
+        InvoiceCount: r.InvoiceCount != null ? parseFloat(r.InvoiceCount) || 0 : null,
+      });
+    } else {
+      const agg = map.get(k);
+      agg.TotalSales += parseFloat(r.TotalSales) || 0;
+      if (r.InvoiceCount != null) {
+        agg.InvoiceCount = (agg.InvoiceCount || 0) + (parseFloat(r.InvoiceCount) || 0);
+      }
+    }
+  }
+  return order.map((k) => {
+    const o = map.get(k);
+    const out = {
+      label: /^\d{4}-\d{2}-\d{2}$/.test(k) ? `${k.slice(8, 10)}-${k.slice(5, 7)}-${k.slice(0, 4)}` : /^\d{4}-\d{2}$/.test(k) ? k : o.label,
+      TotalSales: o.TotalSales,
+    };
+    if (o.InvoiceCount != null && Number.isFinite(o.InvoiceCount)) out.InvoiceCount = o.InvoiceCount;
+    return out;
+  });
+}
+
 function normalizeDateToDMY(s) {
   const raw = String(s || '').trim();
   if (!raw) return '';
@@ -3326,8 +3397,27 @@ function SalesPeriodPanel({ auth }) {
     return keys.find(k => /invoicedt|date|dt|day|created/i.test(k)) || null;
   }, [rows]);
 
-  /* Compute prior-year date range by subtracting 1 year from dd.mm.yyyy strings */
+  /* Prior-year window: calendar-safe (month lengths, leap years) vs naive string year +/-. */
   function priorYearRange(fromDMY, toDMY) {
+    function parseDMY(dmy) {
+      const p = String(dmy || '').split('.');
+      if (p.length !== 3) return null;
+      const dd = parseInt(p[0], 10);
+      const mm = parseInt(p[1], 10);
+      const yy = parseInt(p[2], 10);
+      if (!Number.isFinite(dd) || !Number.isFinite(mm) || !Number.isFinite(yy)) return null;
+      const dt = new Date(yy, mm - 1, dd);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    const a = parseDMY(fromDMY);
+    const b = parseDMY(toDMY);
+    if (a && b) {
+      const pf = new Date(a);
+      pf.setFullYear(pf.getFullYear() - 1);
+      const pt = new Date(b);
+      pt.setFullYear(pt.getFullYear() - 1);
+      return { from: toDMY(pf), to: toDMY(pt) };
+    }
     function shiftYear(dmy, delta) {
       const [d, m, y] = dmy.split('.');
       return `${d}.${m}.${parseInt(y, 10) + delta}`;
@@ -3350,7 +3440,25 @@ function SalesPeriodPanel({ auth }) {
        phase 2 → widgets (branch / dept / category, background)
        This prevents a single massive query from timing out at 120 s and
        crashing the whole panel with "dashboard_unavailable". */
-    const isLongPeriod = ['qtd', 'ytd', '6m', 'last_180d'].includes(activePeriod);
+    const dashboardTimeoutMs = ERP_ANALYTICS_TIMEOUT_MS;
+
+    async function postSalesDashboard(body) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const resp = await apiFetch('/api/analytics/dashboard', {
+            method: 'POST',
+            token: auth.token,
+            timeoutMs: dashboardTimeoutMs,
+            body,
+          });
+          if (resp && resp.kpi) return resp;
+        } catch (_) {
+          /* retry once */
+        }
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 900));
+      }
+      return null;
+    }
 
     try {
       /* ── Phase 1: Critical (KPI + trend) ─────────────────────────── */
@@ -3363,37 +3471,36 @@ function SalesPeriodPanel({ auth }) {
       /* Prior-year comparison — uses period:'custom' + ISO dates so the backend
          doesn't silently fall back to MTD (which was the root cause of identical LY/CY). */
       const { from: pyFrom, to: pyTo } = priorYearRange(from, to);
-      const pyPromise = activePeriod !== 'today'
-        ? apiFetch('/api/analytics/dashboard', {
-            method: 'POST', token: auth.token,
-            timeoutMs: isLongPeriod ? 240000 : 120000,
-            body: {
-              period: 'custom',
-              custom: { from: dmyToISO(pyFrom), to: dmyToISO(pyTo) },
-              dataset: 'sales', loadPhase: 'critical', compact: true,
-            },
-          }).catch(() => null)
-        : Promise.resolve(null);
-
-      /* Always send explicit ISO window (matches subtitle + fixes 6m vs rolling-180d mismatch). */
-      const cyCustom =
-        dmyToISO(from) && dmyToISO(to)
-          ? { from: dmyToISO(from), to: dmyToISO(to) }
-          : null;
-      const criticalPromise = apiFetch('/api/analytics/dashboard', {
-        method: 'POST',
-        token: auth.token,
-        timeoutMs: isLongPeriod ? 240000 : 120000,
-        body: cyCustom
+      const pyBody =
+        activePeriod !== 'today'
           ? {
               period: 'custom',
-              custom: cyCustom,
+              custom: { from: dmyToISO(pyFrom), to: dmyToISO(pyTo) },
               dataset: 'sales',
               loadPhase: 'critical',
               compact: true,
             }
-          : { period: activePeriod, dataset: 'sales', loadPhase: 'critical', compact: true },
-      }).catch(() => null);
+          : null;
+      const pyPromise =
+        pyBody && dmyToISO(pyFrom) && dmyToISO(pyTo)
+          ? postSalesDashboard(pyBody).catch(() => null)
+          : Promise.resolve(null);
+
+      /* Always send explicit ISO window (matches subtitle + aligns with server `6m` calendar rule). */
+      const cyCustom =
+        dmyToISO(from) && dmyToISO(to)
+          ? { from: dmyToISO(from), to: dmyToISO(to) }
+          : null;
+      const criticalBody = cyCustom
+        ? {
+            period: 'custom',
+            custom: cyCustom,
+            dataset: 'sales',
+            loadPhase: 'critical',
+            compact: true,
+          }
+        : { period: activePeriod, dataset: 'sales', loadPhase: 'critical', compact: true };
+      const criticalPromise = postSalesDashboard(criticalBody);
 
       const [flatData, critical, pyDash] = await Promise.all([flatPromise, criticalPromise, pyPromise]);
       setRows(flatData);
@@ -3428,7 +3535,7 @@ function SalesPeriodPanel({ auth }) {
         const widgets = await apiFetch('/api/analytics/dashboard', {
           method: 'POST',
           token: auth.token,
-          timeoutMs: 240000,
+          timeoutMs: dashboardTimeoutMs,
           body: cyCustom
             ? {
                 period: 'custom',
@@ -3538,12 +3645,15 @@ function SalesPeriodPanel({ auth }) {
     }
 
     /* Merge prior-year sales as "PY_TotalSales" — match by calendar period key, not row index */
+    currentRows = aggregateTrendChartRows(currentRows);
+
     if (pyTrendRows?.length && currentRows.length) {
       const pySeries = extractTrendSeries(pyTrendRows);
       const pyByKey = new Map();
       for (const p of pySeries) {
         const k = canonicalTrendLabelKey(p.label);
-        if (k) pyByKey.set(k, p.value);
+        if (!k) continue;
+        pyByKey.set(k, (pyByKey.get(k) || 0) + p.value);
       }
       return currentRows.map((r) => {
         const ck = canonicalTrendLabelKey(r.label);
@@ -3750,7 +3860,7 @@ function HomePanel({ auth, onNavigate }) {
     if (!features.includes('data')) return;
     const mkOpts = (period) => ({
       method: 'POST', token: auth.token,
-      timeoutMs: 120000,
+      timeoutMs: ERP_ANALYTICS_TIMEOUT_MS,
       body: { period, dataset: 'sales', compact: true },
     });
     setTodayKpiStatus('loading');
@@ -3933,14 +4043,28 @@ function HomePanel({ auth, onNavigate }) {
             <button onClick={() => onNavigate("ai")} style={{fontSize:11,color:"#6366f1",fontWeight:600,background:"none",border:"none",cursor:"pointer"}}>View all →</button>
           </div>
           <div className="card" style={{overflow:"hidden"}}>
-            {history.slice(0,6).map((h,i) => (
-              <button key={i} onClick={() => onNavigate("ai")}
-                style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"11px 16px",background:"none",border:"none",borderBottom:i<5&&i<history.length-1?"1px solid #f8fafc":"none",cursor:"pointer",textAlign:"left",transition:"background 0.1s"}}
-                onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"}
-                onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                <span style={{fontSize:14,color:"#c7d2fe",flexShrink:0}}>✨</span>
-                <span style={{fontSize:13,color:"#334155",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{h}</span>
-                <span style={{fontSize:11,color:"#cbd5e1",flexShrink:0}}>→</span>
+            {history.slice(0, 6).map((h, i) => (
+              <button
+                key={i}
+                type="button"
+                className="recent-ai-query-row"
+                onClick={() => onNavigate("ai")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "11px 16px",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "background 0.15s ease",
+                }}
+              >
+                <span className="recent-ai-query-icon" style={{ fontSize: 14, flexShrink: 0 }}>✨</span>
+                <span className="recent-ai-query-text" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{h}</span>
+                <span className="recent-ai-query-arrow" style={{ fontSize: 11, flexShrink: 0 }}>→</span>
               </button>
             ))}
           </div>
@@ -4291,7 +4415,8 @@ const ANALYTICS_PERIOD_CHIPS = [
   { key: "ytd", label: "YTD" },
   { key: "last_30d", label: "30d" },
   { key: "last_90d", label: "90d" },
-  { key: "last_180d", label: "6M" },
+  { key: "6m", label: "Last 6M" },
+  { key: "last_180d", label: "180d" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -4345,7 +4470,7 @@ function prefetchAnalyticsCriticalDefault(token) {
   const key = JSON.stringify(body);
   const prev = analyticsPrefetchStore.criticalHit;
   if (prev && prev.key === key && Date.now() - prev.ts < 60_000) return;
-  apiFetch("/api/analytics/dashboard", { method: "POST", token, body })
+  apiFetch("/api/analytics/dashboard", { method: "POST", token, body, timeoutMs: ERP_ANALYTICS_TIMEOUT_MS })
     .then((data) => {
       analyticsPrefetchStore.criticalHit = { key, data, ts: Date.now() };
     })
@@ -4441,10 +4566,7 @@ function AnalyticsPanel({ auth }) {
     if (forceGranularity === "day") bodyBase.forceTrendGranularity = "day";
     if (forceGranularity === "month") bodyBase.forceTrendGranularity = "month";
 
-    const analyticsTimeout =
-      period === "custom" || period === "ytd" || period === "qtd" || period === "last_180d"
-        ? 300000
-        : 150000;
+    const analyticsTimeout = ERP_ANALYTICS_TIMEOUT_MS;
     try {
       const prefetchKey = JSON.stringify({ ...bodyBase, loadPhase: "critical" });
       let critical;

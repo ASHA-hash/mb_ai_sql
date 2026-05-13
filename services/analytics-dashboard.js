@@ -818,7 +818,7 @@ async function runAnalyticsDashboard(pool, body) {
         range,
         topN,
       }),
-      30
+      120
     );
   }
 
@@ -846,7 +846,7 @@ async function runAnalyticsDashboard(pool, body) {
       trendMonth:            body.trendMonth || null,
       forceTrendGranularity: body.forceTrendGranularity || null,
     }, tier),
-    tier === "critical" ? 20 : 60
+    tier === "critical" ? 90 : 180
   );
 }
 
