@@ -398,6 +398,62 @@
   .data-table tr:nth-child(even) td { background: var(--bg-zebra) !important; }
   .data-table tr:hover td { background: var(--bg-hover) !important; }
 
+  /* Pie chart “Others” drill-down modal: always a light sheet; force text contrast
+     so dark-theme body/.text-slate-* !important rules cannot wash it out */
+  .pie-others-modal-panel .pie-others-modal-search-strip {
+    background: #ffffff !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-search-strip input[type="text"] {
+    color: #0f172a !important;
+    background-color: #f8fafc !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table thead th {
+    color: #475569 !important;
+    background: #f1f5f9 !important;
+    border-bottom-color: #e2e8f0 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table tbody td {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+    border-bottom-color: #f1f5f9 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table tbody tr:hover td {
+    background-color: #f1f5f9 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table .pom-name,
+  .pie-others-modal-panel .pie-others-modal-table .pom-value {
+    color: #0f172a !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table .pom-rank {
+    color: #334155 !important;
+    background-color: #e2e8f0 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-footer {
+    background: #f8fafc !important;
+    color: #475569 !important;
+    border-top-color: #e2e8f0 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-footer button {
+    color: #0f172a !important;
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-footer .pom-legend-others {
+    color: #4f46e5 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-footer .pom-legend-total {
+    color: #047857 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-footer .pom-legend-hint {
+    color: #64748b !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table .pom-pct-total {
+    color: #047857 !important;
+  }
+  .pie-others-modal-panel .pie-others-modal-table .pom-pct-others {
+    color: var(--pom-pct-others, #4f46e5) !important;
+  }
+
   /* Sidebar (the existing inline gradient is a deep purple — replace it with token) */
   .sidebar-shell { background: var(--sidebar-bg) !important; }
   .nav-active {
@@ -2016,7 +2072,7 @@ function PieChart({ rows, labelCol, valueCol, title }) {
             padding:16,
           }}
         >
-          <div style={{
+          <div className="pie-others-modal-panel" style={{
             background:'#ffffff',
             borderRadius:20,
             width:'100%', maxWidth:540,
@@ -2079,7 +2135,7 @@ function PieChart({ rows, labelCol, valueCol, title }) {
             </div>
 
             {/* ── Search box (fixed light surface — theme vars are wrong on white in dark mode) ── */}
-            <div style={{padding:'12px 16px', borderBottom:'1px solid #e2e8f0', background:'#ffffff'}}>
+            <div className="pie-others-modal-search-strip" style={{padding:'12px 16px', borderBottom:'1px solid #e2e8f0', background:'#ffffff'}}>
               <div style={{position:'relative'}}>
                 <span style={{
                   position:'absolute', left:11, top:'50%', transform:'translateY(-50%)',
@@ -2129,7 +2185,7 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                   <p style={{fontSize:13, color:'#475569', fontWeight:600}}>No items match "{othersSearch}"</p>
                 </div>
               ) : (
-                <table style={{width:'100%', borderCollapse:'collapse', background:'#ffffff'}}>
+                <table className="pie-others-modal-table" style={{width:'100%', borderCollapse:'collapse', background:'#ffffff'}}>
                   <thead>
                     <tr style={{background:'#f1f5f9', borderBottom:'2px solid #e2e8f0'}}>
                       <th style={{textAlign:'center', padding:'8px 10px', color:'#475569', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:36}}>#</th>
@@ -2158,13 +2214,10 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                           borderBottom:'1px solid #f1f5f9',
                           background:'#ffffff',
                           transition:'background 0.1s',
-                        }}
-                          onMouseEnter={e => { e.currentTarget.style.background='#f8fafc'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background='#ffffff'; }}
-                        >
+                        }}>
                           {/* Rank */}
                           <td style={{padding:'9px 10px', textAlign:'center'}}>
-                            <span style={{
+                            <span className="pom-rank" style={{
                               fontSize:11, fontWeight:700,
                               color:'#334155',
                               background:'#e2e8f0',
@@ -2176,11 +2229,11 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                           </td>
                           {/* Name */}
                           <td style={{padding:'9px 12px'}}>
-                            <span style={{fontSize:13, fontWeight:600, color:'#0f172a'}}>{item.name}</span>
+                            <span className="pom-name" style={{fontSize:13, fontWeight:600, color:'#0f172a'}}>{item.name}</span>
                           </td>
                           {/* Value */}
                           <td style={{padding:'9px 12px', textAlign:'right'}}>
-                            <span style={{
+                            <span className="pom-value" style={{
                               fontSize:13, fontWeight:700, color:'#0f172a',
                               fontVariantNumeric:'tabular-nums',
                             }}>{valFmt}</span>
@@ -2193,14 +2246,14 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                                 <div style={{width:36, height:4, borderRadius:3, background:'#e2e8f0', overflow:'hidden'}}>
                                   <div style={{width:`${Math.min(sharePct * 2, 100)}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg,#6366f1,#8b5cf6)', transition:'width 0.3s ease'}}/>
                                 </div>
-                                <span style={{fontSize:11, fontWeight:800, color: rankColor, minWidth:34, textAlign:'right'}}>{shareStr}%</span>
+                                <span className="pom-pct-others" style={{ ['--pom-pct-others']: rankColor, fontSize:11, fontWeight:800, color: rankColor, minWidth:34, textAlign:'right'}}>{shareStr}%</span>
                               </div>
                               {/* Within Total bar */}
                               <div style={{display:'flex', alignItems:'center', gap:4}}>
                                 <div style={{width:36, height:4, borderRadius:3, background:'#e2e8f0', overflow:'hidden'}}>
                                   <div style={{width:`${Math.min(totalSharePct * 10, 100)}%`, height:'100%', borderRadius:3, background:'#10b981', transition:'width 0.3s ease'}}/>
                                 </div>
-                                <span style={{fontSize:10, fontWeight:700, color:'#047857', minWidth:34, textAlign:'right'}}>{totalShareStr}%</span>
+                                <span className="pom-pct-total" style={{fontSize:10, fontWeight:700, color:'#047857', minWidth:34, textAlign:'right'}}>{totalShareStr}%</span>
                               </div>
                             </div>
                           </td>
@@ -2213,17 +2266,17 @@ function PieChart({ rows, labelCol, valueCol, title }) {
             </div>
 
             {/* ── Footer ── */}
-            <div style={{
+            <div className="pie-others-modal-footer" style={{
               padding:'10px 16px', borderTop:'1px solid #e2e8f0',
               display:'flex', alignItems:'center', justifyContent:'space-between',
               background:'#f8fafc',
             }}>
               <div style={{margin:0}}>
                 <div style={{display:'flex', gap:12, marginBottom:2}}>
-                  <span style={{fontSize:10, fontWeight:700, color:'#4f46e5'}}>■ % of Others group</span>
-                  <span style={{fontSize:10, fontWeight:700, color:'#047857'}}>■ % of Grand Total</span>
+                  <span className="pom-legend-others" style={{fontSize:10, fontWeight:700, color:'#4f46e5'}}>■ % of Others group</span>
+                  <span className="pom-legend-total" style={{fontSize:10, fontWeight:700, color:'#047857'}}>■ % of Grand Total</span>
                 </div>
-                <p style={{margin:0, fontSize:10, color:'#64748b'}}>Hover any row to highlight</p>
+                <p className="pom-legend-hint" style={{margin:0, fontSize:10, color:'#64748b'}}>Hover any row to highlight</p>
               </div>
               <button
                 onClick={() => setOthersModal(false)}
