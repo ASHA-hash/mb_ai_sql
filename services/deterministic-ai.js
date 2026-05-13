@@ -469,7 +469,16 @@ function chooseDeterministicChart(intent, rows) {
 
 function inferMetricFromQuestion(question) {
   const q = String(question || "").toLowerCase();
-  if (/\b(invoice|transaction|order)\b/.test(q) && /\bcount|how many|number of\b/.test(q)) return "invoice_count";
+  if (
+    /\b(customer|customers)\b/.test(q) &&
+    /\b(count|counts|counting|unique|distinct|how many|number of)\b/.test(q)
+  ) {
+    return "customer_count";
+  }
+  if (/\bunique\b/.test(q) && /\b(customer|customers)\b/.test(q)) return "customer_count";
+  if (/\b(invoice|transaction|order|bill|bills)\b/.test(q) && /\bcount|how many|number of\b/.test(q)) {
+    return "invoice_count";
+  }
   if (/\b(qty|quantity|units?)\b/.test(q)) return "quantity";
   return "revenue";
 }
@@ -895,6 +904,34 @@ function dateFilterSql(dateRange, fromDate, toDate) {
   }
 }
 
+/**
+ * One-row KPI with multiple aggregates (MTD net sales + distinct customers + distinct invoices).
+ * Uses the same date window as single-metric KPIs (fromDate/toDate or inferTimeBlock).
+ */
+function buildCompoundSalesKpiSql(question, fromDate, toDate) {
+  const q = String(question || "").toLowerCase();
+  const wantsNet = /\b(sale|sales|revenue|net\s*sale|amount|turnover)\b/.test(q);
+  const wantsCust =
+    (/\b(customer|customers)\b/.test(q) &&
+      /\b(count|counts|counting|unique|distinct|how many|number of)\b/.test(q)) ||
+    (/\bunique\b/.test(q) && /\b(customer|customers)\b/.test(q));
+  const wantsInv =
+    (/\b(invoice|invoices|bill|bills)\b/.test(q) && /\b(count|counts|how many|number of)\b/.test(q)) ||
+    (/\b(transaction|transactions)\b/.test(q) && /\b(count|how many|number of)\b/.test(q));
+
+  const parts = [];
+  if (wantsNet) parts.push("CAST(SUM(ISNULL(s.SaleNetAmount,0)) AS DECIMAL(38,4)) AS NetSales");
+  if (wantsCust) parts.push("COUNT(DISTINCT s.CustomerId) AS UniqueCustomerCount");
+  if (wantsInv) parts.push("COUNT(DISTINCT s.InvoiceNo) AS InvoiceCount");
+  if (parts.length < 2) return null;
+
+  let dateRange = "all_time";
+  const tb = inferTimeBlock(String(question || ""));
+  if (tb.type === "range" && tb.values && tb.values[0]) dateRange = String(tb.values[0]);
+  const where = dateFilterSql(dateRange, fromDate, toDate);
+  return `SELECT ${parts.join(", ")} FROM dbo.VwAISalesData s WHERE ${where}`;
+}
+
 async function parseIntentStrict({ apiKey, model, question, dictionary, schemaMeta }) {
   const openai = new OpenAI({ apiKey });
   const intents = dictionary?.intents || [];
@@ -1179,9 +1216,13 @@ function buildKpiSql(metricDef, whereSql) {
 function buildTrendSql(metricDef, dimDef, whereSql) {
   const expr = dimDef?.expression || "CAST(s.InvoiceDt AS date)";
   const orderBy = dimDef?.orderBy || expr;
+  const aggExpr =
+    metricDef.aggregation === "COUNT_DISTINCT"
+      ? `CAST(COUNT(DISTINCT s.[${metricDef.column}]) AS DECIMAL(38,4))`
+      : `${metricDef.aggregation}(ISNULL(s.[${metricDef.column}],0))`;
   return [
     `SELECT ${expr} AS Period,`,
-    `  ${metricDef.aggregation}(ISNULL(s.[${metricDef.column}],0)) AS Value`,
+    `  ${aggExpr} AS Value`,
     `FROM dbo.VwAISalesData s`,
     `WHERE ${whereSql}`,
     `GROUP BY ${expr}`,
@@ -1513,7 +1554,11 @@ function normalizeRowsForIntent(intent, rows, topN) {
 
 function buildConfidence(intent, reliability, retriesUsed, rowCount) {
   const reason = String(reliability?.reason || "");
-  if (reason && reason !== "fallback_applied") return { level: "low", note: reason };
+  const benignReason =
+    !reason ||
+    reason === "fallback_applied" ||
+    /_template|_fastpath|_compare|preaggregate|compound_sales/i.test(reason);
+  if (reason && !benignReason) return { level: "low", note: reason };
   if (!rowCount) return { level: "low", note: "empty_result" };
   if (retriesUsed >= 2) return { level: "medium", note: "multiple_retries_used" };
   if (intent === "trend" && rowCount < 3) return { level: "medium", note: "limited_trend_points" };
@@ -1610,6 +1655,41 @@ async function runDeterministicQuery({ apiKey, model, question, pool, fromDate, 
   const semanticGraph = loadSemanticGraph();
 
   const structuredPlan = buildStructuredPlan(question);
+
+  /* Compound MTD-style KPIs in one SQL (avoids picking only invoice_count). */
+  try {
+    const compoundSql = buildCompoundSalesKpiSql(question, fromDate, toDate);
+    if (compoundSql) {
+      const rows = (await pool.request().query(compoundSql)).recordset || [];
+      const pintent = {
+        intent: "kpi",
+        metric: "compound_sales",
+        confidence: "high",
+        clarification_question: null,
+      };
+      const prel = { ok: true, reason: "compound_sales_kpi_template" };
+      return {
+        handled: true,
+        sql: compoundSql,
+        data: rows,
+        intent: pintent,
+        reliability: prel,
+        chartPolicy: "kpi_card",
+        summary: buildDeterministicSummary("kpi", rows),
+        confidence: { level: "high", note: "" },
+        retriesUsed: 0,
+        interpretation: buildInterpretationForResult({
+          dictionary,
+          question,
+          structuredPlan,
+          intent: pintent,
+          reliability: prel,
+        }),
+      };
+    }
+  } catch (e) {
+    console.warn("[deterministic] compound KPI template failed:", e.message);
+  }
 
   /* Multi-date / multi-point comparisons: deterministic UNION ALL, metric from question, all dates kept. */
   if (structuredPlan.time_comparison.mode === "point_set" && structuredPlan.time_comparison.values.length >= 2) {

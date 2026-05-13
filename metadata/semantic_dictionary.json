@@ -18,6 +18,12 @@
       "column": "InvoiceNo",
       "aggregation": "COUNT_DISTINCT"
     },
+    "customer_count": {
+      "label": "Unique Customers",
+      "table": "dbo.VwAISalesData",
+      "column": "CustomerId",
+      "aggregation": "COUNT_DISTINCT"
+    },
     "avg_order_value": {
       "label": "Avg Order Value",
       "table": "dbo.VwAISalesData",

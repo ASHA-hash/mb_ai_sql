@@ -845,7 +845,7 @@ const AI_QUERY_CLIENT_TIMEOUT_MS = Math.min(
   Math.max(120000, parseInt(String(typeof localStorage !== "undefined" ? localStorage.getItem("erp_ai_timeout_ms") : ""), 10) || 180000)
 );
 
-async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
+async function apiFetch(path, { method = "GET", body, token, signal, timeoutMs = 0 } = {}) {
   const base = getApiBase();
   const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -853,8 +853,50 @@ async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
   if (k) headers["X-API-Key"] = k;
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  if (signal) opts.signal = signal;
-  const res = await fetch(base + path, opts);
+
+  const ms = Math.max(0, Number(timeoutMs) || 0);
+  let timer;
+  const ctl = ms > 0 ? new AbortController() : null;
+  if (ctl && ms > 0) {
+    timer = setTimeout(() => {
+      try {
+        ctl.abort();
+      } catch (_) {
+        /* ignore */
+      }
+    }, ms);
+  }
+  if (signal && ctl) {
+    if (signal.aborted) ctl.abort();
+    else
+      signal.addEventListener(
+        "abort",
+        () => {
+          try {
+            ctl.abort();
+          } catch (_) {
+            /* ignore */
+          }
+        },
+        { once: true }
+      );
+  }
+  opts.signal = ctl ? ctl.signal : signal;
+
+  let res;
+  try {
+    res = await fetch(base + path, opts);
+  } catch (e) {
+    if (timer) clearTimeout(timer);
+    if (e && e.name === "AbortError") {
+      throw Object.assign(new Error(`Timeout: Request failed to complete in ${ms}ms`), {
+        status: 408,
+        name: "AbortError",
+      });
+    }
+    throw e;
+  }
+  if (timer) clearTimeout(timer);
   let data;
   try {
     data = await res.json();
@@ -863,7 +905,27 @@ async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
     const preview = text.slice(0, 300).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     data = { message: preview ? `Server error: ${preview}` : `HTTP ${res.status} (non-JSON response)` };
   }
-  if (!res.ok) throw Object.assign(new Error(data.message || `HTTP ${res.status}`), { status: res.status, data });
+  if (!res.ok) {
+    const hadBearer = !!(token && String(token).trim());
+    if (res.status === 401 && hadBearer) {
+      const errCode = data && typeof data === "object" ? String(data.error || "") : "";
+      const msg = data && typeof data === "object" ? String(data.message || "") : "";
+      if (
+        errCode === "invalid_token" ||
+        /jwt|expired|invalid\s*token|log\s*in\s*again/i.test(msg) ||
+        errCode === "token_expired"
+      ) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("erp-session-expired", { detail: { message: msg || "Session expired." } })
+          );
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
+    throw Object.assign(new Error(data.message || `HTTP ${res.status}`), { status: res.status, data });
+  }
   return data;
 }
 
@@ -1442,10 +1504,7 @@ function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, bar
         formatter: (params) => {
           const v = typeof params.value === 'number' ? params.value : parseFloat(params.value);
           if (!Number.isFinite(v) || v === 0) return '';
-          if (isMoneyCol) {
-            if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + 'K L';
-            return v.toFixed(2) + ' L';
-          }
+          if (isMoneyCol) return fmtLakhsAxis(v);
           return formatCompactNumber(v);
         },
       },
@@ -1685,9 +1744,7 @@ function LineChart({ rows, labelCol, valueCols, title, onPointClick = null, valu
         formatter: (params) => {
           const v = typeof params.value === 'number' ? params.value : parseFloat(params.value);
           if (!Number.isFinite(v) || v === 0) return '';
-          if (isMoneySeries) {
-            return Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K L' : v.toFixed(1) + ' L';
-          }
+          if (isMoneySeries) return fmtLakhsAxis(v);
           return formatCompactNumber(v);
         },
       } : { show: false },
@@ -1861,7 +1918,10 @@ function PieChart({ rows, labelCol, valueCol, title }) {
 
   // Build full data array sorted by value descending
   const allData = rows
-    .map(r => ({ name: String(r[labelCol] ?? ''), value: Math.abs(scaleSaleValue(r[valueCol], valueCol) || 0) }))
+    .map(r => ({
+      name: fmtLabel(String(r[labelCol] ?? '')),
+      value: Math.abs(scaleSaleValue(r[valueCol], valueCol) || 0),
+    }))
     .filter(d => d.value > 0)
     .sort((a, b) => b.value - a.value);
 
@@ -1957,13 +2017,14 @@ function PieChart({ rows, labelCol, valueCol, title }) {
           }}
         >
           <div style={{
-            background:'var(--card,#fff)',
+            background:'#ffffff',
             borderRadius:20,
             width:'100%', maxWidth:540,
             maxHeight:'82vh',
             display:'flex', flexDirection:'column',
             boxShadow:'0 32px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)',
             overflow:'hidden',
+            color:'#0f172a',
           }}>
             {/* ── Gradient Header ── */}
             <div style={{
@@ -2017,12 +2078,12 @@ function PieChart({ rows, labelCol, valueCol, title }) {
               </div>
             </div>
 
-            {/* ── Search box ── */}
-            <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border,#e2e8f0)'}}>
+            {/* ── Search box (fixed light surface — theme vars are wrong on white in dark mode) ── */}
+            <div style={{padding:'12px 16px', borderBottom:'1px solid #e2e8f0', background:'#ffffff'}}>
               <div style={{position:'relative'}}>
                 <span style={{
                   position:'absolute', left:11, top:'50%', transform:'translateY(-50%)',
-                  fontSize:14, color:'var(--text-muted,#94a3b8)', pointerEvents:'none',
+                  fontSize:14, color:'#64748b', pointerEvents:'none',
                 }}>🔍</span>
                 <input
                   type="text"
@@ -2032,49 +2093,49 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                   autoFocus
                   style={{
                     width:'100%', boxSizing:'border-box',
-                    border:'1.5px solid var(--border,#e2e8f0)',
+                    border:'1.5px solid #cbd5e1',
                     borderRadius:12, padding:'8px 12px 8px 34px',
                     fontSize:13, outline:'none',
-                    color:'var(--text)', background:'var(--bg,#fff)',
+                    color:'#0f172a', background:'#f8fafc',
                     transition:'border-color 0.15s',
                   }}
                   onFocus={e => { e.target.style.borderColor = '#6366f1'; }}
-                  onBlur={e => { e.target.style.borderColor = 'var(--border,#e2e8f0)'; }}
+                  onBlur={e => { e.target.style.borderColor = '#cbd5e1'; }}
                 />
                 {othersSearch && (
                   <button
                     onClick={() => setOthersSearch('')}
                     style={{
                       position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
-                      border:'none', background:'var(--bg-muted,#f1f5f9)', borderRadius:'50%',
+                      border:'none', background:'#e2e8f0', borderRadius:'50%',
                       width:20, height:20, fontSize:12, cursor:'pointer',
-                      color:'var(--text-muted)', display:'flex', alignItems:'center', justifyContent:'center',
+                      color:'#475569', display:'flex', alignItems:'center', justifyContent:'center',
                     }}
                   >✕</button>
                 )}
               </div>
               {othersSearch && (
-                <p style={{margin:'6px 0 0', fontSize:11, color:'var(--text-muted)', fontWeight:500}}>
+                <p style={{margin:'6px 0 0', fontSize:11, color:'#64748b', fontWeight:500}}>
                   {filteredItems.length} of {othersItems.length} match
                 </p>
               )}
             </div>
 
             {/* ── Table ── */}
-            <div style={{overflowY:'auto', flex:1}}>
+            <div style={{overflowY:'auto', flex:1, background:'#ffffff'}}>
               {filteredItems.length === 0 ? (
-                <div style={{padding:32, textAlign:'center'}}>
+                <div style={{padding:32, textAlign:'center', background:'#ffffff'}}>
                   <p style={{fontSize:28, marginBottom:8}}>🔍</p>
-                  <p style={{fontSize:13, color:'var(--text-muted)', fontWeight:600}}>No items match "{othersSearch}"</p>
+                  <p style={{fontSize:13, color:'#475569', fontWeight:600}}>No items match "{othersSearch}"</p>
                 </div>
               ) : (
-                <table style={{width:'100%', borderCollapse:'collapse'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', background:'#ffffff'}}>
                   <thead>
-                    <tr style={{background:'var(--bg-muted,#f8fafc)', borderBottom:'2px solid var(--border,#e2e8f0)'}}>
-                      <th style={{textAlign:'center', padding:'8px 10px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:36}}>#</th>
-                      <th style={{textAlign:'left', padding:'8px 12px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em'}}>Name</th>
-                      <th style={{textAlign:'right', padding:'8px 12px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap'}}>Value</th>
-                      <th style={{textAlign:'right', padding:'8px 8px', color:'var(--text-muted)', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:110}}>
+                    <tr style={{background:'#f1f5f9', borderBottom:'2px solid #e2e8f0'}}>
+                      <th style={{textAlign:'center', padding:'8px 10px', color:'#475569', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:36}}>#</th>
+                      <th style={{textAlign:'left', padding:'8px 12px', color:'#475569', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em'}}>Name</th>
+                      <th style={{textAlign:'right', padding:'8px 12px', color:'#475569', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap'}}>Value</th>
+                      <th style={{textAlign:'right', padding:'8px 8px', color:'#475569', fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.05em', width:110}}>
                         <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:1}}>
                           <span style={{color:'#6366f1'}}>of Others</span>
                           <span style={{color:'#10b981'}}>of Total</span>
@@ -2091,21 +2152,22 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                       const valFmt = isMoney
                         ? '₹ ' + item.value.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' L'
                         : item.value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
-                      const rankColor = sharePct >= 7 ? '#4f46e5' : sharePct >= 4 ? '#059669' : 'var(--text-muted)';
+                      const rankColor = sharePct >= 7 ? '#4f46e5' : sharePct >= 4 ? '#059669' : '#475569';
                       return (
                         <tr key={idx} style={{
-                          borderBottom:'1px solid var(--border,#f1f5f9)',
+                          borderBottom:'1px solid #f1f5f9',
+                          background:'#ffffff',
                           transition:'background 0.1s',
                         }}
-                          onMouseEnter={e => { e.currentTarget.style.background='var(--bg-muted,rgba(99,102,241,0.04))'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background='transparent'; }}
+                          onMouseEnter={e => { e.currentTarget.style.background='#f8fafc'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background='#ffffff'; }}
                         >
                           {/* Rank */}
                           <td style={{padding:'9px 10px', textAlign:'center'}}>
                             <span style={{
                               fontSize:11, fontWeight:700,
-                              color:'var(--text-muted)',
-                              background:'var(--bg-muted,#f1f5f9)',
+                              color:'#334155',
+                              background:'#e2e8f0',
                               borderRadius:6, padding:'2px 6px',
                               display:'inline-block', minWidth:24, textAlign:'center',
                             }}>
@@ -2114,12 +2176,12 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                           </td>
                           {/* Name */}
                           <td style={{padding:'9px 12px'}}>
-                            <span style={{fontSize:13, fontWeight:600, color:'var(--text)'}}>{item.name}</span>
+                            <span style={{fontSize:13, fontWeight:600, color:'#0f172a'}}>{item.name}</span>
                           </td>
                           {/* Value */}
                           <td style={{padding:'9px 12px', textAlign:'right'}}>
                             <span style={{
-                              fontSize:13, fontWeight:700, color:'var(--text-strong)',
+                              fontSize:13, fontWeight:700, color:'#0f172a',
                               fontVariantNumeric:'tabular-nums',
                             }}>{valFmt}</span>
                           </td>
@@ -2128,17 +2190,17 @@ function PieChart({ rows, labelCol, valueCol, title }) {
                             <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3}}>
                               {/* Within Others bar */}
                               <div style={{display:'flex', alignItems:'center', gap:4}}>
-                                <div style={{width:36, height:4, borderRadius:3, background:'var(--border,#e2e8f0)', overflow:'hidden'}}>
+                                <div style={{width:36, height:4, borderRadius:3, background:'#e2e8f0', overflow:'hidden'}}>
                                   <div style={{width:`${Math.min(sharePct * 2, 100)}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg,#6366f1,#8b5cf6)', transition:'width 0.3s ease'}}/>
                                 </div>
                                 <span style={{fontSize:11, fontWeight:800, color: rankColor, minWidth:34, textAlign:'right'}}>{shareStr}%</span>
                               </div>
                               {/* Within Total bar */}
                               <div style={{display:'flex', alignItems:'center', gap:4}}>
-                                <div style={{width:36, height:4, borderRadius:3, background:'var(--border,#e2e8f0)', overflow:'hidden'}}>
+                                <div style={{width:36, height:4, borderRadius:3, background:'#e2e8f0', overflow:'hidden'}}>
                                   <div style={{width:`${Math.min(totalSharePct * 10, 100)}%`, height:'100%', borderRadius:3, background:'#10b981', transition:'width 0.3s ease'}}/>
                                 </div>
-                                <span style={{fontSize:10, fontWeight:700, color:'#059669', minWidth:34, textAlign:'right'}}>{totalShareStr}%</span>
+                                <span style={{fontSize:10, fontWeight:700, color:'#047857', minWidth:34, textAlign:'right'}}>{totalShareStr}%</span>
                               </div>
                             </div>
                           </td>
@@ -2152,26 +2214,26 @@ function PieChart({ rows, labelCol, valueCol, title }) {
 
             {/* ── Footer ── */}
             <div style={{
-              padding:'10px 16px', borderTop:'1px solid var(--border,#e2e8f0)',
+              padding:'10px 16px', borderTop:'1px solid #e2e8f0',
               display:'flex', alignItems:'center', justifyContent:'space-between',
-              background:'var(--bg-muted,#f8fafc)',
+              background:'#f8fafc',
             }}>
               <div style={{margin:0}}>
                 <div style={{display:'flex', gap:12, marginBottom:2}}>
-                  <span style={{fontSize:10, fontWeight:700, color:'#6366f1'}}>■ % of Others group</span>
-                  <span style={{fontSize:10, fontWeight:700, color:'#10b981'}}>■ % of Grand Total</span>
+                  <span style={{fontSize:10, fontWeight:700, color:'#4f46e5'}}>■ % of Others group</span>
+                  <span style={{fontSize:10, fontWeight:700, color:'#047857'}}>■ % of Grand Total</span>
                 </div>
-                <p style={{margin:0, fontSize:10, color:'var(--text-muted)'}}>Hover any row to highlight</p>
+                <p style={{margin:0, fontSize:10, color:'#64748b'}}>Hover any row to highlight</p>
               </div>
               <button
                 onClick={() => setOthersModal(false)}
                 style={{
-                  border:'1px solid var(--border)', background:'var(--card,#fff)',
+                  border:'1px solid #cbd5e1', background:'#ffffff',
                   borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700,
-                  cursor:'pointer', color:'var(--text)', transition:'all 0.15s',
+                  cursor:'pointer', color:'#0f172a', transition:'all 0.15s',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor='#6366f1'; e.currentTarget.style.color='#6366f1'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--text)'; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#6366f1'; e.currentTarget.style.color='#4f46e5'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#cbd5e1'; e.currentTarget.style.color='#0f172a'; }}
               >
                 Close
               </button>
@@ -2382,7 +2444,7 @@ function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon, def
     const total = vals.reduce((s, v) => s + v, 0);
     const isMoney = isSaleValueKey(col);
     const fmt = isMoney
-      ? (total >= 1000 ? (total / 1000).toFixed(1) + 'K L' : total.toFixed(2) + ' L')
+      ? fmtRupee(total)
       : total >= 1e6 ? (total / 1e6).toFixed(1) + 'M' : total >= 1000 ? (total / 1000).toFixed(1) + 'K' : total.toFixed(0);
     return { col, total, fmt, isMoney };
   }).filter(s => s.total > 0);
@@ -2458,7 +2520,7 @@ function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon, def
                 fontSize:12, fontWeight:800,
                 color: i === 0 ? 'var(--brand,#6366f1)' : 'var(--text-strong)',
               }}>
-                {s.isMoney ? '₹ ' : ''}{s.fmt}
+                {s.fmt}
               </span>
             </div>
           ))}
@@ -2942,6 +3004,30 @@ function aggregateByMonth(rows, dateCol, valueCol) {
     .map(([label, value]) => ({ label, value }));
 }
 
+/** Normalize trend period_label to a stable key for YoY alignment (yyyy-mm-dd or yyyy-mm). */
+function canonicalTrendLabelKey(lbl) {
+  const s = String(lbl ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  const iso = toDayKeyFromCell(s);
+  return iso || s;
+}
+
+/** Map current-period key → prior-year key (same month/day or same fiscal month bucket). */
+function priorYearTrendKey(canonicalKey) {
+  const k = String(canonicalKey || "");
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k);
+  if (day) {
+    const d = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCFullYear(d.getUTCFullYear() - 1);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+  const mo = /^(\d{4})-(\d{2})$/.exec(k);
+  if (mo) return `${Number(mo[1]) - 1}-${mo[2]}`;
+  return null;
+}
+
 function normalizeDateToDMY(s) {
   const raw = String(s || '').trim();
   if (!raw) return '';
@@ -3196,14 +3282,6 @@ function SalesPeriodPanel({ auth }) {
     return { from: shiftYear(fromDMY, -1), to: shiftYear(toDMY, -1) };
   }
 
-  /* Convert dd.mm.yyyy → yyyy-mm-dd (ISO) for backend custom period */
-  function dmyToISO(dmy) {
-    const parts = String(dmy || '').split('.');
-    if (parts.length !== 3) return '';
-    const [d, m, y] = parts;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-
   /* Home Sales panel should use deterministic analytics API, not AI-generated SQL. */
   async function loadAll(p) {
     if (!salesDataset) return;
@@ -3235,6 +3313,7 @@ function SalesPeriodPanel({ auth }) {
       const pyPromise = activePeriod !== 'today'
         ? apiFetch('/api/analytics/dashboard', {
             method: 'POST', token: auth.token,
+            timeoutMs: isLongPeriod ? 240000 : 120000,
             body: {
               period: 'custom',
               custom: { from: dmyToISO(pyFrom), to: dmyToISO(pyTo) },
@@ -3243,10 +3322,24 @@ function SalesPeriodPanel({ auth }) {
           }).catch(() => null)
         : Promise.resolve(null);
 
+      /* Always send explicit ISO window (matches subtitle + fixes 6m vs rolling-180d mismatch). */
+      const cyCustom =
+        dmyToISO(from) && dmyToISO(to)
+          ? { from: dmyToISO(from), to: dmyToISO(to) }
+          : null;
       const criticalPromise = apiFetch('/api/analytics/dashboard', {
         method: 'POST',
         token: auth.token,
-        body: { period: activePeriod, dataset: 'sales', loadPhase: 'critical', compact: true },
+        timeoutMs: isLongPeriod ? 240000 : 120000,
+        body: cyCustom
+          ? {
+              period: 'custom',
+              custom: cyCustom,
+              dataset: 'sales',
+              loadPhase: 'critical',
+              compact: true,
+            }
+          : { period: activePeriod, dataset: 'sales', loadPhase: 'critical', compact: true },
       }).catch(() => null);
 
       const [flatData, critical, pyDash] = await Promise.all([flatPromise, criticalPromise, pyPromise]);
@@ -3282,7 +3375,16 @@ function SalesPeriodPanel({ auth }) {
         const widgets = await apiFetch('/api/analytics/dashboard', {
           method: 'POST',
           token: auth.token,
-          body: { period: activePeriod, dataset: 'sales', loadPhase: 'widgets', compact: true },
+          timeoutMs: 240000,
+          body: cyCustom
+            ? {
+                period: 'custom',
+                custom: cyCustom,
+                dataset: 'sales',
+                loadPhase: 'widgets',
+                compact: true,
+              }
+            : { period: activePeriod, dataset: 'sales', loadPhase: 'widgets', compact: true },
         });
         if (widgets && widgets.widgets) {
           const w = widgets.widgets;
@@ -3382,13 +3484,21 @@ function SalesPeriodPanel({ auth }) {
       currentRows = base.map(r => ({ label: r.label, TotalSales: parseFloat(r.value) || 0 }));
     }
 
-    /* Merge prior-year sales as "PY_TotalSales" — align by relative index (period position) */
+    /* Merge prior-year sales as "PY_TotalSales" — match by calendar period key, not row index */
     if (pyTrendRows?.length && currentRows.length) {
       const pySeries = extractTrendSeries(pyTrendRows);
-      return currentRows.map((r, i) => ({
-        ...r,
-        PY_TotalSales: pySeries[i] ? pySeries[i].value : null,
-      }));
+      const pyByKey = new Map();
+      for (const p of pySeries) {
+        const k = canonicalTrendLabelKey(p.label);
+        if (k) pyByKey.set(k, p.value);
+      }
+      return currentRows.map((r) => {
+        const ck = canonicalTrendLabelKey(r.label);
+        const pyK = priorYearTrendKey(ck);
+        let pyVal = null;
+        if (pyK != null && pyByKey.has(pyK)) pyVal = pyByKey.get(pyK);
+        return { ...r, PY_TotalSales: pyVal != null ? pyVal : null };
+      });
     }
     return currentRows;
   }, [trendAiRows, pyTrendRows, rows, valueCol, dateCol, period]);
@@ -3565,8 +3675,10 @@ function SalesPeriodPanel({ auth }) {
 
 function HomePanel({ auth, onNavigate }) {
   const [connectorConfig, setConnectorConfig] = useState(null);
-  const [todayKpi,  setTodayKpi]  = useState(null);   // {totalSales, txnCount, activeDays}
+  const [todayKpi,  setTodayKpi]  = useState(null);
   const [mtdKpi,    setMtdKpi]    = useState(null);
+  const [todayKpiStatus, setTodayKpiStatus] = useState('loading');
+  const [mtdKpiStatus, setMtdKpiStatus]     = useState('loading');
   const [kpiErr,    setKpiErr]    = useState(false);
   const history = useMemo(() => { try { return JSON.parse(localStorage.getItem("erp_ai_history") || "[]"); } catch { return []; } }, []);
   const { mobile } = useBreakpoint();
@@ -3585,16 +3697,39 @@ function HomePanel({ auth, onNavigate }) {
     if (!features.includes('data')) return;
     const mkOpts = (period) => ({
       method: 'POST', token: auth.token,
+      timeoutMs: 120000,
       body: { period, dataset: 'sales', compact: true },
     });
-    // Today — independent; fall back to zeros so tile shows "₹ 0 L" not "…"
+    setTodayKpiStatus('loading');
+    setMtdKpiStatus('loading');
     apiFetch('/api/analytics/dashboard', mkOpts('today'))
-      .then(d => setTodayKpi(d && d.kpi ? d.kpi : { totalSales: 0, txnCount: 0 }))
-      .catch(() => setTodayKpi({ totalSales: 0, txnCount: 0 }));
-    // MTD — independent; fall back gracefully
+      .then(d => {
+        if (d && d.kpi) {
+          setTodayKpi(d.kpi);
+          setTodayKpiStatus('ok');
+        } else {
+          setTodayKpi(null);
+          setTodayKpiStatus('error');
+        }
+      })
+      .catch(() => {
+        setTodayKpi(null);
+        setTodayKpiStatus('error');
+      });
     apiFetch('/api/analytics/dashboard', mkOpts('mtd'))
-      .then(d => { if (d && d.kpi) setMtdKpi(d.kpi); else setMtdKpi({ totalSales: 0, txnCount: 0 }); })
-      .catch(() => setMtdKpi({ totalSales: 0, txnCount: 0 }));
+      .then(d => {
+        if (d && d.kpi) {
+          setMtdKpi(d.kpi);
+          setMtdKpiStatus('ok');
+        } else {
+          setMtdKpi(null);
+          setMtdKpiStatus('error');
+        }
+      })
+      .catch(() => {
+        setMtdKpi(null);
+        setMtdKpiStatus('error');
+      });
   }, [auth.token]);
 
   const now = new Date();
@@ -3624,15 +3759,30 @@ function HomePanel({ auth, onNavigate }) {
   /* Business KPI cards — sales-first when data feature is on */
   const kpiCards = features.includes('data') ? [
     {
-      val: todayKpi ? fmtRupee(todayKpi.totalSales || 0) : (kpiErr ? '—' : '…'),
+      val:
+        todayKpiStatus === 'loading'
+          ? '…'
+          : todayKpiStatus === 'error'
+            ? '—'
+            : fmtRupee(todayKpi?.totalSales || 0),
       lbl: "Today's Sales", icon: "💰", grad: "kpi-blue",
     },
     {
-      val: todayKpi ? (todayKpi.txnCount || 0).toLocaleString('en-IN') : (kpiErr ? '—' : '…'),
+      val:
+        todayKpiStatus === 'loading'
+          ? '…'
+          : todayKpiStatus === 'error'
+            ? '—'
+            : (todayKpi?.txnCount || 0).toLocaleString('en-IN'),
       lbl: "Bills Today", icon: "🧾", grad: "kpi-emerald",
     },
     {
-      val: mtdKpi ? fmtRupee(mtdKpi.totalSales || 0) : (kpiErr ? '—' : '…'),
+      val:
+        mtdKpiStatus === 'loading'
+          ? '…'
+          : mtdKpiStatus === 'error'
+            ? '—'
+            : fmtRupee(mtdKpi?.totalSales || 0),
       lbl: "MTD Sales", icon: "📈", grad: "kpi-amber",
     },
     { val: auth.role?.toUpperCase() || "—", lbl: "Your Role", icon: "🎖", grad: "kpi-rose" },
@@ -4238,6 +4388,10 @@ function AnalyticsPanel({ auth }) {
     if (forceGranularity === "day") bodyBase.forceTrendGranularity = "day";
     if (forceGranularity === "month") bodyBase.forceTrendGranularity = "month";
 
+    const analyticsTimeout =
+      period === "custom" || period === "ytd" || period === "qtd" || period === "last_180d"
+        ? 300000
+        : 150000;
     try {
       const prefetchKey = JSON.stringify({ ...bodyBase, loadPhase: "critical" });
       let critical;
@@ -4249,6 +4403,7 @@ function AnalyticsPanel({ auth }) {
         critical = await apiFetch("/api/analytics/dashboard", {
           method: "POST",
           token: auth.token,
+          timeoutMs: analyticsTimeout,
           body: { ...bodyBase, loadPhase: "critical" },
         });
       }
@@ -4267,6 +4422,7 @@ function AnalyticsPanel({ auth }) {
         const widgetsPatch = await apiFetch("/api/analytics/dashboard", {
           method: "POST",
           token: auth.token,
+          timeoutMs: analyticsTimeout,
           body: { ...bodyBase, loadPhase: "widgets" },
         });
         if (seq !== loadSeqRef.current) return;
@@ -5125,12 +5281,30 @@ function AIQueryPanel({ auth, initialContext }) {
   /** Only Manager and Admin may create/edit/delete shared SQL templates (server enforces when RBAC is on). */
   const canTrainAi = auth?.role === "admin" || auth?.role === "manager";
 
-  /* Load templates from server on mount */
+  /* Load templates from server (re-fetch when auth token changes) */
   useEffect(() => {
-    apiFetch('/api/sql-templates', { token: auth.token })
-      .then(d => { setSqlTemplates(d.templates || []); setTplsLoading(false); })
-      .catch(e => { setTplsError(e.message); setTplsLoading(false); });
-  }, []);
+    let cancelled = false;
+    setTplsLoading(true);
+    setTplsError('');
+    apiFetch('/api/sql-templates', { token: auth?.token })
+      .then((raw) => {
+        if (cancelled) return;
+        let list = [];
+        if (raw != null && typeof raw === 'object' && Array.isArray(raw.templates)) {
+          list = raw.templates;
+        } else if (Array.isArray(raw)) {
+          list = raw;
+        }
+        setSqlTemplates(list);
+      })
+      .catch((e) => {
+        if (!cancelled) setTplsError(e && e.message ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setTplsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [auth?.token]);
 
   function openNewTplModal() {
     if (!canTrainAi) return;
@@ -5154,12 +5328,16 @@ function AIQueryPanel({ auth, initialContext }) {
         const d = await apiFetch(`/api/sql-templates/${tplEditId}`, {
           method: 'PUT', token: auth.token, body: { name: tplName.trim(), sql: tplSql.trim(), desc: tplDesc.trim() },
         });
-        setSqlTemplates(prev => prev.map(t => t.id === tplEditId ? d.template : t));
+        const updated = d != null && typeof d === 'object' ? d.template : null;
+        if (!updated || !updated.id) throw new Error('Invalid server response (missing template)');
+        setSqlTemplates((prev) => prev.map((t) => (t.id === tplEditId ? updated : t)));
       } else {
         const d = await apiFetch('/api/sql-templates', {
           method: 'POST', token: auth.token, body: { name: tplName.trim(), sql: tplSql.trim(), desc: tplDesc.trim() },
         });
-        setSqlTemplates(prev => [d.template, ...prev]);
+        const created = d != null && typeof d === 'object' ? d.template : null;
+        if (!created || !created.id) throw new Error('Invalid server response (missing template)');
+        setSqlTemplates((prev) => [created, ...prev]);
       }
       setShowTplModal(false);
     } catch (e) { setTplsError('Save failed: ' + e.message); }
@@ -7964,9 +8142,16 @@ function Dashboard({ auth, onLogout }) {
   const [showChangePwd,setChangePwd]       = useState(auth.firstRun);
   const [sidebarOpen,setSidebar]           = useState(true);
   const [drawerOpen,setDrawer]             = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const { mobile,tablet,desktop }          = useBreakpoint();
   const [theme,toggleTheme]               = useTheme();
   const contentRef = useRef(null);
+
+  useEffect(() => {
+    const onExpired = () => setSessionExpired(true);
+    window.addEventListener("erp-session-expired", onExpired);
+    return () => window.removeEventListener("erp-session-expired", onExpired);
+  }, []);
 
   useEffect(()=>{
     setMountedSections(prev=>{
@@ -8059,8 +8244,45 @@ function Dashboard({ auth, onLogout }) {
     return <div key={key} style={{display:section===key?"block":"none"}}>{el}</div>;
   }
 
+  function relogin() {
+    setSessionExpired(false);
+    try {
+      localStorage.removeItem("erp_session");
+    } catch (_) {
+      /* ignore */
+    }
+    clearAuth();
+    onLogout();
+  }
+
   return (
-    <div className="flex min-h-0 h-[100dvh] max-h-[100dvh] overflow-hidden" style={{background:"var(--bg-app)"}}>
+    <div className="flex flex-col min-h-0 h-[100dvh] max-h-[100dvh] overflow-hidden" style={{background:"var(--bg-app)"}}>
+      {sessionExpired && (
+        <div
+          role="alert"
+          className="flex-shrink-0 flex flex-wrap items-center justify-center gap-3 px-4 py-3 text-center z-[100]"
+          style={{
+            background: "linear-gradient(90deg,#7f1d1d,#991b1b)",
+            color: "#fecaca",
+            borderBottom: "1px solid rgba(0,0,0,0.2)",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+          }}
+        >
+          <span className="text-sm font-semibold" style={{ color: "#fff" }}>
+            Your session has expired. Please log out and sign in again to continue.
+          </span>
+          <button
+            type="button"
+            onClick={relogin}
+            className="text-sm font-bold px-4 py-2 rounded-lg border-0 cursor-pointer"
+            style={{ background: "#fff", color: "#991b1b" }}
+          >
+            Log in again
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* Mobile drawer */}
       {mobile&&drawerOpen&&(
@@ -8110,6 +8332,8 @@ function Dashboard({ auth, onLogout }) {
         </div>
       </main>
 
+      </div>
+
       {showChangePwd&&(
         <ChangePasswordModal auth={auth} onClose={()=>setChangePwd(false)}/>
       )}
@@ -8136,6 +8360,11 @@ function App() {
 
   function handleLogout() {
     clearAuth();
+    try {
+      localStorage.removeItem("erp_session");
+    } catch (_) {
+      /* ignore */
+    }
     setAuth(null);
   }
 
