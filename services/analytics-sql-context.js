@@ -116,4 +116,5 @@ module.exports = {
   salesDimColumns: salesDimColumns,
   appendCrossFilterParts: appendCrossFilterParts,
   buildFilterContext: buildFilterContext,
+  resolveAnalyticsDateCol: resolveAnalyticsDateCol,
 };

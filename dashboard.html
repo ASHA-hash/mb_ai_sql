@@ -3854,47 +3854,62 @@ function HomePanel({ auth, onNavigate }) {
   }, [auth.token]);
 
   const features = auth.features || [];
+  const featuresKey = features.slice().sort().join(",");
 
-  /* Fetch today + MTD KPIs for the home page summary tiles — independent calls so one
-     failure/timeout doesn't block the other tile from rendering.                      */
+  /* Fetch today + MTD KPIs — prefer GET /api/home/kpi (one aggregation). MTD can be slow on
+     large line-level views; server uses DB_REQUEST_TIMEOUT_MS (see index.js). If home/kpi
+     fails, fall back to POST /api/analytics/dashboard critical KPI. Today then MTD (sequential)
+     avoids hammering the pool with four concurrent requests. */
+  /* Fetch today, then MTD — avoids two heavy /api/home/kpi + fallback POST bursts at once (pool / Strict Mode). */
   useEffect(() => {
-    if (!features.includes('data')) return;
-    const mkOpts = (period) => ({
-      method: 'POST', token: auth.token,
-      timeoutMs: ERP_ANALYTICS_TIMEOUT_MS,
-      body: { period, dataset: 'sales', compact: true },
-    });
-    setTodayKpiStatus('loading');
-    setMtdKpiStatus('loading');
-    apiFetch('/api/analytics/dashboard', mkOpts('today'))
-      .then(d => {
-        if (d && d.kpi) {
-          setTodayKpi(d.kpi);
-          setTodayKpiStatus('ok');
+    if (!features.includes("data")) return;
+    let cancelled = false;
+    async function fetchOne(period, setKpi, setStatus) {
+      setStatus("loading");
+      let d = null;
+      try {
+        d = await apiFetch(`/api/home/kpi?period=${period}`, { token: auth.token, timeoutMs: 180000 });
+      } catch (_) {
+        d = null;
+      }
+      if (!cancelled && d && d.ok) {
+        setKpi({ totalSales: d.totalSales, txnCount: d.txnCount });
+        setStatus("ok");
+        return;
+      }
+      try {
+        const dash = await apiFetch("/api/analytics/dashboard", {
+          method: "POST",
+          token: auth.token,
+          timeoutMs: ERP_ANALYTICS_TIMEOUT_MS,
+          body: { period, dataset: "sales", compact: true, loadPhase: "critical" },
+        });
+        if (cancelled) return;
+        if (dash && dash.kpi) {
+          setKpi({
+            totalSales: parseFloat(dash.kpi.totalSales) || 0,
+            txnCount: parseInt(String(dash.kpi.txnCount), 10) || 0,
+          });
+          setStatus("ok");
         } else {
-          setTodayKpi(null);
-          setTodayKpiStatus('error');
+          setKpi(null);
+          setStatus("error");
         }
-      })
-      .catch(() => {
-        setTodayKpi(null);
-        setTodayKpiStatus('error');
-      });
-    apiFetch('/api/analytics/dashboard', mkOpts('mtd'))
-      .then(d => {
-        if (d && d.kpi) {
-          setMtdKpi(d.kpi);
-          setMtdKpiStatus('ok');
-        } else {
-          setMtdKpi(null);
-          setMtdKpiStatus('error');
+      } catch (_) {
+        if (!cancelled) {
+          setKpi(null);
+          setStatus("error");
         }
-      })
-      .catch(() => {
-        setMtdKpi(null);
-        setMtdKpiStatus('error');
-      });
-  }, [auth.token]);
+      }
+    }
+    void (async () => {
+      await fetchOne("today", setTodayKpi, setTodayKpiStatus);
+      if (!cancelled) await fetchOne("mtd", setMtdKpi, setMtdKpiStatus);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.token, featuresKey]);
 
   const now = new Date();
   const hour = now.getHours();

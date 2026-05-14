@@ -44,7 +44,7 @@ function indianFyStart(y, m) {
 }
 
 /**
- * @param {string} preset - mtd|qtd|ytd|last_7d|last_30d|last_90d|last_180d|6m|last_6m|this_month|last_month|custom
+ * @param {string} preset - today|mtd|qtd|ytd|last_7d|last_30d|last_90d|last_180d|6m|last_6m|this_month|last_month|custom
  * @param {{ from?: string, to?: string }} [custom]
  * @param {Date} [now]
  */
@@ -65,6 +65,10 @@ function resolvePeriodRange(preset, custom, now) {
       throw e;
     }
     return { preset: "custom", from, to, days: daysBetweenInclusive(from, to) };
+  }
+
+  if (p === "today") {
+    return { preset: "today", from: toIso(y, m, day), to: toIso(y, m, day), days: 1 };
   }
 
   if (p === "mtd") {

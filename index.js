@@ -129,6 +129,7 @@ const {
   executeDatasetQueryWithReliability,
   executeWithSqlRetryBundle,
 } = require("./services/query-reliability");
+const { resolveAnalyticsDateCol, salesDimColumns } = require("./services/analytics-sql-context");
 
 const SCHEMA_CATALOG_FALLBACK = buildSchemaCatalog(DATASET_REGISTRY);
 const SEMANTIC_DICTIONARY_PATH = path.join(rootDir, "metadata", "semantic_dictionary.json");
@@ -1742,6 +1743,68 @@ app.get("/api/sales", rbac.requireFeature("data"), async (req, res) => {
     }
     console.error(err);
     res.status(500).json({ error: "query_failed", message: String(err.message) });
+  }
+});
+
+/**
+ * GET /api/home/kpi?period=today|mtd
+ * Ultra-lightweight endpoint for the Home panel — runs a single aggregation query
+ * instead of the full analytics-dashboard pipeline (6 parallel queries).
+ * Returns { totalSales, txnCount } only.
+ */
+app.get("/api/home/kpi", rbac.requireFeature("data"), async (req, res) => {
+  const period = String(req.query.period || "today").toLowerCase().trim();
+  const nl = String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
+
+  const table = String(process.env.ANALYTICS_BASE_TABLE || "dbo.VwAISalesData").trim();
+  const datCol = resolveAnalyticsDateCol(table, "sales");
+  if (!datCol) {
+    res.status(500).json({
+      ok: false,
+      error: "date_column_not_configured",
+      message: "Set per-table *_FILTER_DATE_COLUMN or SALES_FILTER_DATE_COLUMN for the analytics base table.",
+    });
+    return;
+  }
+  const dims = salesDimColumns();
+  const amtCol = dims.amount;
+
+  let whereSql;
+  if (period === "today") {
+    whereSql = `WHERE CAST([${datCol}] AS DATE) = CAST(GETDATE() AS DATE)`;
+  } else {
+    // mtd — 1st of current month to today
+    whereSql = `WHERE CAST([${datCol}] AS DATE) >= CAST(DATEADD(day, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE)) AS DATE)\n      AND CAST([${datCol}] AS DATE) <= CAST(GETDATE() AS DATE)`;
+  }
+
+  const sqlText = `
+    SELECT
+      CAST(SUM(ISNULL([${amtCol}], 0)) AS DECIMAL(38, 4)) AS total_sales,
+      COUNT(*) AS txn_count
+    FROM ${table}${nl}
+    ${whereSql}`;
+
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    /* MTD touches far more rows than "today"; 20s often timed out while analytics (120s driver cap) succeeded. */
+    const homeKpiReqMs = parseInt(
+      String(process.env.HOME_KPI_REQUEST_TIMEOUT_MS || process.env.DB_REQUEST_TIMEOUT_MS || "120000"),
+      10
+    );
+    request.timeout =
+      Number.isFinite(homeKpiReqMs) && homeKpiReqMs > 0 ? Math.min(300000, Math.max(30000, homeKpiReqMs)) : 120000;
+    const result = await request.query(sqlText);
+    const row = (result.recordset || [])[0] || {};
+    res.json({
+      ok: true,
+      period,
+      totalSales: parseFloat(row.total_sales) || 0,
+      txnCount:   parseInt(String(row.txn_count), 10) || 0,
+    });
+  } catch (err) {
+    console.error(`[home/kpi] ${period} error:`, err.message);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
