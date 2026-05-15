@@ -1129,6 +1129,7 @@ function formatTableDateValue(v) {
 
 function shouldFormatTableNumeric(key, value) {
   if (value === null || value === undefined) return false;
+  if (isNonAggregableDigitKey(key)) return false;
   const k = String(key || '').toLowerCase();
   // Keep identifiers exactly as source values.
   if (/id$|_id$|(^|_)(id|code|no|num|ref|invoice)(_|$)/.test(k)) return false;
@@ -1191,7 +1192,55 @@ function trunc(s, n = 12) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+/** PIN / postal codes are digit-like but must not be summed, averaged, or charted as measures */
+function looksLikePostalOrPinKey(key) {
+  const k = String(key || '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (!k) return false;
+  if (k.includes('pincode') || k.includes('postcode') || k.includes('postalcode') || k.includes('zipcode')) return true;
+  if (k.includes('postal') && k.includes('code')) return true;
+  if (k === 'zip' || k === 'postal' || k.endsWith('zip')) return true;
+  return false;
+}
+
+/** Phone / mobile / fax — digit strings, not sums or chart measures */
+function looksLikePhoneOrMobileKey(key) {
+  const k = String(key || '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (!k || k.includes('microphone')) return false;
+  if (k.includes('contactmobile') || k.includes('mobileno') || k.includes('phoneno')) return true;
+  if (k.includes('phonenumber') || k.includes('cellphone') || k.includes('whatsapp')) return true;
+  if (k.includes('telephone') || k.includes('telephoneno') || k.includes('telno')) return true;
+  if (k.includes('landline') || k.includes('landlineno')) return true;
+  if (k === 'fax' || k.includes('faxno') || (k.startsWith('fax') && k.length <= 12)) return true;
+  if (k.includes('workphone') || k.includes('homephone') || k.includes('officephone')) return true;
+  if (k.includes('alternatemobile') || k.includes('primaryphone') || k.includes('secondaryphone')) return true;
+  if (k.endsWith('mobile') && !k.includes('automobile')) return true;
+  if (k === 'mobile' || k === 'phone' || k === 'tel' || k === 'sms') return true;
+  return false;
+}
+
+/** Invoice / PO / memo numbers parsed as digits — not additive KPIs */
+function looksLikeInvoiceDocumentKey(key) {
+  const k = String(key || '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (!k) return false;
+  return /purinvoice|purinvno|invoiceno|invoiceid|billno|billnumber|billnum|cashmemono|memono|orderno|ordernumber|voucherno|grnno|ponumber|purchaseorder|challanno|purchallan|purchallanno|purrefno|documentno/.test(k);
+}
+
+/** Para1Index, Para2Index — not additive */
+function looksLikeParaIndexKey(key) {
+  return /^para\d+index$/i.test(String(key || '').trim());
+}
+
+function isNonAggregableDigitKey(key) {
+  return (
+    looksLikePostalOrPinKey(key) ||
+    looksLikePhoneOrMobileKey(key) ||
+    looksLikeInvoiceDocumentKey(key) ||
+    looksLikeParaIndexKey(key)
+  );
+}
+
 function isNumericCol(rows, key, sample = 20) {
+  if (isNonAggregableDigitKey(key)) return false;
   const slice = rows.slice(0, Math.min(rows.length, sample));
   let valid = 0, total = 0;
   for (const r of slice) {
@@ -1284,6 +1333,13 @@ function detectChart(rows) {
   if (rows.length <= 6 && /^period$|^label$|^time$|^range$/i.test(labelCol) && finalCols.length >= 1) {
     return { type: 'bar', labelCol, valueCols: finalCols, title: `📊 Period Comparison: ${seriesLabel}` };
   }
+  // 3b. Raw ERP keys × many rows (e.g. stock ItemId × BranchId) — bar is unreadable; table + KPIs enough
+  const normLabel = String(labelCol || "").replace(/[\s_-]/g, "");
+  const rawIdBarLabel =
+    /^(itemid|branchid|customerid|invoiceid|invoiceno|orderid|billno|cashmemono|skuid|productid|materialid|vendorid|supplierid|partyno|purchaseid)$/i.test(
+      normLabel
+    );
+  if (rawIdBarLabel && rows.length > 400) return null;
   // 4. Bar: default for grouping / category / ranking data
   return { type: 'bar', labelCol, valueCols: finalCols, title: `📊 ${seriesLabel} by ${labelCol}` };
 }
@@ -1528,10 +1584,10 @@ function fmtLabel(v) {
 /**
  * @param {'auto'|'vertical'|'horizontal'} barOrientation
  *   - auto: long lists → horizontal (categories on Y); short lists → vertical (categories on X)
- *   - vertical: categories on X axis (classic vertical bars)
+ *   - vertical: categories on X axis (classic vertical bars) — default for most callers
  *   - horizontal: categories on Y axis (horizontal bars)
  */
-function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, barOrientation = 'auto', onPointClick = null, valueAxisMaxRaw = null }) {
+function BarChart({ rows, labelCol, valueCols, title, forceVertical = false, barOrientation = 'vertical', onPointClick = null, valueAxisMaxRaw = null }) {
   const [, force] = useState(0);
   const chartInstRef = useRef(null);   // holds the ECharts instance for Fit button
   useEffect(() => {
@@ -2422,9 +2478,10 @@ const BarAxisPicker = React.memo(function BarAxisPicker({ active, onChange }) {
 });
 
 function SmartChart({ rows, label, chartPolicyHint, columnTags }) {
-  // Apply column tags globally so isSaleValueKey/isCountKey use them
+  // Keep global tags in sync with this chart's props — clearing when absent avoids
+  // Analytics columnTags (money/count) sticking around on Load Dataset rows with the same names.
   useEffect(() => {
-    if (columnTags) setGlobalColTags(columnTags);
+    setGlobalColTags(columnTags != null && typeof columnTags === "object" ? columnTags : {});
   }, [columnTags]);
 
   // detectChart as fallback only — backend shape detection drives type when available
@@ -2464,12 +2521,19 @@ function SmartChart({ rows, label, chartPolicyHint, columnTags }) {
       )
     : null;
   const taggedValueCols = columnTags
-    ? allCols.filter(c => columnTags[c] === 'money' || columnTags[c] === 'count' || columnTags[c] === 'ratio')
+    ? allCols.filter(c =>
+        (columnTags[c] === 'money' || columnTags[c] === 'count' || columnTags[c] === 'ratio') &&
+        !isNonAggregableDigitKey(c)
+      )
     : null;
 
   const effectiveLabelCol = taggedLabelCol || cfg.labelCol;
-  const effectiveValueCols = (taggedValueCols && taggedValueCols.length > 0) ? taggedValueCols : (cfg.valueCols || []);
+  const rawTaggedVals = (taggedValueCols && taggedValueCols.length > 0) ? taggedValueCols : null;
+  const cfgVals = (cfg.valueCols || []).filter(c => !isNonAggregableDigitKey(c));
+  const effectiveValueCols = rawTaggedVals || cfgVals;
   const pieValCol = effectiveValueCols[0];
+
+  if (!effectiveValueCols || effectiveValueCols.length === 0) return null;
 
   /* Warn when user manually picks pie but there are too many unique labels */
   const pieTooManyRows = type === 'pie' && override === 'pie' && rows.length > PIE_MAX_SLICES * 2;
@@ -2520,7 +2584,7 @@ function SmartChart({ rows, label, chartPolicyHint, columnTags }) {
 /* ═══════════════════════════════════════════════
    ChartWithToggle — Bar/Line/Pie toggle, default=line
 ═══════════════════════════════════════════════ */
-function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon, defaultChartType = 'bar' }) {
+function ChartWithToggle({ rows, labelCol, valueCols, valueCol, title, icon, defaultChartType = 'line' }) {
   const [chartType, setChartType] = useState(defaultChartType);
   const pieCol = valueCol || (valueCols && valueCols[0]);
   if (!rows || rows.length === 0) return null;
@@ -2787,7 +2851,7 @@ function StatsBar({ rows }) {
     const money = keys.filter(k => _globalColTags[k] === 'money');
     const count  = keys.filter(k => _globalColTags[k] === 'count');
     const ratio  = keys.filter(k => _globalColTags[k] === 'ratio');
-    numericKeys = [...money, ...count, ...ratio].slice(0, 4);
+    numericKeys = [...money, ...count, ...ratio].filter(k => !isNonAggregableDigitKey(k)).slice(0, 4);
     // Hide before-tax when net-sales present — still useful ERP-specific logic
     const BEFORE_TAX_PAT = /beforetax|before_tax|pretax|pre_tax/i;
     const NET_SALES_PAT  = /salenetamount|netsale|netsales|totalnet|netamount/i;
@@ -3507,7 +3571,27 @@ function SalesPeriodPanel({ auth }) {
       setRows(flatData);
 
       if (!critical || !critical.kpi) {
-        throw new Error('analytics_dashboard_unavailable');
+        /* Analytics API timed out — degrade gracefully using flat data already loaded.
+           Compute KPI total from flat rows so the header tiles still show real numbers. */
+        const preferred = ['SaleNetAmount','NetAmount','Amount','SalesAmount','Revenue','Total','Value'];
+        let flatTotal = 0;
+        let flatTxCount = 0;
+        if (Array.isArray(flatData) && flatData.length > 0) {
+          const flatKeys = Object.keys(flatData[0]);
+          const vc = preferred.find(p => flatKeys.some(k => k.toLowerCase() === p.toLowerCase()))
+                  || flatKeys.find(k => /amount|net|sale|revenue|total|value/i.test(k));
+          const matchedKey = vc && flatKeys.find(k => k.toLowerCase() === vc.toLowerCase()) || vc;
+          if (matchedKey) {
+            flatTotal = flatData.reduce((s, r) => s + (parseFloat(r[matchedKey]) || 0), 0);
+          }
+          flatTxCount = flatData.length;
+        }
+        setKpiTotal(flatTotal);
+        setKpiTxCount(flatTxCount);
+        /* Show a non-blocking soft warning — charts still render from flat data below */
+        setError('analytics_slow_using_flat_data');
+        setLoading(false);
+        return;
       }
 
       const k = critical.kpi || {};
@@ -3728,7 +3812,27 @@ function SalesPeriodPanel({ auth }) {
         ))}
       </div>
 
-      {error && <Alert type="error" msg={error} onClose={() => setError('')} />}
+      {error && error === 'analytics_slow_using_flat_data' ? (
+        /* Soft warning — analytics API timed out but flat data loaded; charts still work */
+        <div style={{
+          display:'flex', alignItems:'center', gap:8, padding:'8px 14px',
+          background:'var(--bg-warning,#fffbeb)', border:'1px solid #f59e0b',
+          borderRadius:8, fontSize:12, color:'#92400e', marginBottom:8,
+        }}>
+          <span>⚠️</span>
+          <span style={{flex:1}}>
+            <strong>Analytics engine is slow</strong> — showing totals from sample data ({(rows||[]).length.toLocaleString()} rows).
+            Trend &amp; breakdown charts may be incomplete.
+            {' '}<button onClick={() => { setError(''); loadAll(period); }} style={{
+              background:'none', border:'none', color:'#92400e', textDecoration:'underline',
+              cursor:'pointer', fontSize:12, padding:0, fontWeight:600,
+            }}>Retry</button>
+          </span>
+          <button onClick={() => setError('')} style={{background:'none',border:'none',cursor:'pointer',color:'#92400e',fontSize:14}}>✕</button>
+        </div>
+      ) : error ? (
+        <Alert type="error" msg={error} onClose={() => setError('')} />
+      ) : null}
 
       {loading && (
         <div className="flex items-center gap-2 py-4" style={{color:'var(--text-muted)'}}>
@@ -3782,7 +3886,7 @@ function SalesPeriodPanel({ auth }) {
                         : '📅 Last 6M — Month-wise Sales (Current vs Last Year)'
                 }
                 icon=""
-                defaultChartType="bar"
+                defaultChartType="line"
               />
             </div>
           )}
@@ -4550,8 +4654,24 @@ function AnalyticsPanel({ auth }) {
       localStorage.setItem("erp_analytics_layout_preset", layoutPreset);
     } catch {}
   }, [layoutPreset]);
-  const layoutOrd = ANALYTICS_LAYOUT_PRESETS[layoutPreset] || ANALYTICS_LAYOUT_PRESETS.default;
   const ROW_H = 28;
+
+  const [analyticsBarOrientation, setAnalyticsBarOrientation] = useState(() => {
+    try {
+      const v = localStorage.getItem("erp_analytics_bar_orientation");
+      if (v === "horizontal" || v === "vertical") return v;
+      return "vertical";
+    } catch {
+      return "vertical";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("erp_analytics_bar_orientation", analyticsBarOrientation);
+    } catch {}
+  }, [analyticsBarOrientation]);
+
+  const layoutOrd = ANALYTICS_LAYOUT_PRESETS[layoutPreset] || ANALYTICS_LAYOUT_PRESETS.default;
 
   const [savedViews, setSavedViews] = useState(() => {
     try {
@@ -4714,6 +4834,7 @@ function AnalyticsPanel({ auth }) {
       trendMonth: trendMonth || "",
       forceGranularity: forceGranularity || "auto",
       layoutPreset: layoutPreset || "default",
+      analyticsBarOrientation: analyticsBarOrientation || "vertical",
       at: Date.now(),
     };
     const next = [entry, ...savedViews.filter((x) => x.name !== name)].slice(0, 12);
@@ -4733,6 +4854,11 @@ function AnalyticsPanel({ auth }) {
     setTrendMonth(v.trendMonth || "");
     setForceGranularity(v.forceGranularity || "auto");
     setLayoutPreset(v.layoutPreset || "default");
+    setAnalyticsBarOrientation(
+      v.analyticsBarOrientation === "horizontal" || v.analyticsBarOrientation === "vertical"
+        ? v.analyticsBarOrientation
+        : "vertical"
+    );
     setCrossFilter(v.crossFilter && typeof v.crossFilter === "object" ? { ...v.crossFilter } : {});
     setViewName(v.name || "");
   }
@@ -4976,6 +5102,42 @@ function AnalyticsPanel({ auth }) {
             <option value="trend_first">Trend first</option>
             <option value="breakdown_first">Breakdowns first</option>
           </select>
+        </div>
+        <div className="flex flex-col gap-1 min-w-[168px]">
+          <span className="font-semibold text-slate-600" title="Branch, department, and category bar charts">
+            Breakdown bars
+          </span>
+          <div
+            className="flex rounded-lg overflow-hidden border text-xs font-bold"
+            style={{ borderColor: "var(--border, #e2e8f0)" }}
+          >
+            <button
+              type="button"
+              className="flex-1 py-1.5 px-2 transition-colors"
+              style={{
+                background: analyticsBarOrientation === "vertical" ? "var(--brand,#6366f1)" : "var(--surface2,#f8fafc)",
+                color: analyticsBarOrientation === "vertical" ? "#fff" : "var(--text-muted,#64748b)",
+              }}
+              onClick={() => setAnalyticsBarOrientation("vertical")}
+              title="Categories on the X axis (vertical columns)"
+            >
+              Cat on X
+            </button>
+            <button
+              type="button"
+              className="flex-1 py-1.5 px-2 transition-colors border-l"
+              style={{
+                borderColor: "var(--border, #e2e8f0)",
+                background: analyticsBarOrientation === "horizontal" ? "var(--brand,#6366f1)" : "var(--surface2,#f8fafc)",
+                color: analyticsBarOrientation === "horizontal" ? "#fff" : "var(--text-muted,#64748b)",
+              }}
+              onClick={() => setAnalyticsBarOrientation("horizontal")}
+              title="Categories on the Y axis (horizontal bars)"
+            >
+              Cat on Y
+            </button>
+          </div>
+          <span className="text-[10px] text-slate-500 leading-tight">Saved in this browser</span>
         </div>
         <button
           type="button"
@@ -5247,7 +5409,7 @@ function AnalyticsPanel({ auth }) {
                     labelCol="label"
                     valueCols={["SaleNetAmount"]}
                     title="By branch — click to filter"
-                    barOrientation={wB && wB.chartPolicy === "bar_horizontal" ? "horizontal" : "auto"}
+                    barOrientation={analyticsBarOrientation}
                     onPointClick={barClickFactory(branchChartRows, branchCol)}
                     valueAxisMaxRaw={data.vizHints && data.vizHints.yAxisMoneyMax}
                   />
@@ -5265,7 +5427,7 @@ function AnalyticsPanel({ auth }) {
                     labelCol="label"
                     valueCols={["SaleNetAmount"]}
                     title="By department — click to filter"
-                    barOrientation={wD && wD.chartPolicy === "bar_horizontal" ? "horizontal" : "auto"}
+                    barOrientation={analyticsBarOrientation}
                     onPointClick={barClickFactory(deptChartRows, deptCol)}
                     valueAxisMaxRaw={data.vizHints && data.vizHints.yAxisMoneyMax}
                   />
@@ -5285,7 +5447,7 @@ function AnalyticsPanel({ auth }) {
                   labelCol="label"
                   valueCols={["SaleNetAmount"]}
                   title="By category — click to filter"
-                  barOrientation={wC && wC.chartPolicy === "bar_horizontal" ? "horizontal" : "auto"}
+                  barOrientation={analyticsBarOrientation}
                   onPointClick={barClickFactory(catChartRows, catCol)}
                   valueAxisMaxRaw={data.vizHints && data.vizHints.yAxisMoneyMax}
                 />
@@ -5445,7 +5607,7 @@ function AIQueryPanel({ auth, initialContext }) {
   const [error, setError]             = useState("");
   const [totals, setTotals]           = useState(false);
   const [showSQL, setShowSQL]         = useState(false);
-  const [history, setHistory]         = useState(() => { try { return JSON.parse(localStorage.getItem("erp_ai_history") || "[]"); } catch { return []; } });
+  const [history, setHistory]         = useState([]);  // server-side — loaded in useEffect below
   const [queryFromDate, setQueryFromDate] = useState("");
   const [queryToDate, setQueryToDate] = useState("");
   const [queryMode, setQueryMode]     = useState(() => { try { return localStorage.getItem("erp_ai_mode") || "deterministic"; } catch { return "deterministic"; } });
@@ -5471,6 +5633,25 @@ function AIQueryPanel({ auth, initialContext }) {
   const [tplSaving,       setTplSaving]       = useState(false);
   /** Only Manager and Admin may create/edit/delete shared SQL templates (server enforces when RBAC is on). */
   const canTrainAi = auth?.role === "admin" || auth?.role === "manager";
+
+  /* Load AI query history from server (replaces localStorage) */
+  useEffect(() => {
+    if (!auth?.token) return;
+    apiFetch('/api/ai/history', { token: auth.token })
+      .then(d => { if (Array.isArray(d)) setHistory(d); })
+      .catch(() => {
+        // Graceful fallback: migrate any existing localStorage history to server
+        try {
+          const local = JSON.parse(localStorage.getItem("erp_ai_history") || "[]");
+          if (local.length) {
+            setHistory(local);
+            // Migrate each entry to server
+            local.forEach(q => apiFetch('/api/ai/history', { method: 'POST', token: auth.token, body: { query: q } }).catch(() => {}));
+            localStorage.removeItem("erp_ai_history");
+          }
+        } catch {}
+      });
+  }, [auth?.token]);
 
   /* Load templates from server (re-fetch when auth token changes) */
   useEffect(() => {
@@ -5609,9 +5790,10 @@ function AIQueryPanel({ auth, initialContext }) {
   }, [conversation]);
 
   function addHistory(q) {
-    const h = [q, ...history.filter(x => x !== q)].slice(0, 12);
-    setHistory(h);
-    localStorage.setItem("erp_ai_history", JSON.stringify(h));
+    // Optimistic local update
+    setHistory(prev => [q, ...prev.filter(x => x !== q)].slice(0, 20));
+    // Persist to server (per-user, cross-device)
+    apiFetch('/api/ai/history', { method: 'POST', token: auth?.token, body: { query: q } }).catch(() => {});
   }
 
   // Run a brand-new SQL query (optional tableHintOverride from suggestion chips)
@@ -6766,10 +6948,45 @@ function DataPanel({ auth }) {
       <div className="card p-5 space-y-3">
         <div className="grid-2col">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Dataset</label>
-            <select value={dataset} onChange={e => setDataset(e.target.value)} className="input-base">
-              {(config?.datasets || []).map(d => <option key={d.key} value={d.key}>{d.label} — {d.objectName}</option>)}
-            </select>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Dataset
+              <span style={{fontWeight:400,color:'var(--text-soft)',marginLeft:6}}>({(config?.datasets||[]).length} views available)</span>
+            </label>
+            {(() => {
+              const all = config?.datasets || [];
+              // Group datasets by category based on key/label patterns
+              const groups = [
+                { label: "🎯 Core AI Views",      keys: /^(sales|stock|customers|branches|vw_ai_salesperson|vw_ai_supplier|vw_mst_items|vw_aimst_items)$/ },
+                { label: "💰 Sales & Revenue",    keys: /^mb_powerbi_sls|mb_powerbi_slsxns|mb_powerbi_sls_billcount|mb_powerbi_mis_supplier/ },
+                { label: "📦 Purchase",           keys: /^mb_powerbi_pur/ },
+                { label: "📊 Stock & Inventory",  keys: /^mb_powerbi_stock|mb_powerbi_cbs/ },
+                { label: "🔄 Stock Transfers",    keys: /^mb_powerbi_st[io]/ },
+                { label: "✅ Approvals",           keys: /^mb_powerbi_ap/ },
+                { label: "📋 Master Data",        keys: /^mb_powerbi_(branch_list|category_master|product_master|vendor_master)|^(salesperson|stock_units|vw_mst_branch_entry)$/ },
+              ];
+              const grouped = groups.map(g => ({
+                ...g,
+                items: all.filter(d => g.keys.test(d.key)),
+              })).filter(g => g.items.length > 0);
+              const ungrouped = all.filter(d => !groups.some(g => g.keys.test(d.key)));
+              return (
+                <select value={dataset} onChange={e => setDataset(e.target.value)} className="input-base" size={1}>
+                  {grouped.map(g => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.items.map(d => {
+                        const shortLabel = d.shortName || d.objectName.split('.').pop();
+                        const cols = d.label.includes('—') ? d.label.split('—')[1].trim() : '';
+                        return <option key={d.key} value={d.key}>{shortLabel}{cols ? ' — ' + cols.slice(0,60) + (cols.length>60?'…':'') : ''}</option>;
+                      })}
+                    </optgroup>
+                  ))}
+                  {ungrouped.length > 0 && (
+                    <optgroup label="Other">
+                      {ungrouped.map(d => <option key={d.key} value={d.key}>{d.shortName || d.key}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+              );
+            })()}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1.5">Rows</label>

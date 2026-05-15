@@ -4,6 +4,8 @@
  *   {PREFIX}_FILTER_DATE_COLUMN, _BRANCH_, _STATUS_, _DEPARTMENT_, _CATEGORY_
  * Optional: {PREFIX}_FILTER_BRANCH_MATCH=like (same for DEPARTMENT, CATEGORY) for contains-style match.
  * skipDateParamsIfNoColumn: if true and _FILTER_DATE_COLUMN is unset, ?from/&to/&fy date filters are ignored (no 400).
+ * ignoreEnvDateColumn: if true, never use {PREFIX}_FILTER_DATE_COLUMN (snapshot / master views with no time column).
+ *   Prevents broken env like STOCK_FILTER_DATE_COLUMN on dbo.VwAIStockData. Use dated stock via mb_powerbi_stock_report etc.
  * API query: ?from=&to= (yyyy-mm-dd or dd.mm.yyyy), ?fy=FY26 (India Apr–Mar), ?branch=&department=&category=
  * envOverride: optional process.env key that replaces defaultTable (e.g. SALES_VIEW).
  * routingHint: keywords that help the LLM table-selector pick this view.
@@ -26,6 +28,7 @@ module.exports.DATASET_REGISTRY = [
     filterPrefix: "STOCK",
     routingHint: "current stock on hand inventory quantity available branch item",
     skipDateParamsIfNoColumn: true,
+    ignoreEnvDateColumn: true,
   },
   {
     key: "customers",
@@ -35,6 +38,7 @@ module.exports.DATASET_REGISTRY = [
     filterPrefix: "CUSTOMERS",
     routingHint: "customer buyer client name mobile email city birthday anniversary credit limit top customers loyal",
     skipDateParamsIfNoColumn: true,
+    ignoreEnvDateColumn: true,
   },
   {
     key: "branches",

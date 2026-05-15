@@ -14,6 +14,14 @@ function sleep(ms) {
  */
 function isTransientSqlError(err) {
   const m = String((err && err.message) || err || "").toLowerCase();
+  const code = String((err && err.code) || "").toUpperCase();
+  /* Driver per-statement cap (ETIMEOUT) — retrying runs the same heavy query again (~2× wait). */
+  if (
+    code === "ETIMEOUT" &&
+    /request failed to complete in \d+ms|timeout:\s*request failed to complete/i.test(m)
+  ) {
+    return false;
+  }
   return (
     /timeout|timed out|econnreset|ecanceled|connection.*(closed|lost|broken)|socket|broken pipe|read econnreset|failed to connect|communication link|deadline|acquire connection/i.test(
       m

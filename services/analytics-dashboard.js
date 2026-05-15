@@ -10,7 +10,7 @@ const {
   daysBetweenInclusive,
   intersectPeriodWithFyBounds,
 } = require("./analytics-periods");
-const { getOrSet, getDataEpoch } = require("./analytics-cache");
+const { getOrSet, getDataEpoch, primeCache } = require("./analytics-cache");
 const { chartForTrend, chartForBreakdown, progressiveHint } = require("./analytics-chart-policy");
 const {
   anomalyScan,
@@ -46,6 +46,25 @@ function sanitizeTableName(raw) {
  */
 function nolock() {
   return String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
+}
+
+/**
+ * Returns " OPTION(RECOMPILE)" for queries that span more than 30 days.
+ *
+ * Why this fixes timeouts: SQL Server caches execution plans with the first
+ * parameter set it sees. A plan built for a 1-day range is catastrophically
+ * bad for a 180-day range (and vice-versa). RECOMPILE forces SQL Server to
+ * build a fresh plan for every execution — typically 10-50× faster for large
+ * date-range analytics queries.
+ *
+ * Only applied when spanDays > ANALYTICS_RECOMPILE_THRESHOLD (default 30).
+ * Disable entirely: ANALYTICS_RECOMPILE=0
+ */
+function queryHint(spanDays) {
+  const disabled = String(process.env.ANALYTICS_RECOMPILE || "1").trim() === "0";
+  if (disabled) return "";
+  const threshold = parseInt(process.env.ANALYTICS_RECOMPILE_THRESHOLD || "30", 10);
+  return spanDays > threshold ? " OPTION(RECOMPILE)" : "";
 }
 
 /** Pre-summarized daily grain (SaleDate × branch × dept × category); uses SUM(LineCount) instead of COUNT(*). */
@@ -139,6 +158,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
     : "COUNT(*)";
 
   const nl = nolock();
+  const qh = queryHint(spanDays);
 
   const kpiSql = `
     SELECT
@@ -146,7 +166,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       ${rowCntAgg} AS txn_count,
       COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
       CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
-    FROM ${table}${nl}${whereSql}`;
+    FROM ${table}${nl}${whereSql}${qh}`;
 
   const branchSql = `
     SELECT TOP (${topN})
@@ -155,7 +175,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.branch}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   const deptSql = `
     SELECT TOP (${topN})
@@ -164,7 +184,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.dept}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   const catSql = `
     SELECT TOP (${topN})
@@ -173,7 +193,7 @@ async function loadDashboardWidgetsPayload(pool, params) {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.cat}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   const [kpiR, branchR, deptR, catR] = await Promise.all([
     req.query(kpiSql),
@@ -330,6 +350,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
     : "COUNT(*)";
 
   const nl = nolock();
+  const qh = queryHint(spanDays);
 
   const wmCol = sanitizeColumnName(process.env.SALES_ANALYTICS_WATERMARK_COLUMN || "");
   const wmSelect = wmCol
@@ -343,7 +364,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
       CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
       ${wmSelect}
-    FROM ${table}${nl}${whereSql}`;
+    FROM ${table}${nl}${whereSql}${qh}`;
 
   const branchSql = `
     SELECT TOP (${topN})
@@ -352,7 +373,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.branch}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   const deptSql = `
     SELECT TOP (${topN})
@@ -361,7 +382,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.dept}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   const catSql = `
     SELECT TOP (${topN})
@@ -370,7 +391,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
       ${rowCntAgg} AS row_cnt
     FROM ${table}${nl}${whereSql}
     GROUP BY CAST([${dims.cat}] AS NVARCHAR(500))
-    ORDER BY metric_value DESC`;
+    ORDER BY metric_value DESC${qh}`;
 
   let trendSql;
   if (trendMode === "day") {
@@ -381,7 +402,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
         ${rowCntAgg} AS txn_count
       FROM ${table}${nl}${trendWhereSql}
       GROUP BY CAST([${dateCol}] AS DATE)
-      ORDER BY period_label`;
+      ORDER BY period_label${qh}`;
   } else {
     trendSql = `
       SELECT
@@ -390,7 +411,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
         ${rowCntAgg} AS txn_count
       FROM ${table}${nl}${trendWhereSql}
       GROUP BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))
-      ORDER BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))`;
+      ORDER BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))${qh}`;
   }
 
   const dupLazy = () => maybeFetchDuplicateRatio(req, table, whereSql, parseDedupeKeyColumns());
@@ -850,8 +871,80 @@ async function runAnalyticsDashboard(pool, body) {
   );
 }
 
+/**
+ * Cache warm-up: pre-run the slow analytics periods so the first real user
+ * request hits cache instead of waiting for a cold 5-minute DB query.
+ *
+ * Runs once ~30 s after server start (gives the DB pool time to settle),
+ * then repeats every ANALYTICS_WARMUP_INTERVAL_MS (default 15 min).
+ *
+ * Disable: ANALYTICS_WARMUP=0
+ */
+async function warmAnalyticsCache(pool) {
+  if (String(process.env.ANALYTICS_WARMUP || "1").trim() === "0") return;
+
+  // Periods ordered cheapest → slowest so fast ones populate cache quickly.
+  // Heavy periods (90d, 180d, ytd) get an inter-period pause so they don't
+  // hold all pool connections simultaneously with active user requests.
+  const periods = ["mtd", "30d", "qtd", "90d", "180d", "ytd"];
+
+  // Pause between periods (ms) — gives pool connections time to be released
+  // before the next heavy query fires. Configurable via env.
+  const pauseMs = Math.max(0, parseInt(process.env.ANALYTICS_WARMUP_PAUSE_MS || "3000", 10));
+
+  for (const period of periods) {
+    try {
+      console.log(`[analytics-warmup] warming ${period}…`);
+      const result = await runAnalyticsDashboard(pool, {
+        period,
+        dataset: "sales",
+        loadPhase: "critical",
+        compact: true,
+      });
+      // Small pause between critical and widgets so connections are released
+      if (pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs));
+      // Also warm the widgets phase (branch/dept/cat breakdowns)
+      await runAnalyticsDashboard(pool, {
+        period,
+        dataset: "sales",
+        loadPhase: "widgets",
+        compact: true,
+      });
+      console.log(`[analytics-warmup] ${period} done — cacheHit=${result.cacheHit || false}`);
+      // Pause before next period
+      if (pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs));
+    } catch (e) {
+      // Non-fatal — warmup failure just means first user waits for live query
+      console.warn(`[analytics-warmup] ${period} failed (non-fatal):`, e.message);
+      // Still pause after failure so pool can recover before next attempt
+      if (pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs));
+    }
+  }
+}
+
+/**
+ * Schedule repeated background warm-up.
+ * Call once from server startup after DB pool is ready.
+ */
+function scheduleAnalyticsWarmup(pool) {
+  if (String(process.env.ANALYTICS_WARMUP || "1").trim() === "0") return;
+  const intervalMs = Math.max(
+    60000,
+    parseInt(process.env.ANALYTICS_WARMUP_INTERVAL_MS || String(15 * 60 * 1000), 10)
+  );
+
+  // First run: delay 30s to let DB pool fully settle after startup
+  setTimeout(() => {
+    warmAnalyticsCache(pool).catch(() => {});
+    // Then repeat on schedule
+    setInterval(() => warmAnalyticsCache(pool).catch(() => {}), intervalMs).unref();
+  }, 30000);
+}
+
 module.exports = {
   runAnalyticsDashboard,
+  warmAnalyticsCache,
+  scheduleAnalyticsWarmup,
   bumpDataEpoch: require("./analytics-cache").bumpDataEpoch,
   getDataEpoch:  require("./analytics-cache").getDataEpoch,
   recordDataFreshnessFromPayload: require("./observability-kpis").recordDataFreshnessFromPayload,

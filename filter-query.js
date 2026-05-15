@@ -31,6 +31,15 @@ function getFilterColumns(datasetKey) {
   if (!p) {
     return { date: "", branch: "", status: "", department: "", category: "" };
   }
+  if (e.ignoreEnvDateColumn) {
+    return {
+      date: "",
+      branch: process.env[`${p}_FILTER_BRANCH_COLUMN`] || "",
+      status: process.env[`${p}_FILTER_STATUS_COLUMN`] || "",
+      department: process.env[`${p}_FILTER_DEPARTMENT_COLUMN`] || "",
+      category: process.env[`${p}_FILTER_CATEGORY_COLUMN`] || "",
+    };
+  }
   return {
     date: process.env[`${p}_FILTER_DATE_COLUMN`] || "",
     branch: process.env[`${p}_FILTER_BRANCH_COLUMN`] || "",

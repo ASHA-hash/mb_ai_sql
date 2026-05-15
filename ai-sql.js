@@ -1058,6 +1058,50 @@ function tagColumns(rows) {
 }
 
 /**
+ * Drop LLM drill suggestions that are off-domain or unsafe for the adaptive SQL engine.
+ * Keeps suggestions aligned with dbo.VwAISalesData unless the user was clearly in purchase/stock.
+ */
+function filterDrillDownSuggestionsVerified({ question, tableHint, suggestions }) {
+  const q = String(question || "").toLowerCase().trim();
+  const hint = String(tableHint || "").toLowerCase();
+  const salesish =
+    !hint ||
+    hint.includes("vwaisalesdata") ||
+    hint.includes("sales") ||
+    /\b(sales|revenue|invoice|branch|product|customer|mtd|ytd|today)\b/.test(q);
+  const purchaseish =
+    /\b(pur_report|purxns|supplier|vendor|purchase)\b/.test(hint) ||
+    /\b(purchase|vendor|supplier|procurement|po)\b/.test(q);
+  const stockish =
+    hint.includes("stock") ||
+    hint.includes("inventory") ||
+    /\b(stock|inventory|sku on hand|closing stock)\b/.test(q);
+
+  const out = [];
+  const seen = new Set();
+  for (const s of suggestions || []) {
+    const t = String(s || "").trim();
+    if (!t || t.length > 160) continue;
+    const low = t.toLowerCase();
+    if (seen.has(low)) continue;
+    seen.add(low);
+    if (low === q) continue;
+
+    if (salesish && !purchaseish && !stockish) {
+      if (/\b(low stock|out of stock|reorder point|warehouse bin)\b/i.test(t)) continue;
+      if (/\b(purchase order|vendor ledger|accounts payable)\b/i.test(t)) continue;
+      if (/\b(hr\b|payroll|employee attendance)\b/i.test(t)) continue;
+    }
+    if (!purchaseish && /\btop\s+\d+\s+vendors?\b/i.test(t) && !/\bpurchase\b/i.test(t)) continue;
+    if (!stockish && /\b(stock on hand|closing inventory|warehouse stock)\b/i.test(t)) continue;
+
+    out.push(t);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+/**
  * Generate 3-5 contextual drill-down / follow-up query suggestions after a successful result.
  * Returns a plain string array; never throws.
  */
@@ -1067,13 +1111,19 @@ async function generateDrillDownSuggestions({ apiKey, model, question, data, int
   const cols = rowCount > 0 ? Object.keys(data[0]) : [];
   const sample = rowCount > 0 ? JSON.stringify(data.slice(0, 5)).slice(0, 800) : "(no data returned)";
 
-  const system = `You are an ERP analytics assistant. Generate exactly 3-5 short follow-up query suggestions.
-Rules:
+  const system = `You are an ERP analytics assistant for Microsoft SQL Server / retail apparel data.
+Generate exactly 3-5 short follow-up NATURAL LANGUAGE questions the user could run next.
+
+Hard rules:
 - Return ONLY a raw JSON array of strings — no prose, no markdown, no backticks.
-- Each suggestion must be a complete standalone question (under 12 words).
-- Vary intent: include at least one drill-down, one comparison, one trend question.
-- Use concrete specifics (time periods, dimensions visible in the columns/sample).
-- Do NOT repeat or rephrase the original question.`;
+- Each string must be a complete question (max 14 words).
+- Every question MUST be answerable with T-SQL using the same domain as typical answers:
+  sales → dbo.VwAISalesData (InvoiceDt, SaleNetAmount) plus joins to dbo.VwMstItems (product names),
+  dbo.VwAIBranch (branch names), dbo.VwAICustomerDetails, dbo.VwAISalesPerson when needed.
+- Prefer SaleNetAmount for revenue (not quantity-only) unless the user asked for units.
+- Date filters must use SQL Server patterns (e.g. last 7 days, this month, YTD) — never vague "recently" without a period.
+- Vary intent: at least one drill-down dimension, one comparison, one trend/time question.
+- Do NOT repeat the original question. Do NOT suggest purchase/vendor/stock questions unless the original question or columns clearly involve purchases or stock.`;
 
   const userMsg = `Original question: "${String(question).slice(0, 400)}"
 Intent: ${intentType || "generic"}
@@ -1089,7 +1139,7 @@ Generate 3-5 follow-up questions as a JSON array.`;
         { role: "system", content: system },
         { role: "user", content: userMsg },
       ],
-      temperature: 0.7,
+      temperature: 0.35,
       max_tokens: 300,
     });
     const raw = (completion.choices[0]?.message?.content || "").trim();
@@ -1375,4 +1425,5 @@ module.exports = {
   tagColumns,
   enforceTopLimit,
   generateDrillDownSuggestions,
+  filterDrillDownSuggestionsVerified,
 };

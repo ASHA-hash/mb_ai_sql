@@ -125,7 +125,7 @@ function getRoleForEmail(email) {
   return {
     roleKey: u.role,
     features: Array.isArray(roleDef.features) ? roleDef.features.slice() : [],
-    datasets: roleDef.datasets,
+    datasets: normalizeDatasetScope(roleDef.datasets),
   };
 }
 
@@ -163,7 +163,7 @@ function rbacMiddleware(req, res, next) {
       email:    payload.email,
       roleKey:  payload.role,
       features: Array.isArray(payload.features) ? payload.features : [],
-      datasets: payload.datasets || "*",
+      datasets: normalizeDatasetScope(payload.datasets),
     };
     return next();
   }
@@ -179,7 +179,7 @@ function rbacMiddleware(req, res, next) {
         email: payload.email,
         roleKey: payload.role,
         features: Array.isArray(payload.features) ? payload.features.slice() : [],
-        datasets: payload.datasets || "*",
+        datasets: normalizeDatasetScope(payload.datasets),
       };
       return next();
     }
@@ -255,16 +255,44 @@ function requireManagerOrAdminApi(req, res, next) {
   });
 }
 
+/**
+ * Coerce role / JWT dataset scope to "*" | string[].
+ * Note: `[] || "*"` in JS yields [] (empty array is truthy), so login used to embed [] and empty the dropdown.
+ */
+function normalizeDatasetScope(raw) {
+  if (raw === "*" || raw === null || raw === undefined) return "*";
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return "*";
+    return raw.map((k) => String(k || "").trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (t === "" || t === "*") return "*";
+    try {
+      const j = JSON.parse(t);
+      if (Array.isArray(j)) {
+        if (j.length === 0) return "*";
+        return j.map((k) => String(k || "").trim()).filter(Boolean);
+      }
+      if (j === "*") return "*";
+    } catch (_) {
+      /* not JSON */
+    }
+    return "*";
+  }
+  return "*";
+}
+
 function filterDatasets(datasets, rbacCtx) {
   if (!rbacEnabled() || !rbacCtx) {
     return datasets;
   }
-  const allowed = rbacCtx.datasets;
+  const allowed = normalizeDatasetScope(rbacCtx.datasets);
   if (allowed === "*") {
     return datasets;
   }
   if (!Array.isArray(allowed)) {
-    return [];
+    return datasets;
   }
   const set = new Set(allowed.map((k) => String(k).toLowerCase()));
   return (datasets || []).filter((d) => set.has(String(d.key || "").toLowerCase()));
@@ -278,7 +306,7 @@ function assertDatasetAllowed(rbacCtx, datasetKey) {
     return false;
   }
   const dk = String(datasetKey || "").toLowerCase().trim();
-  const allowed = rbacCtx.datasets;
+  const allowed = normalizeDatasetScope(rbacCtx.datasets);
   if (allowed === "*") {
     return true;
   }
@@ -377,6 +405,7 @@ module.exports = {
   requireFeature,
   requireAdminApi,
   requireManagerOrAdminApi,
+  normalizeDatasetScope,
   filterDatasets,
   assertDatasetAllowed,
   getRoleForEmail,

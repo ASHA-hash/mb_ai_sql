@@ -26,6 +26,8 @@ const {
   classifyQueryIntent,
   validateResultContract,
   tagColumns,
+  generateDrillDownSuggestions,
+  filterDrillDownSuggestionsVerified,
 } = require("./ai-sql");
 const { runAgenticQuery } = require("./ai-agentic-query");
 const { runLangChainQuery } = require("./ai-langchain-query");
@@ -80,6 +82,39 @@ function preferChartForTrendQuestion(question, intentType, chartPolicyIn) {
   if (/\b(monthly|daily|weekly)\b/.test(q) && /\btrend\b/.test(q)) return "line";
   return chartPolicyIn;
 }
+
+/** Optional follow-up chips for Sheets sidebar + dashboard; bounded latency. */
+async function maybeDrillDownSuggestions({ apiKey, model, question, data, intentType, tableHint }) {
+  const off = /^(0|false|no)$/i.test(String(process.env.ADAPTIVE_DRILL_SUGGESTIONS ?? "1").trim());
+  if (off) return [];
+  if (!Array.isArray(data) || data.length === 0) return [];
+  const timeoutMs = Math.max(
+    2000,
+    Math.min(25000, Number(process.env.ADAPTIVE_DRILL_SUGGESTIONS_TIMEOUT_MS) || 10000)
+  );
+  try {
+    const raw = await Promise.race([
+      generateDrillDownSuggestions({
+        apiKey: String(apiKey).trim(),
+        model,
+        question,
+        data,
+        intentType,
+      }),
+      new Promise((resolve) => {
+        setTimeout(() => resolve([]), timeoutMs);
+      }),
+    ]);
+    return filterDrillDownSuggestionsVerified({
+      question,
+      tableHint,
+      suggestions: Array.isArray(raw) ? raw : [],
+    });
+  } catch (e) {
+    console.warn("[adaptive] drillDownSuggestions:", e.message);
+    return [];
+  }
+}
 const { buildSchemaDocFromDb } = require(path.join(rootDir, "ai-schema-introspect"));
 const {
   getMirrorUrl,
@@ -113,6 +148,7 @@ const {
 const { appendDatasetFilterWhere } = require("./services/dataset-where");
 const {
   runAnalyticsDashboard,
+  scheduleAnalyticsWarmup,
   bumpDataEpoch,
   getDataEpoch,
 } = require("./services/analytics-dashboard");
@@ -992,26 +1028,46 @@ function envTrim(key) {
 }
 
 function getDbConfig() {
-  const requestTimeout = parseInt(process.env.DB_REQUEST_TIMEOUT_MS || "120000", 10);
+  /* Large analytics views (PowerBI rollups, QTD/YTD) often exceed 120s — default 480s unless overridden.
+     IMPORTANT: In mssql v9+, requestTimeout MUST be at the top-level of the config object,
+     NOT inside options{} — otherwise it is ignored and tedious uses its default of 120 s. */
+  const requestTimeout = parseInt(process.env.DB_REQUEST_TIMEOUT_MS || "480000", 10);
   const connectTimeout = parseInt(process.env.DB_CONNECT_TIMEOUT_MS || "60000", 10);
   const encryptEnv = String(process.env.DB_ENCRYPT || "")
     .trim()
     .toLowerCase();
   const encrypt = encryptEnv === "1" || encryptEnv === "true" || encryptEnv === "yes";
+  const safeReqTimeout = Number.isFinite(requestTimeout) ? requestTimeout : 480000;
+  const safeConTimeout = Number.isFinite(connectTimeout) ? connectTimeout : 60000;
+
+  /* Pool sizing:
+     - max: 20 connections (up from 10) — analytics runs up to 6 parallel queries per request;
+       warmup + concurrent user requests would exhaust a pool of 10.
+     - acquireTimeoutMillis: how long tarn waits for a free connection before throwing
+       "operation timed out for an unknown reason". Default is 60s — too short when
+       analytics warmup holds connections for several minutes. Set to 3 min. */
+  const poolMax = parseInt(process.env.DB_POOL_MAX || "20", 10);
+  const acquireTimeout = parseInt(process.env.DB_POOL_ACQUIRE_TIMEOUT_MS || "180000", 10);
+
   return {
     user: envTrim("DB_USER"),
     password: envTrim("DB_PASSWORD"),
     server: envTrim("DB_SERVER"),
     port: parseInt(envTrim("DB_PORT") || "1433", 10),
     database: envTrim("DB_NAME"),
+    /* mssql v9+ reads requestTimeout from the TOP level, not from options{} */
+    requestTimeout: safeReqTimeout,
+    connectionTimeout: safeConTimeout,
     options: {
       encrypt,
       trustServerCertificate: true,
-      /** Default was 15s — large views (e.g. VwAIBranch) often need longer */
-      requestTimeout: Number.isFinite(requestTimeout) ? requestTimeout : 120000,
-      connectTimeout: Number.isFinite(connectTimeout) ? connectTimeout : 60000,
     },
-    pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
+    pool: {
+      max: poolMax,
+      min: 0,
+      idleTimeoutMillis: 30000,
+      acquireTimeoutMillis: acquireTimeout,
+    },
   };
 }
 
@@ -1229,7 +1285,7 @@ app.post("/api/auth/login", (req, res) => {
   }
   const roleDef = cfg.roles?.[userEntry.role];
   const features = roleDef?.features || [];
-  const datasets  = roleDef?.datasets || "*";
+  const datasets = rbac.normalizeDatasetScope(roleDef?.datasets);
   const token = auth.generateToken({
     email:    userEntry.email,
     role:     userEntry.role,
@@ -1295,7 +1351,7 @@ app.post("/api/auth/google", async (req, res) => {
 
   const roleDef  = cfg.roles?.[userEntry.role];
   const features = roleDef?.features || [];
-  const datasets = roleDef?.datasets || "*";
+  const datasets = rbac.normalizeDatasetScope(roleDef?.datasets);
   const name     = userEntry.name || tokenInfo.name || tokenInfo.email;
 
   const token = auth.generateToken({ email: userEntry.email, role: userEntry.role, name, features, datasets });
@@ -2252,6 +2308,14 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
       const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
       const lgChartRaw = lgShape.chartType || intent.chartPolicy || "auto";
       const lgChart = preferChartForTrendQuestion(question, lgIntent, lgChartRaw);
+      const drillDownSuggestions = await maybeDrillDownSuggestions({
+        apiKey: String(apiKey).trim(),
+        model,
+        question,
+        data,
+        intentType: lgIntent,
+        tableHint,
+      });
       return res.json({
         sql: lg.sql,
         rowCount: data.length,
@@ -2273,6 +2337,7 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
         retryCount: lg.retryCount || 0,
         _langchainNodes: lg.nodeLog || [],
         _langchainRetries: lg.retryCount || 0,
+        drillDownSuggestions,
       });
     } catch (lgErr) {
       console.error("[adaptive] LangGraph forced mode error:", lgErr.message);
@@ -2399,6 +2464,14 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
           intentType === "kpi" ? "kpi_card" : "auto");
       const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
       const plannerLogicalPlan = deterministic.intent?.planner?.logicalPlan ?? null;
+      const drillDownSuggestions = await maybeDrillDownSuggestions({
+        apiKey: String(apiKey).trim(),
+        model,
+        question,
+        data,
+        intentType,
+        tableHint,
+      });
       return res.json({
         sql: deterministic.sql,
         rowCount: data.length,
@@ -2419,6 +2492,7 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
         retryCount: deterministic.retriesUsed || 0,
         interpretation: deterministic.interpretation || null,
         logicalPlan: plannerLogicalPlan,
+        drillDownSuggestions,
       });
     }
   } catch (detErr) {
@@ -3164,6 +3238,57 @@ app.post("/api/admin/semantic-dictionary", rbac.requireAdminApi, (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────
+   AI QUERY HISTORY — server-side per-user store
+   Stored in data/ai-history.json  { "email": ["q1","q2",...] }
+   Max 20 entries per user. Replaces localStorage.
+   ───────────────────────────────────────────────────────────── */
+const AI_HISTORY_PATH = path.join(rootDir, "data", "ai-history.json");
+const AI_HISTORY_MAX  = 20;
+
+function readAiHistory() {
+  try {
+    const dir = path.dirname(AI_HISTORY_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(AI_HISTORY_PATH)) return {};
+    return JSON.parse(fs.readFileSync(AI_HISTORY_PATH, "utf8") || "{}");
+  } catch { return {}; }
+}
+function writeAiHistory(data) {
+  try { fs.writeFileSync(AI_HISTORY_PATH, JSON.stringify(data, null, 2)); } catch {}
+}
+
+/** GET /api/ai/history — returns array of recent query strings for the logged-in user */
+app.get("/api/ai/history", rbac.rbacMiddleware, (req, res) => {
+  const email = req.rbac?.email || "";
+  if (!email) return res.json([]);
+  const all = readAiHistory();
+  res.json(all[email.toLowerCase()] || []);
+});
+
+/** POST /api/ai/history — { query: string } — prepend to user's history list */
+app.post("/api/ai/history", rbac.rbacMiddleware, (req, res) => {
+  const email = req.rbac?.email || "";
+  const query = String((req.body && req.body.query) || "").trim();
+  if (!email || !query) return res.json({ ok: false });
+  const all = readAiHistory();
+  const key = email.toLowerCase();
+  const prev = Array.isArray(all[key]) ? all[key] : [];
+  all[key] = [query, ...prev.filter(q => q !== query)].slice(0, AI_HISTORY_MAX);
+  writeAiHistory(all);
+  res.json({ ok: true, count: all[key].length });
+});
+
+/** DELETE /api/ai/history — clears history for the logged-in user */
+app.delete("/api/ai/history", rbac.rbacMiddleware, (req, res) => {
+  const email = req.rbac?.email || "";
+  if (!email) return res.json({ ok: false });
+  const all = readAiHistory();
+  delete all[email.toLowerCase()];
+  writeAiHistory(all);
+  res.json({ ok: true });
+});
+
+/* ─────────────────────────────────────────────────────────────
    SQL TEMPLATES — server-side CRUD
    Stored in data/sql-templates.json, shared across all users.
    Each template: { id, name, sql, desc, createdAt, updatedAt }
@@ -3485,6 +3610,55 @@ app.post("/api/rag/example/:id/thumbs-down", rbac.requireManagerOrAdminApi, (req
   res.json({ ok });
 });
 
+/**
+ * POST /api/rag/example/:id/run — execute the verified SQL for a RAG example by ID.
+ * Safe: SQL comes from server-side verified store, not from the caller.
+ * Optional body: { limit: 200 } to cap rows returned (default 200, max 500).
+ * Returns: { ok, id, question, sql, data, rowCount, verified }
+ */
+app.post("/api/rag/example/:id/run", rbac.requireFeature("data"), async (req, res) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ ok: false, error: "id required" });
+
+    const all = ragStore.listByType("example");
+    const entry = all.find(e => e.id === id) || null;
+    if (!entry) return res.status(404).json({ ok: false, error: "Example not found: " + id });
+
+    const sql = String(entry.metadata?.sql || "").trim();
+    if (!sql) return res.status(400).json({ ok: false, error: "Example has no SQL stored" });
+
+    const question = String(entry.metadata?.question || "").trim();
+    const verified = !!entry.metadata?.verified;
+
+    // Safety check: only allow SELECT statements from the verified store
+    const sqlUpper = sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim().toUpperCase();
+    if (!sqlUpper.startsWith("SELECT") && !sqlUpper.startsWith("WITH")) {
+      return res.status(400).json({ ok: false, error: "Only SELECT/WITH statements allowed" });
+    }
+
+    const rawLimit = parseInt(String((req.body && req.body.limit) || "200"), 10);
+    const rowLimit = isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 200;
+
+    // Inject TOP if not already present and SQL starts with SELECT
+    let execSql = sql;
+    if (sqlUpper.startsWith("SELECT") && !/^\s*SELECT\s+TOP\s+\d+/i.test(sql)) {
+      execSql = sql.replace(/^\s*SELECT\s+/i, `SELECT TOP ${rowLimit} `);
+    }
+
+    const pool = await getPool();
+    const request = pool.request();
+    request.timeout = 60000; // 60s cap for verified examples
+    const result = await request.query(execSql);
+    const rows = result.recordset || [];
+
+    res.json({ ok: true, id, question, sql, data: rows, rowCount: rows.length, verified });
+  } catch (err) {
+    console.error("[rag/example/run] error:", err.message);
+    res.status(500).json({ ok: false, error: err.message || "Query failed" });
+  }
+});
+
 /** GET /api/rag/glossary — list glossary terms */
 app.get("/api/rag/glossary", (req, res) => {
   const terms = ragStore.listByType("glossary").map(({ id, metadata, addedAt }) => ({
@@ -3586,6 +3760,11 @@ app.post("/api/rag/seed-examples", rbac.requireManagerOrAdminApi, async (req, re
   ragSchemaIndexer.indexSchema().catch(e =>
     console.warn("[rag-schema-indexer] background index failed:", e.message)
   );
+
+  // Schedule analytics cache warm-up (30s delay, then every 15 min).
+  // Pre-runs MTD/QTD/YTD/180d so the first user never waits for a cold query.
+  // Disable: ANALYTICS_WARMUP=0 in .env
+  getPool().then(pool => scheduleAnalyticsWarmup(pool)).catch(() => {});
 
   server.listen(port, "0.0.0.0", () => {
     server.ref();

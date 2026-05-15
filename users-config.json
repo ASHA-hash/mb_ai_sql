@@ -11,12 +11,7 @@
       ]
     },
     "manager": {
-      "datasets": [
-        "sales",
-        "stock",
-        "customers",
-        "branches"
-      ],
+      "datasets": "*",
       "features": [
         "ai",
         "data",
@@ -25,10 +20,7 @@
       ]
     },
     "viewer": {
-      "datasets": [
-        "sales",
-        "branches"
-      ],
+      "datasets": "*",
       "features": [
         "data",
         "explorer"
@@ -40,13 +32,13 @@
       "email": "ashakarthikeyan24@gmail.com",
       "role": "admin",
       "name": "Admin",
-      "passwordHash": "123456789"
+      "passwordHash": "pbkdf2:97259f8ee7a11638601222929e3585f4:bfd3b94ce67fcd44b663e8e319a1068e4faae6880630efd5de364856de7f6eac"
     },
     {
       "email": "manoj.kumar@mbindia.net",
       "role": "admin",
       "name": "Admin",
-      "passwordHash": "123456789"
+      "passwordHash": "pbkdf2:97259f8ee7a11638601222929e3585f4:bfd3b94ce67fcd44b663e8e319a1068e4faae6880630efd5de364856de7f6eac"
     },
     {
       "email": "karthikeyanasha24@gmail.com",
@@ -58,7 +50,7 @@
       "email": "asha24workofficial@gmail.com",
       "role": "admin",
       "name": "Asha",
-      "passwordHash": "123456789"
+      "passwordHash": "pbkdf2:97259f8ee7a11638601222929e3585f4:bfd3b94ce67fcd44b663e8e319a1068e4faae6880630efd5de364856de7f6eac"
     }
   ]
 }

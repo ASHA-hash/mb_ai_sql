@@ -13,6 +13,7 @@
 "use strict";
 
 const { decideChart } = require("./chart-decision-engine");
+const { isNonAggregableDigitColumnName } = require("./column-semantics");
 
 /* ---------------------------------------------------------------------------
    COLUMN TAGGER -- value-first, name-as-tiebreaker
@@ -38,6 +39,12 @@ function tagColumnsByValues(rows) {
     var values = allVals.filter(function(v) { return v !== null && v !== undefined && v !== ""; });
 
     if (values.length === 0) { tags[col] = "unknown"; continue; }
+
+    /* PIN / phone / postal — numeric strings but never money or count */
+    if (isNonAggregableDigitColumnName(col)) {
+      tags[col] = "text";
+      continue;
+    }
 
     /* 1. DATE: check value format first */
     var dateCount = values.filter(function(v) {
