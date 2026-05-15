@@ -286,6 +286,7 @@ async function closePool() {
 module.exports = {
   connectionString,
   initAndLoad,
+  syncRolesFromFile,
   fetchFullConfig,
   replaceUsers,
   setPasswordHash,

@@ -53,6 +53,16 @@ async function initStorage() {
     cachedConfig = await rbacPg.initAndLoad(CONFIG_PATH);
     cachedMtimeMs = null;
     console.log("[rbac] storage: PostgreSQL (RBAC_DATABASE_URL or DATABASE_URL)");
+    // Always sync role definitions (features + datasets) from users-config.json on startup.
+    // Uses ON CONFLICT DO UPDATE so it is safe to run every deploy — this ensures
+    // production Postgres roles stay in sync with the file (fixes "4 views" issue where
+    // old bootstrapped roles had a restricted dataset list instead of "*").
+    try {
+      await rbacPg.syncRolesFromFile(CONFIG_PATH);
+      console.log("[rbac] roles synced from users-config.json → PostgreSQL");
+    } catch (syncErr) {
+      console.warn("[rbac] role sync failed (non-fatal):", syncErr.message);
+    }
   } else {
     storageMode = "file";
     cachedConfig = null;
