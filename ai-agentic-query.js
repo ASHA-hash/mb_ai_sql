@@ -9,6 +9,8 @@
 const OpenAI = require("openai");
 const { dispatchAgenticTool } = require("./services/agentic-db-tools");
 const { getMCPTools, callMCPTool, runMCPExclusive } = require("./services/mcp-client");
+const { buildMappingDictionaryBlock, buildAggregationMandateBlock } = require("./services/metadata-translation-engine");
+const { buildSqlGenerationSystemPrompt } = require("./services/adaptive-intent");
 
 /** If tools/list fails at startup — keep names aligned with MCP server + OpenAI compatibility. */
 const AGENTIC_TOOLS = [
@@ -190,93 +192,28 @@ async function internalRun({
     : "";
 
   const userDateBlock = buildUserDateRangeBlock(userDateRange || {});
-  const systemPrompt = `You are a retail fashion ERP business analytics assistant for Meena Bazaar.
-Answer the user's question by querying a Microsoft SQL Server database using the provided tools.
+  const mappingBlock = buildMappingDictionaryBlock(question);
+  const systemPrompt = `You are a retail ERP analytics assistant (Meena Bazaar).
+Answer by querying SQL Server through tools — metadata-driven, not hardcoded view rules.
 
-══ MANDATORY WORKFLOW — follow every step, every time ══
-1. call find_views_for_question — discover relevant views
-2. call get_view_columns on ALL views found — never guess column names
-3. call get_sample_rows on the primary view — understand real date formats, branch codes, value scales
-4. if the question mentions a named filter (branch, supplier, category, department):
-   call get_distinct_values to find the exact stored value before writing SQL
-5. write and call run_select with a validated SQL query
-6. if run_select errors: read the error message, call get_view_columns again if needed, fix and retry
-7. answer in plain English based on the returned data
+══ MANDATORY WORKFLOW ══
+1. SEPARATE intent from SQL: infer metrics/dimensions/filters first (use BUSINESS TERM MAPPINGS).
+2. find_views_for_question → get_view_columns on ALL recommended views.
+3. get_sample_rows on the primary view when formats are unclear.
+4. get_distinct_values before filtering by branch/supplier/category names.
+5. run_select with aggregated SQL (SUM/COUNT/AVG + GROUP BY) unless line-level detail is explicit.
+6. On run_select error: read system_observation / hint in the tool result, fix columns, retry.
 
-══ STRICT SQL RULES ══
-COLUMN NAMES
-- NEVER guess — only use columns returned by get_view_columns
-- If a column is not in that list, it does not exist — find the right column
+${mappingBlock}
 
-BRANCH IDENTIFIER
-- VwAI* views → BranchId (INT) | VW_MB_POWERBI_* → BranchAlias (varchar e.g. "01-SE")
-- NEVER mix these — the wrong one will always return an error
+${buildAggregationMandateBlock()}
 
-REVENUE COLUMN
-- VwAI* views → SaleNetAmount | VW_MB_POWERBI_* → NetAmount
-- NEVER use MRPValue, GrossValue, CostValue, or NetAmountBeforeTax as revenue
-
-JOIN DIRECTION (critical for ranking queries)
-- ALWAYS start FROM dbo.VwAISalesData (the fact table with millions of rows) and JOIN to master tables
-- ✅ CORRECT: FROM dbo.VwAISalesData s INNER JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId
-- ✅ CORRECT: FROM dbo.VwAISalesData s LEFT JOIN dbo.VwAIBranch b ON s.BranchId = b.BranchId
-- ❌ WRONG: FROM dbo.VwMstItems i LEFT JOIN dbo.VwAISalesData s ...  ← returns at most as many rows as are in VwMstItems (could be just 4!)
-- ❌ WRONG: FROM dbo.VwAIBranch b LEFT JOIN dbo.VwAISalesData s ...  ← same problem
-- WHY: Master tables (VwMstItems, VwAIBranch) may have very few pre-loaded rows. Starting FROM them limits results to that tiny count even when TOP 100 is requested.
-
-DATE ARITHMETIC
-- CORRECT: DATEADD(day, -7, CAST(GETDATE() AS DATE))
-- WRONG:   GETDATE() - 7  ← integer subtraction, always returns wrong/0 rows
-- Always CAST datetime columns to date: CAST(InvoiceDt AS date)
-- "This week": CAST(InvoiceDt AS date) >= DATEADD(day, 1-DATEPART(dw,GETDATE()), CAST(GETDATE() AS DATE))
-- "This month" / MTD: YEAR(col)=YEAR(GETDATE()) AND MONTH(col)=MONTH(GETDATE())
-- "Last Monday": CAST(col AS date) = DATEADD(day, 2-DATEPART(WEEKDAY,GETDATE()), DATEADD(day,-7, CAST(GETDATE() AS date)))
-- "Last month MTD" (same day range last month): CAST(col AS date) BETWEEN DATEADD(month,-1,DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)) AND DATEADD(month,-1,CAST(GETDATE() AS date))
-
-INDIAN FISCAL YEAR
-- FY starts April 1. Q1=Apr–Jun, Q2=Jul–Sep, Q3=Oct–Dec, Q4=Jan–Mar
-- Do NOT use DATEDIFF(quarter,...) — it uses calendar quarters
-- QTD: WHERE CAST(col AS date) >= '<qStart>' AND CAST(col AS date) <= CAST(GETDATE() AS date)
-- YTD: WHERE CAST(col AS date) >= '<fyStart Apr 1>' AND CAST(col AS date) <= CAST(GETDATE() AS date)
-- The date context block appended to each question contains the exact current quarter start and FY start
-
-BIRTHDAY/ANNIVERSARY
-- Filter by MONTH(col) ONLY — never YEAR(col), which returns 0 rows
-
-MULTI-METRIC COMPARISON (purchase + sales, period vs period)
-- When asked for two metrics in the same chart (e.g. "sales and purchases simultaneously"):
-  Return ONE result set with a label column AND two numeric columns (one per metric).
-  Example: SELECT <date> AS Period, SUM(SaleNetAmount) AS NetSales, SUM(PurNetAmount) AS Purchases ...
-- When asked for period comparison (e.g. "today vs last Monday vs last month"):
-  Use UNION ALL with a 'Period' text label and identical numeric aliases in every branch:
-  SELECT 'Today' AS Period, SUM(SaleNetAmount) AS NetSales FROM ... WHERE <today filter>
-  UNION ALL SELECT 'Last Monday' AS Period, SUM(SaleNetAmount) AS NetSales FROM ... WHERE <last Monday>
-  UNION ALL SELECT 'Last Month' AS Period, SUM(SaleNetAmount) AS NetSales FROM ... WHERE <last month same days>
-  ORDER BY 1
-
-GROUPING AND AGGREGATES
-- Every non-aggregate SELECT column must be in GROUP BY
-- Always alias aggregates: SUM(x) AS TotalX, COUNT(DISTINCT x) AS UniqueX
-- For trend queries: GROUP BY CAST(InvoiceDt AS date) not the raw datetime
-
-RESULT SIZE
-- Non-aggregate queries: always add TOP (N), max 200
-- Ranking queries: TOP 10 / TOP 20 + ORDER BY metric DESC
-
-FORMAT
-- No semicolons, no SQL comments
-- Column aliases must not have spaces (use CamelCase)
-- Always ORDER BY for trend and ranking results
+${buildSqlGenerationSystemPrompt(null, dateContext || "")}
 
 ══ ANSWER FORMAT ══
-- 2–5 sentences in plain English
-- Lead with the single most important number (₹ in Lakhs/Crores using Indian system)
-- Include actual numbers from the data — be specific, not vague
-- If 0 rows returned: say why (likely cause) and suggest what to try instead
-- Never mention SQL, columns, or technical terms in the answer
-
-${userDateBlock}
-${dateContext || ""}`;
+- 2–5 sentences plain English; lead with the key number (₹ Lakhs/Crores).
+- Never mention SQL or column names.
+${userDateBlock}`;
 
   let toolsOpenAI;
   try {
@@ -298,9 +235,10 @@ ${dateContext || ""}`;
   const MAX_TURNS = 18;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const { openAiOmitsTemperature } = require("./services/llm-params");
     const response = await openai.chat.completions.create({
       model: mdl,
-      temperature: 0,
+      ...(openAiOmitsTemperature(mdl) ? {} : { temperature: 0 }),
       tools: toolsOpenAI,
       tool_choice: "auto",
       messages,
@@ -360,9 +298,16 @@ ${dateContext || ""}`;
         toolResult = {
           error: `Tool execution error: ${toolErr.message}`,
           ...(toolName === "run_select"
-            ? { hint: "Query failed. Try adding TOP 50, narrowing the date range to a single week, or using a simpler aggregation." }
+            ? { hint: "Query failed. Use aggregation + date filter; see system_observation if present." }
             : {}),
         };
+      }
+
+      if (toolName === "run_select" && toolResult?.system_observation) {
+        messages.push({
+          role: "system",
+          content: toolResult.system_observation,
+        });
       }
 
       toolCallLog.push({ tool: toolName, args: enriched, result: toolResult });

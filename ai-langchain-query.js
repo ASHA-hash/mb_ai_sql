@@ -4,129 +4,96 @@
  * LangGraph-powered SQL query engine — 7-node StateGraph.
  *
  * Workflow:
- *   load_schema → generate_sql → check_sql
+ *   pre_flight_gate → retrieve_context → resolve_intent → discover_column_values
+ *       → generate_sql → check_sql (structural guard + compliance + optional LLM review)
  *       → execute_sql → [error_recovery (×3)] → generate_answer → verify_answer
  *
  * Key accuracy improvements:
- *   • load_schema  — instant JSON lookup from db_tables_views_columns.json (no DB round-trip)
- *                    passes EXACT column names to AI — no guessing, no hallucination
- *   • temperature=0 for SQL — deterministic, no invented column names
- *   • check_sql    — LLM pre-validates T-SQL rules before DB execution
- *   • verify_answer — LLM cross-checks numbers against actual rows
+ *   • load_schema        — instant JSON lookup from db_tables_views_columns.json (no DB round-trip)
+ *                          passes EXACT column names to AI — no guessing, no hallucination
+ *   • semantic_mapping   — Layer 1: business-term → exact column injection into every prompt
+ *   • value_sampling     — Layer 2: live DB DISTINCT values sampled before SQL generation
+ *                          prevents hallucinated WHERE clauses (e.g. "chenai" → "CHENNAI MAIN")
+ *   • compliance_guard   — Layer 3: SQL blocked/auto-repaired if illegal column detected
+ *                          (e.g. Quantity→AppQty, InvoiceNo→XnNo) before DB execution
+ *   • temperature=0      — deterministic, no invented column names
+ *   • check_sql          — LLM pre-validates T-SQL rules before DB execution
+ *   • verify_answer      — LLM cross-checks numbers against actual rows
  *   • zero_rows_recovery — widens filters and retries once
- *   • 3 retry attempts with cumulative error memory
+ *   • 3 retry attempts   — with cumulative error memory
  */
 "use strict";
 
+const path = require("path");
+const fs   = require("fs");
 const { ChatOpenAI } = require("@langchain/openai");
+let _ChatAnthropic = null;
+function getChatAnthropic() {
+  if (_ChatAnthropic) return _ChatAnthropic;
+  try {
+    _ChatAnthropic = require("@langchain/anthropic").ChatAnthropic;
+  } catch {
+    console.warn("[langchain] @langchain/anthropic not installed — Claude provider unavailable");
+  }
+  return _ChatAnthropic;
+}
 const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
 const { StateGraph, Annotation, END, START } = require("@langchain/langgraph");
-const { dispatchAgenticTool } = require("./services/agentic-db-tools");
-const { findRelevantViews, formatSchemaForPrompt: formatSchemaFromJson, getViewColumns } = require("./services/schema-from-json");
-const { normalizeApiDate } = require("./filter-query");
+const {
+  dispatchAgenticTool,
+  discoverLiveSamplesForQuestion,
+} = require("./services/agentic-db-tools");
+const { validateSqlAccuracy } = require("./services/sql-validator");
+const { getCanonicalSalesContext, remapLegacyColumnNames } = require("./services/canonical-sales-sql");
+const { formatSchemaWithSemantics } = require("./services/schema-rag");
+const {
+  buildBusinessDictionaryPrompt,
+  verifySchemaMetadata,
+} = require("./services/business-terminology");
+const {
+  parseIntentJson,
+  buildIntentSystemPrompt,
+  buildSqlGenerationSystemPrompt,
+  buildIntentUserPrompt,
+  formatIntentForSqlPrompt,
+} = require("./services/adaptive-intent");
 const ragStore = require("./services/rag-store");
+const { detectExportIntent } = require("./services/query-performance");
+const {
+  buildAggregationMandateBlock,
+  formatSystemObservation,
+} = require("./services/metadata-translation-engine");
+const { runPreFlightGate } = require("./services/pre-flight-gate");
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ERP DOMAIN RULES — injected into every generation / check prompt
-   ───────────────────────────────────────────────────────────────────────────── */
-const ERP_SQL_RULES = `
-══ ERP T-SQL RULES — ALL MANDATORY ══
+/* ── Layer 1: Semantic Mapping (business term → exact column) ─────────────── */
+let _semanticMapping = null;
+function getSemanticMapping() {
+  if (_semanticMapping) return _semanticMapping;
+  try {
+    const p = path.join(__dirname, "metadata/semantic-mapping-layer.json");
+    _semanticMapping = JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    _semanticMapping = { prompt_injection: "" };
+  }
+  return _semanticMapping;
+}
+function getSemanticMappingPrompt() {
+  const m = getSemanticMapping();
+  return m.prompt_injection || "";
+}
 
-1. BRANCH IDENTIFIER (most common mistake)
-   • VwAI* views            → BranchId  (INT, numeric)
-   • VW_MB_POWERBI_* views  → BranchAlias (varchar, e.g. "01-SE")
-   ❌ NEVER use BranchId on PowerBI views — column does not exist
-   ❌ NEVER use BranchAlias on VwAI* views — column does not exist
-   ✅ To filter by branch name, use BranchAlias on PowerBI views or join VwAIBranch
+/* ── Layer 2: Dynamic Value Sampling ─────────────────────────────────────── */
+const {
+  sampleValuesForQuestion,
+  buildValueCorrectionBlock,
+} = require("./services/value-sampling-tool");
 
-2. REVENUE COLUMN (second most common mistake)
-   • VwAI* views            → SaleNetAmount   (post-discount net revenue)
-   • VW_MB_POWERBI_* views  → NetAmount
-   ❌ NEVER use MRPValue, GrossValue, NetAmountBeforeTax, CostValue as revenue
-   ❌ NEVER use SaleAmountBeforeTax as final revenue
-
-3. DATE ARITHMETIC (critical for time-range queries)
-   ✅ CORRECT:   DATEADD(day, -7, CAST(GETDATE() AS DATE))
-   ✅ CORRECT:   CAST(InvoiceDt AS date) BETWEEN '2026-01-01' AND '2026-01-31'
-   ❌ WRONG:     GETDATE() - 7          (integer subtraction on date — always 0 rows)
-   ❌ WRONG:     InvoiceDt >= GETDATE() - 30  (same mistake)
-   • Date columns are often datetime — always CAST to date before comparison
-   • "This week" = DATEADD(day, 1-DATEPART(dw,GETDATE()), CAST(GETDATE() AS DATE)) to CAST(GETDATE() AS DATE)
-   • "This month" / MTD = YEAR(col)=YEAR(GETDATE()) AND MONTH(col)=MONTH(GETDATE())
-   • "Last Monday" = CAST(col AS date) = DATEADD(day, 2-DATEPART(WEEKDAY,GETDATE()), DATEADD(day,-7,CAST(GETDATE() AS date)))
-   • "Last month same period" = CAST(col AS date) BETWEEN DATEADD(month,-1,DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)) AND DATEADD(month,-1,CAST(GETDATE() AS date))
-
-3a. INDIAN FISCAL YEAR (critical — do NOT use calendar year logic)
-   • FY = April 1 – March 31.  Q1=Apr–Jun | Q2=Jul–Sep | Q3=Oct–Dec | Q4=Jan–Mar
-   ❌ WRONG for QTD/YTD: DATEDIFF(quarter,...) or YEAR(col)=YEAR(GETDATE())
-   ✅ QTD: WHERE CAST(col AS date) >= '<quarter start from date context>' AND CAST(col AS date) <= CAST(GETDATE() AS date)
-   ✅ YTD: WHERE CAST(col AS date) >= '<April 1 of current FY from date context>' AND CAST(col AS date) <= CAST(GETDATE() AS date)
-   • The [SERVER DATE CONTEXT] block in the question contains the exact current quarter start and FY start — use those dates
-
-4. BIRTHDAY / ANNIVERSARY (filter by month only)
-   ✅ CORRECT:   MONTH(BirthdayDt) = MONTH(GETDATE())
-   ❌ WRONG:     YEAR(BirthdayDt) = YEAR(GETDATE())  — returns 0 rows (DOB year ≠ current year)
-
-5. JOINS (always explicit — direction depends on the question)
-   ✅ Normal ranking / top products / invoices (sales rows drive the grain):
-      FROM dbo.VwAISalesData s INNER JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId
-      FROM dbo.VwAISalesData s LEFT  JOIN dbo.VwAIBranch b ON <matching branch keys>
-      FROM dbo.VwAISalesData s LEFT  JOIN dbo.VwAICustomerDetails c ON s.CustomerId = c.CustomerId
-   ✅ EXCEPTION — "branches with NO / ZERO sales in <period>" (branch is the grain, NOT sales rows):
-      Start FROM dbo.VwAIBranch b and use LEFT JOIN dbo.VwAISalesData … WHERE sales key IS NULL,
-      OR use WHERE NOT EXISTS (SELECT 1 FROM dbo.VwAISalesData s WHERE same branch key AND date in period).
-      Return ONE row per branch (BranchId + display name). Never SELECT only from VwAISalesData for this.
-   ❌ WRONG for normal ranking: FROM dbo.VwMstItems i LEFT JOIN dbo.VwAISalesData s …
-   ❌ WRONG for zero-sales question: FROM dbo.VwAISalesData with TOP 500 — duplicates one branch per invoice line.
-   ❌ NEVER use implicit cross joins (missing ON clause)
-
-6. RESULT SIZE
-   • Non-aggregate SELECT → MUST include TOP (N), max 200
-   • Aggregate returning many groups → TOP 500 on outer query
-   • "Top 10" questions → TOP 10 ... ORDER BY metric DESC
-
-7. NULL SAFETY
-   • Wrap nullable numeric cols: ISNULL(SaleNetAmount, 0)
-   • Wrap nullable string cols: ISNULL(BranchAlias, 'Unknown')
-
-8. FORMAT
-   • No semicolons at end
-   • No SQL comments (-- or /* */)
-   • Always alias all aggregates: SUM(x) AS TotalX, COUNT(*) AS TxnCount
-   • Always include ORDER BY for trend/ranking queries
-   • Column aliases must not contain spaces (use CamelCase or underscore)
-
-9. GROUPING
-   • Every non-aggregate SELECT column must appear in GROUP BY
-   • Do NOT group by datetime — always GROUP BY CAST(col AS date) or FORMAT(col, 'MMM yyyy')
-
-10. COMMON PATTERNS
-    • Daily trend:
-      SELECT CAST(InvoiceDt AS date) AS SaleDate, SUM(SaleNetAmount) AS TotalSales, COUNT(DISTINCT InvoiceNo) AS InvoiceCount
-      FROM dbo.VwAISalesData GROUP BY CAST(InvoiceDt AS date) ORDER BY SaleDate
-    • Branch ranking:
-      SELECT TOP 20 BranchAlias, SUM(NetAmount) AS TotalSales FROM VW_MB_POWERBI_...
-      GROUP BY BranchAlias ORDER BY TotalSales DESC
-    • Product/item ranking (CORRECT — fact table first):
-      SELECT TOP 10 ISNULL(i.<name_col>, 'Unknown') AS ProductName, SUM(s.SaleNetAmount) AS TotalSales
-      FROM dbo.VwAISalesData s INNER JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId
-      GROUP BY i.<name_col> ORDER BY TotalSales DESC
-      — replace <name_col> with the actual name column from the schema (e.g. Description, ArticleShortName, ItemName)
-    • Customer count: COUNT(DISTINCT CustomerId) AS CustomerCount
-    • Invoice count: COUNT(DISTINCT InvoiceNo) AS InvoiceCount
-
-11. MULTI-METRIC COMPARISON
-    • Two measures in one chart (e.g. "sales + purchases simultaneously", "revenue and cost together"):
-      Return ONE result set with a label column AND two numeric columns (one per metric).
-      SELECT <date> AS Period, SUM(s.SaleNetAmount) AS NetSales, SUM(p.PurNetAmount) AS Purchases
-      FROM dbo.VwAISalesData s LEFT JOIN <purchase_view> p ON <date join> GROUP BY <date> ORDER BY <date>
-    • Period comparison (e.g. "today vs last Monday vs last month"):
-      Use UNION ALL with identical column aliases across branches:
-      SELECT 'Today' AS Period, 1 AS SortOrder, SUM(SaleNetAmount) AS NetSales FROM ... WHERE <today>
-      UNION ALL SELECT 'Last Monday', 2, SUM(SaleNetAmount) FROM ... WHERE <last Monday>
-      UNION ALL SELECT 'Last Month', 3, SUM(SaleNetAmount) FROM ... WHERE <last month same range>
-      ORDER BY SortOrder
-`;
+/* ── Layer 3: Query Compliance Guard ─────────────────────────────────────── */
+const {
+  checkSqlCompliance,
+  autoRepairSql,
+  formatComplianceObservation,
+} = require("./services/query-compliance-engine");
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STATE SCHEMA
@@ -135,10 +102,12 @@ const last = (a, b) => (b !== undefined ? b : a);
 
 const AgentState = Annotation.Root({
   // Inputs
-  question:        Annotation({ reducer: last }),
-  dateContext:     Annotation({ reducer: last }),
-  tableHint:       Annotation({ reducer: last }),
-  userDateRange:   Annotation({ reducer: last }),
+  question:            Annotation({ reducer: last }),
+  originalQuestion:    Annotation({ reducer: last }),
+  adaptiveEnrichment:  Annotation({ reducer: last }),
+  dateContext:         Annotation({ reducer: last }),
+  tableHint:           Annotation({ reducer: last }),
+  userDateRange:       Annotation({ reducer: last }),
 
   // Schema discovery
   viewScores:      Annotation({ reducer: last }),
@@ -156,10 +125,28 @@ const AgentState = Annotation.Root({
   executionResult: Annotation({ reducer: last }),
   retryCount:      Annotation({ default: () => 0, reducer: last }),
   retryErrors:     Annotation({ default: () => [], reducer: (a, b) => [...(a || []), ...(b || [])] }),
+  systemObservations: Annotation({ default: () => [], reducer: (a, b) => [...(a || []), ...(b || [])] }),
   zeroRowsRetried: Annotation({ default: () => false, reducer: last }),
 
   // RAG — retrieved context injected before SQL generation
   ragContext:      Annotation({ reducer: last }),
+  businessDictionary: Annotation({ reducer: last }),
+  queryIntent:     Annotation({ reducer: last }),
+
+  // Column value discovery (cognitive loop)
+  liveColumnSamples:     Annotation({ reducer: last }),
+  columnDiscoveryText:   Annotation({ reducer: last }),
+  sqlValidationFailed:   Annotation({ reducer: last }),
+
+  // Pre-flight guard
+  nextStep:              Annotation({ reducer: last }),
+  rankedViews:           Annotation({ reducer: last }),
+  targetView:            Annotation({ reducer: last }),
+  clarityScore:          Annotation({ reducer: last }),
+  preFlightMs:           Annotation({ reducer: last }),
+  fastPathSql:           Annotation({ reducer: last }),
+  clarificationMessage:  Annotation({ reducer: last }),
+  clarificationOptions:  Annotation({ reducer: last }),
 
   // Output
   finalAnswer:     Annotation({ reducer: last }),
@@ -259,160 +246,6 @@ function buildDateRangeClause(userDateRange) {
   return `\n[USER DATE RANGE — use this in WHERE clause on the appropriate date column]\n${parts.join(", ")}`;
 }
 
-function quoteIdent(name) {
-  return `[${String(name || "").replace(/]/g, "]]")}]`;
-}
-
-function pickFirstExisting(columns, preferred) {
-  const set = new Set((columns || []).map((c) => String(c).toLowerCase()));
-  for (const p of preferred) {
-    if (set.has(String(p).toLowerCase())) return p;
-  }
-  return null;
-}
-
-function getSchemaColumnNames(schema, viewName) {
-  if (!schema || typeof schema !== "object") return [];
-  const candidates = [
-    viewName,
-    `dbo.${viewName}`,
-    String(viewName || "").replace(/^dbo\./i, ""),
-  ].map((s) => String(s || "").toLowerCase());
-  const key = Object.keys(schema).find((k) => candidates.includes(String(k || "").toLowerCase()));
-  const cols = key ? schema[key] : null;
-  if (!Array.isArray(cols)) return [];
-  return cols.map((c) => c?.column).filter(Boolean);
-}
-
-function isTopProductsSalesQuestion(question) {
-  const q = String(question || "").toLowerCase();
-  return /\btop\s+\d+\b/.test(q) &&
-    /\b(product|item|article|sku)\b/.test(q) &&
-    /\b(sale|sales|revenue|amount)\b/.test(q);
-}
-
-function buildTopProductsSqlFromSchema(state) {
-  if (!isTopProductsSalesQuestion(state.question)) return null;
-  const salesCols = getSchemaColumnNames(state.schema, "VwAISalesData");
-  const itemCols = getSchemaColumnNames(state.schema, "VwMstItems");
-  if (!salesCols.length || !itemCols.length) return null;
-
-  const amountCol = pickFirstExisting(salesCols, ["SaleNetAmount", "NetAmount", "Amount"]);
-  if (!amountCol) return null;
-
-  const productNameCol = pickFirstExisting(itemCols, [
-    "ProductName",
-    "Description",
-    "ItemName",
-    "ArticleShortName",
-    "ArticleName",
-    "ArticleNo",
-  ]);
-  if (!productNameCol) return null;
-
-  const topNMatch = String(state.question || "").match(/\btop\s+(\d+)\b/i);
-  const requestedTop = topNMatch ? parseInt(topNMatch[1], 10) : 10;
-  const topN = Number.isFinite(requestedTop) ? Math.min(Math.max(requestedTop, 1), 200) : 10;
-
-  const labelExpr = `ISNULL(NULLIF(LTRIM(RTRIM(i.${quoteIdent(productNameCol)})), ''), 'Unknown')`;
-  return [
-    `SELECT TOP ${topN}`,
-    `  ${labelExpr} AS ProductName,`,
-    `  SUM(ISNULL(s.${quoteIdent(amountCol)}, 0)) AS TotalSales`,
-    `FROM dbo.VwAISalesData s`,
-    `INNER JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId`,
-    `GROUP BY ${labelExpr}`,
-    `HAVING SUM(ISNULL(s.${quoteIdent(amountCol)}, 0)) > 0`,
-    `ORDER BY TotalSales DESC`,
-  ].join("\n");
-}
-
-function isZeroSalesBranchesQuestion(question) {
-  const q = String(question || "").toLowerCase();
-  if (!/\b(branch|branches|store|stores|outlet|location)\b/.test(q)) return false;
-  return /\b(zero sales|no sales|without sales|0\s+sales|didn'?t sell|haven'?t\s+sold|not selling)\b/.test(q);
-}
-
-function pickSalesDateColumnFromJson() {
-  const salesCols = getViewColumns("dbo.VwAISalesData");
-  if (!salesCols.length) return null;
-  const envCol = String(process.env.SALES_FILTER_DATE_COLUMN || "").trim();
-  if (envCol) {
-    const hit = salesCols.find((c) => c.toLowerCase() === envCol.toLowerCase());
-    if (hit) return hit;
-  }
-  return pickFirstExisting(salesCols, ["InvoiceDt", "SaleDate", "BillDate", "TxnDate", "InvoiceDate"]);
-}
-
-/**
- * Builds NOT EXISTS predicate date filter for dbo.VwAISalesData alias s (parameterized dates in SQL literals).
- */
-function buildZeroSalesDateWindowSql(question, userDateRange) {
-  const dateCol = pickSalesDateColumnFromJson();
-  if (!dateCol) return null;
-  const qc = `s.${quoteIdent(dateCol)}`;
-
-  const ur = userDateRange || {};
-  const fromN = ur.from != null ? normalizeApiDate(String(ur.from)) : "";
-  const toN = ur.to != null ? normalizeApiDate(String(ur.to)) : "";
-
-  if (fromN && toN && /^\d{4}-\d{2}-\d{2}$/.test(fromN) && /^\d{4}-\d{2}-\d{2}$/.test(toN)) {
-    return `CAST(${qc} AS date) BETWEEN CAST('${fromN}' AS date) AND CAST('${toN}' AS date)`;
-  }
-
-  const q = String(question || "").toLowerCase();
-  const m = q.match(/\blast\s*(\d+)\s*days?\b/);
-  const n = m ? Math.min(Math.max(parseInt(m[1], 10), 1), 366) : 7;
-  return (
-    `CAST(${qc} AS date) >= DATEADD(day, -${n}, CAST(GETDATE() AS date)) ` +
-    `AND CAST(${qc} AS date) <= CAST(GETDATE() AS date)`
-  );
-}
-
-/**
- * Override LLM SQL for "branches with zero/no sales in period" — one row per branch, anti-join pattern.
- */
-function buildZeroSalesBranchesSqlFromJson(state) {
-  if (!isZeroSalesBranchesQuestion(state.question)) return null;
-
-  const branchCols = getViewColumns("dbo.VwAIBranch");
-  const salesCols = getViewColumns("dbo.VwAISalesData");
-  if (!branchCols.length || !salesCols.length) return null;
-  if (!branchCols.includes("BranchId") || !salesCols.includes("BranchId")) return null;
-
-  const dateWindow = buildZeroSalesDateWindowSql(state.question, state.userDateRange);
-  if (!dateWindow) return null;
-
-  const bKey = `LTRIM(RTRIM(CAST(b.${quoteIdent("BranchId")} AS NVARCHAR(50))))`;
-  const sKey = `LTRIM(RTRIM(CAST(s.${quoteIdent("BranchId")} AS NVARCHAR(50))))`;
-
-  const aliasExpr = branchCols.includes("BranchShortName")
-    ? `ISNULL(NULLIF(LTRIM(RTRIM(b.${quoteIdent("BranchShortName")})), ''), b.${quoteIdent("BranchName")})`
-    : `b.${quoteIdent("BranchName")}`;
-
-  return [
-    `SELECT`,
-    `  b.${quoteIdent("BranchId")} AS BranchId,`,
-    `  ${aliasExpr} AS BranchAlias`,
-    `FROM dbo.VwAIBranch b`,
-    `WHERE NOT EXISTS (`,
-    `  SELECT 1`,
-    `  FROM dbo.VwAISalesData s`,
-    `  WHERE ${sKey} = ${bKey}`,
-    `    AND (${dateWindow})`,
-    `)`,
-    `ORDER BY b.${quoteIdent("BranchId")}`,
-  ].join("\n");
-}
-
-function enforcedLangGraphSql(state) {
-  const top = buildTopProductsSqlFromSchema(state);
-  if (top) return top;
-  const zero = buildZeroSalesBranchesSqlFromJson(state);
-  if (zero) return zero;
-  return null;
-}
-
 /* ─────────────────────────────────────────────────────────────────────────────
    NODE 0 — retrieve_context  (RAG: examples + glossary + schema chunks)
    Runs after load_schema so topViews is known; results injected into generate_sql.
@@ -424,15 +257,15 @@ function makeRetrieveContext() {
 
     try {
       const [examples, glossary, schemaDocs] = await Promise.all([
-        ragStore.search(question, 3, { type: "example" }),
-        ragStore.search(question, 3, { type: "glossary" }),
-        ragStore.search(question, 2, { type: "schema"   }),
+        ragStore.search(question, 5, { type: "example" }),   // more examples → better few-shot
+        ragStore.search(question, 4, { type: "glossary" }),
+        ragStore.search(question, 3, { type: "schema"   }),
       ]);
 
-      const MIN_SCORE = 0.70; // only surface genuinely similar results
+      const MIN_SCORE = 0.65; // slightly lower threshold to surface more useful context
       const relExamples = examples.filter(r => r.score >= MIN_SCORE);
-      const relGlossary = glossary.filter(r => r.score >= 0.65);
-      const relSchema   = schemaDocs.filter(r => r.score >= 0.72);
+      const relGlossary = glossary.filter(r => r.score >= 0.60);
+      const relSchema   = schemaDocs.filter(r => r.score >= 0.65);
 
       let ctx = "";
 
@@ -481,35 +314,183 @@ function makeRetrieveContext() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   NODE 1 — load_schema
-   Replaces the old discover_views + get_schema + sample_data trio.
-   Uses db_tables_views_columns.json (local file, instant) — no DB round-trip.
-   Picks the most relevant views for the question using keyword scoring, then
-   formats their exact column names for injection into the AI prompt.
+   NODE 0 — pre_flight_gate (fast path + feasibility + single-view schema slice)
    ───────────────────────────────────────────────────────────────────────────── */
-function makeLoadSchema() {
-  return function loadSchema(state) {
-    console.log("[langchain] node: load_schema (JSON-based, instant)");
+function makePreFlightGate() {
+  return async function preFlightGate(state) {
+    const t0 = Date.now();
+    console.log("[langchain] node: pre_flight_gate");
 
-    // Keyword-scored view selection from local JSON
-    const relevantViews = findRelevantViews(state.question, {
-      topN: 4,
+    const gate = runPreFlightGate(state.question, {
       tableHint: state.tableHint || undefined,
     });
 
-    console.log("[langchain] relevant views:", relevantViews);
+    const metaCheck = verifySchemaMetadata();
+    if (!metaCheck.ok) {
+      console.warn("[langchain] schema metadata:", metaCheck.message);
+    }
 
-    // Format exact column names from JSON — no DB call
-    const schemaText = formatSchemaFromJson(relevantViews);
+    console.log(
+      "[langchain] pre_flight:",
+      gate.nextStep,
+      gate.preFlightMs != null ? `${gate.preFlightMs}ms` : "",
+      gate.clarityScore != null ? `clarity=${gate.clarityScore.toFixed(2)}` : ""
+    );
+
+    if (gate.nextStep === "PROMPT_USER_FOR_CLARIFICATION") {
+      return {
+        nextStep: gate.nextStep,
+        clarificationMessage: gate.clarificationMessage,
+        clarificationOptions: gate.clarificationOptions || [],
+        suggestedOptions: gate.suggestedOptions || [],
+        uiType: gate.uiType || "SUGGESTION_CHIPS",
+        rankedViews: gate.rankedViews,
+        clarityScore: gate.clarityScore,
+        preFlightMs: gate.preFlightMs,
+        finalAnswer: gate.clarificationMessage,
+        confidence: "low",
+        confidenceNote: gate.clarificationReason || "pre_flight_clarification",
+        nodeLog: ["pre_flight_gate:clarification"],
+      };
+    }
+
+    if (gate.nextStep === "FAST_PATH") {
+      const view = gate.rankedViews?.[0]?.viewName || "dbo.VW_MB_POWERBI_APP_REPORT";
+      return {
+        nextStep: gate.nextStep,
+        question: gate.correctedQuestion || state.question,
+        originalQuestion: gate.originalQuestion || state.question,
+        adaptiveEnrichment: gate.adaptiveEnrichment || "",
+        fastPathSql: gate.fastPathSql,
+        checkedSQL: gate.fastPathSql,
+        generatedSQL: gate.fastPathSql,
+        targetView: view,
+        topViews: [view],
+        rankedViews: gate.rankedViews,
+        clarityScore: 1,
+        preFlightMs: gate.preFlightMs,
+        nodeLog: [`pre_flight_gate:fast_path:${gate.fastPathMatch}`],
+      };
+    }
+
+    const targetView = gate.targetView;
+    const schemaText =
+      formatSchemaWithSemantics([targetView]) || gate.schemaText;
+    const businessDictionary = buildBusinessDictionaryPrompt(
+      [targetView],
+      state.question
+    );
 
     return {
-      topViews:   relevantViews,
-      schema:     {},          // not used downstream but kept for state compat
+      nextStep: "CONTINUE",
+      question: gate.correctedQuestion || state.question,
+      originalQuestion: gate.originalQuestion || state.originalQuestion || state.question,
+      adaptiveEnrichment: gate.adaptiveEnrichment || state.adaptiveEnrichment || "",
+      targetView,
+      topViews: gate.topViews,
+      rankedViews: gate.rankedViews,
       schemaText,
+      businessDictionary,
+      clarityScore: gate.clarityScore,
+      preFlightMs: Date.now() - t0,
       sampleData: {},
       sampleText: "",
-      nodeLog:    ["load_schema"],
+      nodeLog: ["pre_flight_gate:continue"],
     };
+  };
+}
+
+function routeAfterPreFlight(state) {
+  if (state.nextStep === "PROMPT_USER_FOR_CLARIFICATION") return "generate_answer";
+  if (state.nextStep === "FAST_PATH") return "execute_sql";
+  return "retrieve_context";
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NODE 3b — resolve_intent  (plain-English → structured plan, no SQL yet)
+   ───────────────────────────────────────────────────────────────────────────── */
+function makeResolveIntent(llm) {
+  return async function resolveIntent(state) {
+    const off = /^(0|false|no)$/i.test(String(process.env.ADAPTIVE_INTENT_STEP || "1").trim());
+    if (off) {
+      return { queryIntent: null, nodeLog: ["resolve_intent:skipped"] };
+    }
+
+    console.log("[langchain] node: resolve_intent");
+    try {
+      const response = await llm.invoke([
+        new SystemMessage(buildIntentSystemPrompt(state.schemaText)),
+        new HumanMessage(buildIntentUserPrompt(state)),
+      ]);
+      const intent = parseIntentJson(response.content);
+      if (intent) {
+        console.log("[langchain] intent:", intent.metric_intent || JSON.stringify(intent).slice(0, 80));
+      }
+      return {
+        queryIntent: intent,
+        nodeLog: ["resolve_intent"],
+      };
+    } catch (e) {
+      console.warn("[langchain] resolve_intent failed:", e.message);
+      return { queryIntent: null, nodeLog: ["resolve_intent:error"] };
+    }
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NODE 3c — discover_column_values
+   Layer 2 (value sampling) + original live sample discovery run in parallel.
+   Injects real DB values into the SQL generation prompt so the LLM never
+   hallucinates branch names, categories, department names etc.
+   ───────────────────────────────────────────────────────────────────────────── */
+function makeDiscoverColumnValues(pool) {
+  return async function discoverColumnValuesNode(state) {
+    const off = /^(0|false|no)$/i.test(String(process.env.COGNITIVE_COLUMN_DISCOVERY || "1").trim());
+    if (off) {
+      return { columnDiscoveryText: "", liveColumnSamples: {}, nodeLog: ["discover_column_values:off"] };
+    }
+
+    console.log("[langchain] node: discover_column_values (Layer 2 — value sampling)");
+    const view =
+      state.targetView ||
+      (Array.isArray(state.topViews) && state.topViews[0]) ||
+      getCanonicalSalesContext().table;
+
+    try {
+      // Run original agentic sampler + Layer-2 semantic sampler in parallel
+      const [agenticResult, semanticResult] = await Promise.allSettled([
+        discoverLiveSamplesForQuestion(pool, state.question, view),
+        sampleValuesForQuestion(pool, state.question, view),
+      ]);
+
+      // Merge samples from both sources
+      const agenticSamples = agenticResult.status === "fulfilled" ? agenticResult.value?.samples || {} : {};
+      const agenticText    = agenticResult.status === "fulfilled" ? agenticResult.value?.text    || "" : "";
+      const semanticSamples = semanticResult.status === "fulfilled" ? semanticResult.value?.samples || {} : {};
+      const semanticText    = semanticResult.status === "fulfilled" ? semanticResult.value?.text    || "" : "";
+
+      const mergedSamples = { ...agenticSamples, ...semanticSamples };
+
+      // Build value-correction hints (e.g. "chenai" → "CHENNAI MAIN BRANCH")
+      const correctionBlock = buildValueCorrectionBlock(state.question, mergedSamples);
+
+      // Combine all discovery text — semantic text first (higher priority)
+      const combinedText = [semanticText, agenticText, correctionBlock]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const found = Object.keys(mergedSamples).length;
+      console.log("[langchain] column discovery:", found, "column(s) sampled (Layer 2 + agentic)");
+
+      return {
+        liveColumnSamples:    mergedSamples,
+        columnDiscoveryText:  combinedText,
+        nodeLog: [`discover_column_values:${found}`],
+      };
+    } catch (e) {
+      console.warn("[langchain] discover_column_values failed (non-fatal):", e.message);
+      return { columnDiscoveryText: "", liveColumnSamples: {}, nodeLog: ["discover_column_values:error"] };
+    }
   };
 }
 
@@ -520,9 +501,14 @@ function makeGenerateSQL(llm) {
   return async function generateSQL(state) {
     console.log("[langchain] node: generate_sql");
 
+    const observationBlock =
+      (state.systemObservations || []).length > 0
+        ? `\n\n${(state.systemObservations || []).join("\n\n")}`
+        : "";
+
     const retryGuidance =
       state.retryCount > 0 && state.retryErrors.length
-        ? `\n\n══ PREVIOUS ERRORS — do NOT repeat these mistakes ══\n${state.retryErrors.join("\n")}`
+        ? `\n\n══ PRIOR FAILURES — fix before retrying ══\n${state.retryErrors.join("\n")}`
         : "";
 
     const sampleSection = state.sampleText
@@ -535,19 +521,43 @@ function makeGenerateSQL(llm) {
       ? `\n\n[RAG MEMORY — highest-priority context, follow these patterns exactly]\n${state.ragContext}`
       : "";
 
-    const systemPrompt = `You are a Microsoft T-SQL expert for a retail fashion ERP (Meena Bazaar).
-Write ONE valid T-SQL SELECT statement that answers the user's question.
-Use ONLY column names that appear in the provided schema — never guess or invent columns.
-${ERP_SQL_RULES}
-${state.dateContext || ""}
-Output ONLY the SQL — no explanation, no markdown fences, no semicolons at end.`;
+    const dictSection = state.businessDictionary
+      ? `\n\n${state.businessDictionary}`
+      : "";
+
+    const intentSection = formatIntentForSqlPrompt(state.queryIntent);
+
+    const discoverySection = state.columnDiscoveryText
+      ? `\n\n${state.columnDiscoveryText}`
+      : "";
+
+    const adaptiveSection = state.adaptiveEnrichment
+      ? `\n\n${state.adaptiveEnrichment}`
+      : "";
+
+    // Layer 1 — Semantic Mapping injection: critical column rules at top of every prompt
+    const semanticMappingBlock = getSemanticMappingPrompt()
+      ? `\n\n[MANDATORY COLUMN RULES — Layer 1 Semantic Map]\n${getSemanticMappingPrompt()}`
+      : "";
+
+    const systemPrompt = buildSqlGenerationSystemPrompt(
+      state.queryIntent,
+      state.dateContext || "",
+      state.columnDiscoveryText || ""
+    );
 
     const userPrompt =
       `[SCHEMA — ONLY use columns listed here]\n${state.schemaText}` +
+      semanticMappingBlock +
+      adaptiveSection +
+      dictSection +
+      discoverySection +
+      (intentSection ? `\n\n${intentSection}` : "") +
       sampleSection +
       ragSection +
       dateRangeSection +
       `\n\n[QUESTION]\n${state.question}` +
+      observationBlock +
       retryGuidance;
 
     const response = await llm.invoke([
@@ -555,80 +565,154 @@ Output ONLY the SQL — no explanation, no markdown fences, no semicolons at end
       new HumanMessage(userPrompt),
     ]);
 
-    const sql = extractSQL(response.content);
-    const enforced = enforcedLangGraphSql(state);
-    const finalSql = enforced || sql;
-    if (enforced) {
-      console.log("[langchain] generated SQL overridden by deterministic guardrail");
-    }
-    console.log("[langchain] generated SQL:", finalSql.slice(0, 160));
-    return { generatedSQL: finalSql, nodeLog: ["generate_sql"] };
+    let sql = extractSQL(response.content);
+    sql = remapLegacyColumnNames(sql);
+    console.log("[langchain] generated SQL:", sql.slice(0, 160));
+    return { generatedSQL: sql, sqlValidationFailed: false, nodeLog: ["generate_sql"] };
   };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   NODE 5 — check_sql  (QuerySQLCheckerTool — 15-point review)
+   NODE 5 — check_sql  (structural validator + optional LLM review)
    ───────────────────────────────────────────────────────────────────────────── */
 function makeCheckSQL(llm) {
   return async function checkSQL(state) {
     console.log("[langchain] node: check_sql");
-    const enforced = enforcedLangGraphSql(state);
-    if (enforced) {
-      return { checkedSQL: enforced, nodeLog: ["check_sql"] };
+
+    const rawSql = remapLegacyColumnNames(state.generatedSQL || "");
+
+    /* ── Layer 3: Compliance Guard — check for illegal columns first ─────── */
+    const compliance = checkSqlCompliance(rawSql);
+    if (!compliance.valid) {
+      const attempt = (state.retryCount || 0) + 1;
+      console.warn("[langchain] check_sql COMPLIANCE FAIL:", compliance.rejectionReason);
+
+      // Try auto-repair first (may fix bracketed column references)
+      const repaired = autoRepairSql(rawSql);
+      if (repaired !== rawSql) {
+        const recheck = checkSqlCompliance(repaired);
+        if (recheck.valid) {
+          console.log("[langchain] check_sql: compliance auto-repaired successfully");
+          // Fall through with repaired SQL — skip retry
+          const salesCtxR = getCanonicalSalesContext();
+          const structR = validateSqlAccuracy(repaired, state.question, {
+            domain: "sales",
+            amountCol: salesCtxR.amountCol,
+          });
+          if (structR.isValid) {
+            return { checkedSQL: repaired, sqlValidationFailed: false, nodeLog: ["check_sql:compliance_auto_repaired"] };
+          }
+        }
+      }
+
+      // Auto-repair didn't work — trigger LangGraph self-healing retry
+      const observation = formatComplianceObservation(compliance, rawSql);
+
+      if (attempt > 3) {
+        return {
+          checkedSQL: rawSql,
+          sqlValidationFailed: true,
+          nodeLog: ["check_sql:compliance_gave_up"],
+        };
+      }
+
+      return {
+        generatedSQL: rawSql,
+        checkedSQL:   rawSql,
+        sqlValidationFailed: true,
+        retryCount:   attempt,
+        executionResult: {
+          error:           compliance.rejectionReason,
+          failed_sql:      rawSql,
+          validation_only: true,
+        },
+        systemObservations: [observation],
+        nodeLog: ["check_sql:compliance_fail"],
+      };
     }
 
-    // Extract the user-requested TOP N from original question so checker doesn't override it
+    /* ── Structural validator (existing) ─────────────────────────────────── */
+    const salesCtx = getCanonicalSalesContext();
+    const structural = validateSqlAccuracy(rawSql, state.question, {
+      domain: "sales",
+      amountCol: salesCtx.amountCol,
+    });
+
+    if (!structural.isValid) {
+      const attempt = (state.retryCount || 0) + 1;
+      console.warn("[langchain] check_sql structural fail:", structural.reason);
+      const observation =
+        `[System Observation] Your generated SQL failed validation rules: ${structural.reason} ` +
+        "Correct column selection and regenerate.";
+
+      if (attempt > 3) {
+        return {
+          checkedSQL: rawSql,
+          sqlValidationFailed: true,
+          nodeLog: ["check_sql:structural_gave_up"],
+        };
+      }
+
+      return {
+        generatedSQL: rawSql,
+        checkedSQL: rawSql,
+        sqlValidationFailed: true,
+        retryCount: attempt,
+        executionResult: {
+          error: structural.reason,
+          failed_sql: rawSql,
+          validation_only: true,
+        },
+        systemObservations: [observation],
+        nodeLog: ["check_sql:structural_fail"],
+      };
+    }
+
+    const llmCheckOff = /^(0|false|no)$/i.test(String(process.env.LANGGRAPH_LLM_SQL_CHECK || "0").trim());
+    if (llmCheckOff) {
+      return { checkedSQL: rawSql, sqlValidationFailed: false, nodeLog: ["check_sql:structural_ok"] };
+    }
+
     const topNMatch = state.question.match(/\btop\s+(\d+)\b/i);
     const userRequestedTopN = topNMatch ? parseInt(topNMatch[1]) : null;
 
-    const systemPrompt = `You are a T-SQL code reviewer for Microsoft SQL Server.
-Your job is to FIX BUGS without changing the intent or scope of the query.
+    const systemPrompt = `You are a T-SQL reviewer for Microsoft SQL Server.
+Fix definite bugs only — preserve intent. Enforce metadata mappings and aggregation rules.
 
-══ ABSOLUTE DO-NOT-CHANGE RULES (never override these) ══
-1. NEVER change FROM table name or JOIN table name — even if it's not in the schema list.
-   The schema list only shows discovered views; join/lookup tables may be valid but not listed.
-   If "VwMstItems", "VwAIBranch", "VwAICustomerDetails" appear in JOINs — leave them exactly as is.
-2. NEVER increase TOP N if the user asked for a specific number.
-   ${userRequestedTopN ? `The user asked for TOP ${userRequestedTopN} — keep TOP ${userRequestedTopN}, do NOT change to any other number.` : 'Only add TOP if there is no TOP at all and no GROUP BY aggregation.'}
-3. NEVER rename a column alias unless it contains spaces or is an SQL reserved word.
-4. NEVER change a column to a different column name unless it truly does not exist in ANY table in the schema — check ALL tables before flagging a column as missing.
-5. NEVER remove or change a JOIN that already has a valid ON clause.
+${buildAggregationMandateBlock()}
 
-══ ONLY fix these actual errors ══
-  A. Column name that definitely does not exist in ANY schema table → find the correct column
-  B. Wrong branch identifier: BranchId on PowerBI views, or BranchAlias on VwAI* views
-  C. Wrong revenue: SaleAmountBeforeTax or GrossValue used as final revenue → use SaleNetAmount/NetAmount
-  D. Integer date subtraction: GETDATE()-7 → DATEADD(day,-7,CAST(GETDATE() AS DATE))
-  E. YEAR(BirthdayDt) filter → remove YEAR, keep only MONTH
-  F. Missing GROUP BY for a non-aggregate SELECT column (only if clearly missing)
-  G. Missing aggregate alias (SUM/COUNT without AS)
-  H. SELECT * → replace with explicit columns only if a specific error would result
-  I. Trailing semicolon → remove
-  J. SQL comments → remove
+Do-not-change: FROM/JOIN targets, user-requested TOP N${
+      userRequestedTopN ? ` (${userRequestedTopN})` : ""
+    }, valid JOIN ON clauses.
 
-IMPORTANT APPROACH:
-- When in doubt, LEAVE IT UNCHANGED.
-- A query that runs correctly is better than a "fixed" query that is wrong.
-- Return the SQL UNCHANGED if you cannot identify a definite error.
-
-${ERP_SQL_RULES}
+Fix when certain: invalid columns (use SCHEMA + business mappings), missing GROUP BY,
+GETDATE()-N date math, missing TOP on non-aggregated scans, trailing semicolons, SQL comments.
 
 Output ONLY the SQL — no explanation, no markdown fences.`;
 
     const userPrompt =
       `[SCHEMA — ONLY these columns exist]\n${state.schemaText}\n\n` +
       (state.sampleText ? `[SAMPLE DATA]\n${state.sampleText}\n\n` : "") +
-      `[SQL TO REVIEW]\n${state.generatedSQL}`;
+      `[SQL TO REVIEW]\n${rawSql}`;
 
     const response = await llm.invoke([
       new SystemMessage(systemPrompt),
       new HumanMessage(userPrompt),
     ]);
 
-    const checkedSQL = extractSQL(response.content) || state.generatedSQL;
-    const changed = checkedSQL !== state.generatedSQL;
+    let checkedSQL = remapLegacyColumnNames(extractSQL(response.content) || rawSql);
+    const structural2 = validateSqlAccuracy(checkedSQL, state.question, {
+      domain: "sales",
+      amountCol: salesCtx.amountCol,
+    });
+    if (!structural2.isValid) {
+      console.warn("[langchain] check_sql LLM output failed structural:", structural2.reason);
+      checkedSQL = rawSql;
+    }
+
+    const changed = checkedSQL !== rawSql;
     console.log("[langchain] check_sql changed:", changed, "→", checkedSQL.slice(0, 160));
-    return { checkedSQL, nodeLog: ["check_sql"] };
+    return { checkedSQL, sqlValidationFailed: false, nodeLog: ["check_sql"] };
   };
 }
 
@@ -639,16 +723,30 @@ function makeExecuteSQL(pool) {
   return async function executeSQL(state) {
     console.log("[langchain] node: execute_sql");
     const sql = state.checkedSQL || state.generatedSQL;
+
+    if (detectExportIntent(state.question)) {
+      console.log("[langchain] execute_sql skipped — raw export will run async");
+      return {
+        executionResult: { error: null, export_only: true, row_count: 0, data: [] },
+        finalSQL: sql,
+        finalData: [],
+        nodeLog: ["execute_sql:export_deferred"],
+      };
+    }
+
     const result = await dispatchAgenticTool(pool, "run_select", { sql }, state.question, "");
     console.log(
       "[langchain] execute_sql:",
       result.error ? `ERROR: ${result.error}` : `${result.row_count ?? (result.data?.length ?? 0)} rows`
     );
+
+    const observation = result.system_observation || null;
     return {
       executionResult: result,
-      finalSQL:  result.error ? null : sql,
+      finalSQL: result.error ? null : sql,
       finalData: result.error ? [] : (result.data || []),
-      nodeLog:   ["execute_sql"],
+      systemObservations: observation ? [observation] : [],
+      nodeLog: ["execute_sql"],
     };
   };
 }
@@ -658,36 +756,97 @@ function makeExecuteSQL(pool) {
    ───────────────────────────────────────────────────────────────────────────── */
 function makeErrorRecovery(llm) {
   return async function errorRecovery(state) {
-    const errMsg   = state.executionResult?.error || "unknown error";
+    const errMsg    = state.executionResult?.error || "unknown error";
     const failedSQL = state.executionResult?.failed_sql || state.checkedSQL || state.generatedSQL;
-    const attempt  = (state.retryCount || 0) + 1;
-    console.log("[langchain] node: error_recovery attempt", attempt, "error:", errMsg);
+    const attempt   = (state.retryCount || 0) + 1;
+    console.log("[langchain] node: error_recovery attempt", attempt, "— error:", errMsg);
 
-    const systemPrompt = `You are a T-SQL debugger for Microsoft SQL Server.
-A query failed with the error shown. Fix the SQL so it executes without error.
-Study the error carefully — it usually tells you exactly which column or syntax is wrong.
-${ERP_SQL_RULES}
-Output ONLY the corrected SQL — no explanation, no markdown, no semicolons.`;
+    // ── Build rich observation with column-specific replacement hints ──────
+    const observation = formatSystemObservation(
+      { message: errMsg, failed_sql: failedSQL },
+      failedSQL,
+      attempt
+    );
+
+    // ── Extract invalid column from Error 207 for targeted replacement ────
+    const invalidColMatch = errMsg.match(/Invalid column name ['"]?(\w+)['"]?/i);
+    let columnDirective = "";
+    if (invalidColMatch) {
+      const badCol = invalidColMatch[1];
+      const knownFix = {
+        SaleNetAmount: "MrpValue", NetSlsNetAmount: "MrpValue", NetAmount: "MrpValue",
+        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty",
+        InvoiceNo: "XnNo", InvoiceDt: "XnDt",
+        BranchId: "BranchAlias", BranchName: "BranchAlias",
+        CustomerId: "XnNo",  // proxy — CustomerCode not on APP_REPORT
+      };
+      const fix = knownFix[badCol] || knownFix[badCol.replace(/^_/, "")] || null;
+      if (fix) {
+        columnDirective = `\n\n[CRITICAL FIX REQUIRED — SQL Error 207]\n` +
+          `The column '${badCol}' does NOT exist in dbo.VW_MB_POWERBI_APP_REPORT.\n` +
+          `You MUST replace every occurrence of '${badCol}' with '${fix}'.\n` +
+          `This is a hard requirement — any SQL containing '${badCol}' will fail again.`;
+      }
+    }
+
+    const systemPrompt =
+      `${buildSqlGenerationSystemPrompt(
+        state.queryIntent,
+        state.dateContext || "",
+        state.columnDiscoveryText || ""
+      )}\n\n` +
+      `SELF-HEALING ATTEMPT ${attempt}/3: The database rejected the previous SQL.\n` +
+      `Study the [System Observation] and ALL column directives below.\n` +
+      `Output ONLY the corrected SQL — no explanation, no markdown fences, no semicolons.`;
+
+    const semanticRetryBlock = getSemanticMappingPrompt()
+      ? `[MANDATORY COLUMN RULES — retry]\n${getSemanticMappingPrompt()}\n\n`
+      : "";
 
     const userPrompt =
-      `[SCHEMA — use ONLY these columns]\n${state.schemaText}\n\n` +
-      `[FAILED SQL]\n${failedSQL}\n\n` +
-      `[DB ERROR]\n${errMsg}\n\n` +
-      `[ALL PREVIOUS ERRORS]\n${[...state.retryErrors, errMsg].join("\n")}\n\n` +
-      `Fix the SQL. If the error is "Invalid column name X", find the correct column in the schema above.`;
+      `[SCHEMA]\n${state.schemaText}\n\n` +
+      semanticRetryBlock +
+      `${state.businessDictionary || ""}\n\n` +
+      (state.columnDiscoveryText ? `[VALUE SAMPLES]\n${state.columnDiscoveryText}\n\n` : "") +
+      observation +
+      columnDirective +
+      `\n\n[ALL PRIOR ERRORS — do not repeat these mistakes]\n` +
+      [...(state.retryErrors || []), `Attempt ${attempt}: ${errMsg}`].join("\n");
 
     const response = await llm.invoke([
       new SystemMessage(systemPrompt),
       new HumanMessage(userPrompt),
     ]);
 
-    const fixedSQL = extractSQL(response.content) || failedSQL;
+    // Apply compliance auto-repair AND legacy column remap after LLM fix
+    let fixedSQL = extractSQL(response.content) || failedSQL;
+    fixedSQL = remapLegacyColumnNames(fixedSQL);
+
+    // If the LLM still has the bad column, do a hard string replacement
+    if (invalidColMatch) {
+      const badCol = invalidColMatch[1];
+      const knownFix = {
+        SaleNetAmount: "MrpValue", NetSlsNetAmount: "MrpValue", NetAmount: "MrpValue",
+        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty",
+        InvoiceNo: "XnNo", InvoiceDt: "XnDt",
+        BranchId: "BranchAlias", BranchName: "BranchAlias",
+      };
+      const fix = knownFix[badCol] || null;
+      if (fix && fixedSQL.includes(badCol)) {
+        fixedSQL = fixedSQL.replace(new RegExp(`\\b${badCol}\\b`, "g"), fix);
+        console.log(`[error_recovery] hard-replaced '${badCol}' → '${fix}' in SQL`);
+      }
+    }
+
     return {
-      checkedSQL:  fixedSQL,
-      generatedSQL: fixedSQL,
-      retryCount:  attempt,
-      retryErrors: [`Attempt ${attempt}: ${errMsg}`],
-      nodeLog:     ["error_recovery"],
+      checkedSQL:         fixedSQL,
+      generatedSQL:       fixedSQL,
+      sqlValidationFailed: false,
+      executionResult:    {},
+      retryCount:         attempt,
+      retryErrors:        [`Attempt ${attempt}: ${errMsg}`],
+      systemObservations: [observation],
+      nodeLog:            [`error_recovery:attempt_${attempt}`],
     };
   };
 }
@@ -750,10 +909,9 @@ Rules:
 function makeZeroRowsRecovery(llm) {
   return async function zeroRowsRecovery(state) {
     console.log("[langchain] node: zero_rows_recovery");
-    const systemPrompt = `You are a T-SQL expert. A query returned 0 rows.
-Common causes: date range too narrow, filter value mis-spelled, wrong table used.
-Fix the query so it returns data.
-${ERP_SQL_RULES}
+    const systemPrompt = `${buildSqlGenerationSystemPrompt(state.queryIntent, state.dateContext || "")}
+
+A query returned 0 rows — widen date filters or relax string filters using SCHEMA columns only.
 Output ONLY the corrected SQL — no explanation, no markdown, no semicolons.`;
 
     const userPrompt =
@@ -839,14 +997,23 @@ Respond ONLY with the (possibly corrected) answer text — no JSON, no labels.`;
 /* ─────────────────────────────────────────────────────────────────────────────
    ROUTING HELPERS
    ───────────────────────────────────────────────────────────────────────────── */
+function routeAfterCheckSql(state) {
+  if (state.sqlValidationFailed) {
+    if ((state.retryCount || 0) <= 3 && state.executionResult?.error) {
+      return "error_recovery";
+    }
+    return "generate_answer";
+  }
+  return "execute_sql";
+}
+
 function routeAfterExecute(state) {
   const err  = state.executionResult?.error;
   const rows = Array.isArray(state.finalData) ? state.finalData.length : 0;
 
   if (err) {
-    // SQL error — retry up to 3 times
     if ((state.retryCount || 0) < 3) return "error_recovery";
-    return "generate_answer"; // give up, answer with error message
+    return "generate_answer";
   }
   if (rows === 0 && !state.zeroRowsRetried) {
     // Ran OK but no rows — try once to widen/relax
@@ -866,10 +1033,11 @@ function routeAfterZeroRows(state) {
 function buildGraph(pool, llmSQL, llmAnswer) {
   const graph = new StateGraph(AgentState);
 
-  // Register nodes — load_schema replaces discover_views + get_schema + sample_data
-  graph.addNode("load_schema",        makeLoadSchema());
+  graph.addNode("pre_flight_gate",    makePreFlightGate());
   graph.addNode("retrieve_context",   makeRetrieveContext());
-  graph.addNode("generate_sql",       makeGenerateSQL(llmSQL));
+  graph.addNode("resolve_intent",          makeResolveIntent(llmSQL));
+  graph.addNode("discover_column_values",  makeDiscoverColumnValues(pool));
+  graph.addNode("generate_sql",            makeGenerateSQL(llmSQL));
   graph.addNode("check_sql",          makeCheckSQL(llmSQL));
   graph.addNode("execute_sql",        makeExecuteSQL(pool));
   graph.addNode("error_recovery",     makeErrorRecovery(llmSQL));
@@ -877,12 +1045,21 @@ function buildGraph(pool, llmSQL, llmAnswer) {
   graph.addNode("generate_answer",    makeGenerateAnswer(llmAnswer));
   graph.addNode("verify_answer",      makeVerifyAnswer(llmAnswer));
 
-  // Linear entry pipeline — RAG retrieval between schema load and SQL gen
-  graph.addEdge(START,                "load_schema");
-  graph.addEdge("load_schema",        "retrieve_context");
-  graph.addEdge("retrieve_context",   "generate_sql");
-  graph.addEdge("generate_sql",  "check_sql");
-  graph.addEdge("check_sql",     "execute_sql");
+  graph.addEdge(START, "pre_flight_gate");
+  graph.addConditionalEdges("pre_flight_gate", routeAfterPreFlight, {
+    generate_answer: "generate_answer",
+    execute_sql: "execute_sql",
+    retrieve_context: "retrieve_context",
+  });
+  graph.addEdge("retrieve_context", "resolve_intent");
+  graph.addEdge("resolve_intent", "discover_column_values");
+  graph.addEdge("discover_column_values", "generate_sql");
+  graph.addEdge("generate_sql", "check_sql");
+  graph.addConditionalEdges("check_sql", routeAfterCheckSql, {
+    error_recovery: "error_recovery",
+    execute_sql: "execute_sql",
+    generate_answer: "generate_answer",
+  });
 
   // Conditional routing after execute
   graph.addConditionalEdges("execute_sql", routeAfterExecute, {
@@ -891,8 +1068,8 @@ function buildGraph(pool, llmSQL, llmAnswer) {
     generate_answer:   "generate_answer",
   });
 
-  // Error recovery loops back to execute
-  graph.addEdge("error_recovery",     "execute_sql");
+  // Error recovery re-validates SQL before execute
+  graph.addEdge("error_recovery", "check_sql");
 
   // Zero-rows recovery loops back to execute (SQL was already rewritten)
   graph.addConditionalEdges("zero_rows_recovery", routeAfterZeroRows, {
@@ -923,41 +1100,78 @@ function buildGraph(pool, llmSQL, llmAnswer) {
  *  • verify_answer cross-checks numbers against raw data
  *
  * @param {object} opts
- * @param {string} opts.apiKey        OpenAI API key
- * @param {string} [opts.model]       OpenAI model id (default: env OPENAI_MODEL)
- * @param {string} opts.question      Natural-language question
- * @param {object} opts.pool          mssql connection pool
- * @param {string} [opts.dateContext] Pre-built date context string (FY dates etc.)
+ * @param {string} [opts.apiKey]       OpenAI API key (used when provider=openai)
+ * @param {string} [opts.model]        Model id override (default: env OPENAI_MODEL / ANTHROPIC_MODEL)
+ * @param {string} [opts.provider]     "openai" (default) | "claude" — which AI provider to use
+ * @param {string} [opts.claudeApiKey] Anthropic API key (used when provider=claude)
+ * @param {string} opts.question       Natural-language question
+ * @param {object} opts.pool           mssql connection pool
+ * @param {string} [opts.dateContext]  Pre-built date context string (FY dates etc.)
  * @param {object} [opts.userDateRange] { from, to } explicit date range
- * @param {string} [opts.tableHint]   Force-prefer a specific view/table
- * @returns {{ data, sql, answer, confidence, confidenceNote, retryCount }}
+ * @param {string} [opts.tableHint]    Force-prefer a specific view/table
+ * @returns {{ data, sql, answer, confidence, confidenceNote, retryCount, provider }}
  */
 async function runLangChainQuery({
   apiKey,
   model,
+  provider,
+  claudeApiKey,
   question,
   pool,
   dateContext,
   userDateRange,
   tableHint,
 }) {
-  const modelName = String(model || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+  const useProvider = String(provider || "openai").toLowerCase().trim();
+  const isClaude    = useProvider === "claude" || useProvider === "anthropic";
 
-  // SQL LLM — temperature=0 for maximum determinism (no hallucinated columns)
-  const llmSQL = new ChatOpenAI({
-    openAIApiKey: apiKey,
-    model:        modelName,
-    temperature:  0,
-    maxTokens:    2048,
-  });
+  let llmSQL, llmAnswer;
 
-  // Answer LLM — slightly warmer for natural language summaries
-  const llmAnswer = new ChatOpenAI({
-    openAIApiKey: apiKey,
-    model:        modelName,
-    temperature:  0.2,
-    maxTokens:    1024,
-  });
+  if (isClaude) {
+    /* ── Claude / Anthropic provider ─────────────────────────────────────── */
+    const ChatAnthropic = getChatAnthropic();
+    if (!ChatAnthropic) {
+      throw new Error(
+        "@langchain/anthropic is not installed. Run: npm install @langchain/anthropic"
+      );
+    }
+    const claudeKey   = String(claudeApiKey || process.env.ANTHROPIC_API_KEY || "").trim();
+    const claudeModel = String(model || process.env.ANTHROPIC_MODEL || "claude-opus-4-5").trim();
+    if (!claudeKey) throw new Error("Anthropic API key not configured (ANTHROPIC_API_KEY)");
+
+    console.log("[langchain] provider: Claude —", claudeModel);
+
+    // Claude uses maxTokens differently — temperature is supported
+    llmSQL = new ChatAnthropic({
+      anthropicApiKey: claudeKey,
+      model:           claudeModel,
+      temperature:     0,
+      maxTokens:       2048,
+    });
+    llmAnswer = new ChatAnthropic({
+      anthropicApiKey: claudeKey,
+      model:           claudeModel,
+      temperature:     0.2,
+      maxTokens:       1024,
+    });
+  } else {
+    /* ── OpenAI provider (default) ───────────────────────────────────────── */
+    const modelName = String(model || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+    console.log("[langchain] provider: OpenAI —", modelName);
+
+    // SQL LLM — temperature=0 for maximum determinism (no hallucinated columns)
+    const { openAiChatOptions } = require("./services/llm-params");
+    llmSQL = new ChatOpenAI({
+      openAIApiKey: apiKey || process.env.OPENAI_API_KEY,
+      ...openAiChatOptions(modelName, { temperature: 0, maxTokens: 2048 }),
+    });
+
+    // Answer LLM — slightly warmer for natural language summaries
+    llmAnswer = new ChatOpenAI({
+      openAIApiKey: apiKey || process.env.OPENAI_API_KEY,
+      ...openAiChatOptions(modelName, { temperature: 0.2, maxTokens: 1024 }),
+    });
+  }
 
   const app = buildGraph(pool, llmSQL, llmAnswer);
 
@@ -984,14 +1198,31 @@ async function runLangChainQuery({
     "retries:", result.retryCount
   );
 
+  const clarificationNeeded =
+    result.nextStep === "PROMPT_USER_FOR_CLARIFICATION" ||
+    Boolean(result.clarificationMessage && !result.finalSQL && !(result.finalData || []).length);
+
   return {
-    data:           result.finalData  || [],
-    sql:            result.finalSQL   || null,
-    answer:         result.finalAnswer || "",
-    confidence:     result.confidence  || "medium",
+    data: result.finalData || [],
+    sql: result.finalSQL || result.fastPathSql || result.checkedSQL || null,
+    answer: result.finalAnswer || "",
+    confidence: result.confidence || "medium",
     confidenceNote: result.confidenceNote || "",
-    retryCount:     result.retryCount  || 0,
-    nodeLog:        result.nodeLog     || [],
+    retryCount: result.retryCount || 0,
+    nodeLog: result.nodeLog || [],
+    clarificationNeeded,
+    clarificationQuestion: result.clarificationMessage || null,
+    clarificationOptions: result.clarificationOptions || [],
+    suggestedOptions: result.suggestedOptions || [],
+    uiType: result.uiType || null,
+    status: clarificationNeeded ? "CLARIFICATION_REQUIRED" : "SUCCESS",
+    mode: result.nextStep === "FAST_PATH" ? "fast_path" : clarificationNeeded ? "clarification" : "langgraph",
+    fastPath: result.nextStep === "FAST_PATH",
+    targetView: result.targetView || null,
+    clarityScore: result.clarityScore ?? null,
+    preFlightMs: result.preFlightMs ?? null,
+    originalQuestion: result.originalQuestion || null,
+    adaptiveEnrichment: result.adaptiveEnrichment || null,
   };
 }
 

@@ -104,8 +104,12 @@ const VIEW_BOOST = {
     base: 3,
   },
   "dbo.VW_MB_POWERBI_APP_REPORT": {
-    keywords: ["approval","app","apparel","sales","article"],
-    base: 2,
+    keywords: ["approval","app","consignment","mrpvalue","appqty","xndt","supplier","salesperson","staff","rep","category","branch","article","sale","sales","revenue","mtd","turnover"],
+    base: 5,
+  },
+  "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT": {
+    keywords: ["supplier","vendor","purchase","pur","category","department","branch","article"],
+    base: 5,
   },
   "dbo.VW_MB_POWERBI_APR_REPORT": {
     keywords: ["approval","apr","article","sales"],
@@ -131,21 +135,22 @@ const SLOW_VIEWS = new Set([
  * Returns integer score (higher = more relevant).
  */
 function scoreView(viewName, qWords) {
-  if (SLOW_VIEWS.has(viewName)) return -1; // exclude unless explicitly named
-
   const cfg = VIEW_BOOST[viewName];
-  if (!cfg) return 0;
+  if (!cfg) return SLOW_VIEWS.has(viewName) ? -1 : 0;
 
   let score = cfg.base;
   for (const kw of cfg.keywords) {
-    if (qWords.some(w => w.includes(kw) || kw.includes(w))) {
+    if (qWords.some((w) => w.includes(kw) || kw.includes(w))) {
       score += 2;
     }
   }
 
-  // Bonus: if view name itself is mentioned in the question
   const vShort = viewName.replace(/^dbo\./i, "").toLowerCase();
-  if (qWords.some(w => vShort.includes(w) && w.length > 4)) score += 5;
+  if (qWords.some((w) => vShort.includes(w) && w.length > 4)) score += 5;
+
+  if (SLOW_VIEWS.has(viewName)) {
+    return score >= 8 ? score : -1;
+  }
 
   return score;
 }

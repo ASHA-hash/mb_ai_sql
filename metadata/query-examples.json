@@ -1,0 +1,459 @@
+[
+  {
+    "id": "ex001",
+    "category": "sales_kpi",
+    "question": "What is the total net sales amount today?",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS TodaySales, SUM(NetSlsQty) AS TodayQty, SUM(BillCount) AS TodayBills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = CAST(GETDATE() AS date)",
+    "explanation": "Today's net sales from primary sales transactions view",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex002",
+    "category": "sales_kpi",
+    "question": "MTD sales total this month",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS MTDSales, SUM(NetSlsQty) AS MTDQty, COUNT(DISTINCT XnNo) AS MTDBills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE())",
+    "explanation": "Month-to-date net sales using year and month filters on XnDt",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex003",
+    "category": "sales_kpi",
+    "question": "Last 7 days sales",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS Last7dSales, SUM(NetSlsQty) AS Last7dQty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(day, -7, CAST(GETDATE() AS date)) AND CAST(XnDt AS date) < CAST(GETDATE() AS date)",
+    "explanation": "Last 7 days excluding today",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex004",
+    "category": "sales_kpi",
+    "question": "Last 30 days net sales",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS Last30dSales, SUM(BillCount) AS TotalBills, SUM(NetSlsQty) AS TotalQty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(day, -30, CAST(GETDATE() AS date))",
+    "explanation": "Last 30 days rolling sales",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex005",
+    "category": "sales_kpi",
+    "question": "YTD sales this financial year",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS YTDSales, SUM(NetSlsQty) AS YTDQty, SUM(BillCount) AS YTDBills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= CASE WHEN MONTH(GETDATE()) >= 4 THEN DATEFROMPARTS(YEAR(GETDATE()), 4, 1) ELSE DATEFROMPARTS(YEAR(GETDATE())-1, 4, 1) END AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+    "explanation": "Year-to-date from April 1 of current Indian financial year to today",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex006",
+    "category": "sales_kpi",
+    "question": "QTD sales this quarter",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS QTDSales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= CASE WHEN MONTH(GETDATE()) IN (4,5,6) THEN DATEFROMPARTS(YEAR(GETDATE()),4,1) WHEN MONTH(GETDATE()) IN (7,8,9) THEN DATEFROMPARTS(YEAR(GETDATE()),7,1) WHEN MONTH(GETDATE()) IN (10,11,12) THEN DATEFROMPARTS(YEAR(GETDATE()),10,1) ELSE DATEFROMPARTS(YEAR(GETDATE()),1,1) END AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+    "explanation": "Quarter-to-date using Indian FY quarters (Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar)",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex007",
+    "category": "sales_kpi",
+    "question": "Average bill value this month",
+    "sql": "SELECT SUM(NetSlsNetAmount) / NULLIF(SUM(BillCount), 0) AS AvgBillValue, SUM(NetSlsNetAmount) AS TotalSales, SUM(BillCount) AS TotalBills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE())",
+    "explanation": "Average bill value = total net sales / total bill count",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex008",
+    "category": "sales_kpi",
+    "question": "Sales this month vs same month last year",
+    "sql": "SELECT 'This Month' AS Period, SUM(NetSlsNetAmount) AS NetSales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) UNION ALL SELECT 'Last Year Same Month' AS Period, SUM(NetSlsNetAmount) AS NetSales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE())-1 AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE())",
+    "explanation": "Year-on-year comparison for current month using UNION ALL",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex009",
+    "category": "sales_kpi",
+    "question": "Total returns this month",
+    "sql": "SELECT SUM(SlrNetAmount) AS TotalReturns, SUM(SlrQty) AS ReturnQty, SUM(SlrNetAmount) / NULLIF(SUM(SlsNetAmount), 0) * 100 AS ReturnPct FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE())",
+    "explanation": "Sales returns using SlrNetAmount (return amount) and SlrQty (return quantity)",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex010",
+    "category": "sales_kpi",
+    "question": "Gross margin this month",
+    "sql": "SELECT SUM(NetSlsNetAmount) AS Revenue, SUM(NetSlsCostValue) AS COGS, SUM(NetSlsNetAmount) - SUM(NetSlsCostValue) AS GrossProfit, (SUM(NetSlsNetAmount) - SUM(NetSlsCostValue)) / NULLIF(SUM(NetSlsNetAmount), 0) * 100 AS GrossMarginPct FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE())",
+    "explanation": "Gross margin = (Revenue - Cost) / Revenue × 100",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "kpi_card"
+  },
+
+  {
+    "id": "ex011",
+    "category": "branch_analysis",
+    "question": "Top 10 branches by net sales this month",
+    "sql": "SELECT TOP 10 BranchAlias, SUM(NetSlsNetAmount) AS NetSales, SUM(BillCount) AS Bills, SUM(NetSlsQty) AS Qty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY BranchAlias ORDER BY NetSales DESC",
+    "explanation": "Top branches by net revenue this month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex012",
+    "category": "branch_analysis",
+    "question": "Sales by branch today",
+    "sql": "SELECT BranchAlias, SUM(NetSlsNetAmount) AS NetSales, SUM(BillCount) AS Bills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = CAST(GETDATE() AS date) GROUP BY BranchAlias ORDER BY NetSales DESC",
+    "explanation": "Today's branch-wise sales",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex013",
+    "category": "branch_analysis",
+    "question": "Bottom 5 performing branches last month",
+    "sql": "SELECT TOP 5 BranchAlias, SUM(NetSlsNetAmount) AS NetSales, SUM(BillCount) AS Bills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(DATEADD(month,-1,GETDATE())) AND MONTH(CAST(XnDt AS date)) = MONTH(DATEADD(month,-1,GETDATE())) GROUP BY BranchAlias ORDER BY NetSales ASC",
+    "explanation": "Lowest 5 branches last calendar month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex014",
+    "category": "branch_analysis",
+    "question": "Which branches had zero sales today",
+    "sql": "SELECT b.BranchName, b.ShortName FROM dbo.VW_MB_POWERBI_BRANCH_LIST b WITH (NOLOCK) WHERE b.ActiveStatus = 1 AND b.IsWarehouse = 0 AND NOT EXISTS (SELECT 1 FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT s WITH (NOLOCK) WHERE s.BranchAlias = b.ShortName AND CAST(s.XnDt AS date) = CAST(GETDATE() AS date))",
+    "explanation": "Active retail branches with no sales today using NOT EXISTS",
+    "views_used": ["dbo.VW_MB_POWERBI_BRANCH_LIST", "dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex015",
+    "category": "branch_analysis",
+    "question": "Branch-wise MTD sales compared to last month",
+    "sql": "SELECT BranchAlias, SUM(CASE WHEN YEAR(CAST(XnDt AS date))=YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date))=MONTH(GETDATE()) THEN NetSlsNetAmount ELSE 0 END) AS CurrentMTD, SUM(CASE WHEN YEAR(CAST(XnDt AS date))=YEAR(DATEADD(month,-1,GETDATE())) AND MONTH(CAST(XnDt AS date))=MONTH(DATEADD(month,-1,GETDATE())) THEN NetSlsNetAmount ELSE 0 END) AS PrevMonth FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(month,-2,DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)) GROUP BY BranchAlias ORDER BY CurrentMTD DESC",
+    "explanation": "Side-by-side MTD vs previous month using conditional aggregation",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex016",
+    "category": "branch_analysis",
+    "question": "List all active branches",
+    "sql": "SELECT BranchId, BranchName, ShortName, City, State FROM dbo.VW_MB_POWERBI_BRANCH_LIST WITH (NOLOCK) WHERE ActiveStatus = 1 ORDER BY BranchName",
+    "explanation": "All active non-warehouse branches",
+    "views_used": ["dbo.VW_MB_POWERBI_BRANCH_LIST"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex017",
+    "category": "branch_analysis",
+    "question": "Average daily sales per branch this month",
+    "sql": "SELECT BranchAlias, SUM(NetSlsNetAmount) AS TotalSales, COUNT(DISTINCT CAST(XnDt AS date)) AS SalesDays, SUM(NetSlsNetAmount)/NULLIF(COUNT(DISTINCT CAST(XnDt AS date)),0) AS AvgDailySales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY BranchAlias ORDER BY AvgDailySales DESC",
+    "explanation": "Average daily sales per branch this month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+
+  {
+    "id": "ex021",
+    "category": "product_analysis",
+    "question": "Top 10 selling articles by net sales this month",
+    "sql": "SELECT TOP 10 ArticleNo, SUM(NetSlsNetAmount) AS NetSales, SUM(NetSlsQty) AS Qty, CategoryShortName FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY ArticleNo, CategoryShortName ORDER BY NetSales DESC",
+    "explanation": "Top 10 articles by net revenue this month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex022",
+    "category": "product_analysis",
+    "question": "Sales by department this month",
+    "sql": "SELECT DepartmentShortName, SUM(NetSlsNetAmount) AS NetSales, SUM(NetSlsQty) AS Qty, SUM(BillCount) AS Bills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY DepartmentShortName ORDER BY NetSales DESC",
+    "explanation": "Department-wise sales breakdown",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "pie"
+  },
+  {
+    "id": "ex023",
+    "category": "product_analysis",
+    "question": "Sales by category this month",
+    "sql": "SELECT TOP 15 CategoryShortName, SUM(NetSlsNetAmount) AS NetSales, SUM(NetSlsQty) AS Qty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY CategoryShortName ORDER BY NetSales DESC",
+    "explanation": "Category-wise sales this month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex024",
+    "category": "product_analysis",
+    "question": "Top selling fabric types by quantity",
+    "sql": "SELECT TOP 10 Fabric, SUM(NetSlsQty) AS TotalQty, SUM(NetSlsNetAmount) AS NetSales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) AND Fabric IS NOT NULL AND Fabric <> '' GROUP BY Fabric ORDER BY TotalQty DESC",
+    "explanation": "Fabric-wise quantity sold",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex025",
+    "category": "product_analysis",
+    "question": "Top 10 products by sales in women's department",
+    "sql": "SELECT TOP 10 ArticleNo, SUM(NetSlsNetAmount) AS NetSales, SUM(NetSlsQty) AS Qty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE DepartmentShortName = 'WOMEN' AND YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY ArticleNo ORDER BY NetSales DESC",
+    "explanation": "Top articles in Women's department this month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex026",
+    "category": "product_analysis",
+    "question": "Color-wise sales breakdown",
+    "sql": "SELECT TOP 10 Color, SUM(NetSlsNetAmount) AS NetSales, SUM(NetSlsQty) AS Qty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) AND Color IS NOT NULL AND Color <> '' GROUP BY Color ORDER BY NetSales DESC",
+    "explanation": "Top colors by net sales",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "pie"
+  },
+  {
+    "id": "ex027",
+    "category": "product_analysis",
+    "question": "Products with highest return rate this month",
+    "sql": "SELECT TOP 10 ArticleNo, SUM(SlsNetAmount) AS GrossSales, SUM(SlrNetAmount) AS Returns, SUM(SlrNetAmount)/NULLIF(SUM(SlsNetAmount),0)*100 AS ReturnPct FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) AND SlsNetAmount > 0 GROUP BY ArticleNo HAVING SUM(SlsNetAmount) > 0 ORDER BY ReturnPct DESC",
+    "explanation": "Products with highest return percentage",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "bar"
+  },
+
+  {
+    "id": "ex031",
+    "category": "trend",
+    "question": "Daily sales trend for last 30 days",
+    "sql": "SELECT CAST(XnDt AS date) AS SaleDate, SUM(NetSlsNetAmount) AS NetSales, SUM(BillCount) AS Bills, SUM(NetSlsQty) AS Qty FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(day, -30, CAST(GETDATE() AS date)) GROUP BY CAST(XnDt AS date) ORDER BY SaleDate",
+    "explanation": "Daily sales trend for last 30 days",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "line"
+  },
+  {
+    "id": "ex032",
+    "category": "trend",
+    "question": "Monthly sales trend last 12 months",
+    "sql": "SELECT YEAR(CAST(XnDt AS date)) AS Yr, MONTH(CAST(XnDt AS date)) AS Mo, FORMAT(CAST(XnDt AS date), 'MMM yyyy') AS MonthLabel, SUM(NetSlsNetAmount) AS NetSales, SUM(BillCount) AS Bills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(month, -12, DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)) GROUP BY YEAR(CAST(XnDt AS date)), MONTH(CAST(XnDt AS date)), FORMAT(CAST(XnDt AS date), 'MMM yyyy') ORDER BY Yr, Mo",
+    "explanation": "Monthly sales trend for the past 12 months ordered chronologically",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "line"
+  },
+  {
+    "id": "ex033",
+    "category": "trend",
+    "question": "Weekly sales trend last 8 weeks",
+    "sql": "SELECT DATEPART(year, XnDt) AS Yr, DATEPART(week, XnDt) AS WeekNo, CAST(DATEADD(day, 2-DATEPART(weekday,MIN(XnDt)), CAST(MIN(XnDt) AS date)) AS date) AS WeekStart, SUM(NetSlsNetAmount) AS NetSales FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(week, -8, CAST(GETDATE() AS date)) GROUP BY DATEPART(year, XnDt), DATEPART(week, XnDt) ORDER BY Yr, WeekNo",
+    "explanation": "Weekly aggregated sales for last 8 weeks",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "line"
+  },
+  {
+    "id": "ex034",
+    "category": "trend",
+    "question": "This month daily sales vs same period last year",
+    "sql": "SELECT CAST(XnDt AS date) AS SaleDate, SUM(NetSlsNetAmount) AS NetSales, 'CY' AS YearLabel FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY CAST(XnDt AS date) UNION ALL SELECT CAST(XnDt AS date) AS SaleDate, SUM(NetSlsNetAmount) AS NetSales, 'PY' AS YearLabel FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE())-1 AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY CAST(XnDt AS date) ORDER BY SaleDate",
+    "explanation": "YoY comparison of daily sales for current month",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "line"
+  },
+  {
+    "id": "ex035",
+    "category": "trend",
+    "question": "Bill count trend last 30 days",
+    "sql": "SELECT CAST(XnDt AS date) AS SaleDate, SUM(BillCount) AS DailyBills FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEADD(day, -30, CAST(GETDATE() AS date)) GROUP BY CAST(XnDt AS date) ORDER BY SaleDate",
+    "explanation": "Daily footfall trend using BillCount",
+    "views_used": ["dbo.VW_MB_POWERBI_SLSXNS_REPORT"],
+    "chart_type": "line"
+  },
+
+  {
+    "id": "ex041",
+    "category": "purchase",
+    "question": "Top 10 suppliers by purchase quantity this month",
+    "sql": "SELECT TOP 10 SupplierName, SUM(PurQty) AS TotalPurQty, SUM(PurCost) AS TotalPurCost FROM dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST WITH (NOLOCK) WHERE YEAR(CAST(PurchaseDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(PurchaseDt AS date)) = MONTH(GETDATE()) GROUP BY SupplierName ORDER BY TotalPurQty DESC",
+    "explanation": "Top suppliers by purchase quantity this month",
+    "views_used": ["dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex042",
+    "category": "purchase",
+    "question": "Monthly purchase trend last 6 months",
+    "sql": "SELECT YEAR(CAST(PurchaseDt AS date)) AS Yr, MONTH(CAST(PurchaseDt AS date)) AS Mo, FORMAT(CAST(PurchaseDt AS date), 'MMM yyyy') AS MonthLabel, SUM(PurQty) AS PurchaseQty, SUM(PurCost) AS PurchaseCost FROM dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST WITH (NOLOCK) WHERE CAST(PurchaseDt AS date) >= DATEADD(month, -6, DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1)) GROUP BY YEAR(CAST(PurchaseDt AS date)), MONTH(CAST(PurchaseDt AS date)), FORMAT(CAST(PurchaseDt AS date), 'MMM yyyy') ORDER BY Yr, Mo",
+    "explanation": "Monthly purchase trend for last 6 months",
+    "views_used": ["dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST"],
+    "chart_type": "line"
+  },
+  {
+    "id": "ex043",
+    "category": "purchase",
+    "question": "Department-wise purchase this month",
+    "sql": "SELECT DepartmentShortName, SUM(PurQty) AS PurchaseQty, SUM(PurCost) AS PurchaseCost FROM dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST WITH (NOLOCK) WHERE YEAR(CAST(PurchaseDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(PurchaseDt AS date)) = MONTH(GETDATE()) GROUP BY DepartmentShortName ORDER BY PurchaseCost DESC",
+    "explanation": "Department-wise purchasing this month",
+    "views_used": ["dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex044",
+    "category": "purchase",
+    "question": "Purchase returns this month by supplier",
+    "sql": "SELECT TOP 10 SupplierName, SUM(PrtQty) AS ReturnQty FROM dbo.VW_MB_POWERBI_PRT_REPORT WITH (NOLOCK) WHERE YEAR(CAST(PurReturnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(PurReturnDt AS date)) = MONTH(GETDATE()) GROUP BY SupplierName ORDER BY ReturnQty DESC",
+    "explanation": "Supplier-wise purchase returns this month",
+    "views_used": ["dbo.VW_MB_POWERBI_PRT_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex045",
+    "category": "purchase",
+    "question": "Net purchase value by branch this month",
+    "sql": "SELECT BranchAlias, SUM(NetPurNetAmount) AS NetPurchase, SUM(NetPurQty) AS NetQty FROM dbo.VW_MB_POWERBI_PURXNS_REPORT WITH (NOLOCK) WHERE YEAR(CAST(XnDt AS date)) = YEAR(GETDATE()) AND MONTH(CAST(XnDt AS date)) = MONTH(GETDATE()) GROUP BY BranchAlias ORDER BY NetPurchase DESC",
+    "explanation": "Branch-wise net purchase amount after returns",
+    "views_used": ["dbo.VW_MB_POWERBI_PURXNS_REPORT"],
+    "chart_type": "bar"
+  },
+
+  {
+    "id": "ex051",
+    "category": "stock",
+    "question": "Current stock quantity by branch",
+    "sql": "SELECT BranchAlias, SUM(StockQty) AS TotalStock, COUNT(DISTINCT ArticleNo) AS UniqueArticles FROM dbo.VW_MB_POWERBI_STOCK_REPORT WITH (NOLOCK) GROUP BY BranchAlias ORDER BY TotalStock DESC",
+    "explanation": "Current stock levels by branch",
+    "views_used": ["dbo.VW_MB_POWERBI_STOCK_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex052",
+    "category": "stock",
+    "question": "Stock by category",
+    "sql": "SELECT CategoryShortName, SUM(StockQty) AS TotalStock, SUM(StockQty * ItemMRP) AS StockMRPValue FROM dbo.VW_MB_POWERBI_STOCK_REPORT WITH (NOLOCK) GROUP BY CategoryShortName ORDER BY TotalStock DESC",
+    "explanation": "Stock quantity and MRP value by category",
+    "views_used": ["dbo.VW_MB_POWERBI_STOCK_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex053",
+    "category": "stock",
+    "question": "Articles with zero stock",
+    "sql": "SELECT TOP 50 i.ArticleNo, i.Description, i.InvCategoryShortName, i.InvDepartmentShortName FROM dbo.VwMstItems i WITH (NOLOCK) WHERE NOT EXISTS (SELECT 1 FROM dbo.VwAIStockData s WITH (NOLOCK) WHERE s.ItemId = i.ItemId AND s.StockQty > 0)",
+    "explanation": "Articles that have zero stock across all branches",
+    "views_used": ["dbo.VwMstItems", "dbo.VwAIStockData"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex054",
+    "category": "stock",
+    "question": "Total stock value at MRP by department",
+    "sql": "SELECT DepartmentShortName, SUM(StockQty) AS TotalQty, SUM(StockQty * ItemMRP) AS StockValueAtMRP FROM dbo.VW_MB_POWERBI_STOCK_REPORT WITH (NOLOCK) GROUP BY DepartmentShortName ORDER BY StockValueAtMRP DESC",
+    "explanation": "Department-wise stock value at MRP",
+    "views_used": ["dbo.VW_MB_POWERBI_STOCK_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex055",
+    "category": "stock",
+    "question": "Stock ageing — articles purchased more than 90 days ago still in stock",
+    "sql": "SELECT TOP 50 ArticleNo, BranchAlias, CategoryShortName, SupplierName, SUM(StockQty) AS StockQty, MIN(PurInvoiceDt) AS OldestPurchase, DATEDIFF(day, MIN(PurInvoiceDt), GETDATE()) AS DaysInStock FROM dbo.VW_MB_POWERBI_STOCK_REPORT WITH (NOLOCK) WHERE StockQty > 0 AND CAST(PurInvoiceDt AS date) <= DATEADD(day, -90, CAST(GETDATE() AS date)) GROUP BY ArticleNo, BranchAlias, CategoryShortName, SupplierName ORDER BY DaysInStock DESC",
+    "explanation": "Slow-moving stock purchased 90+ days ago",
+    "views_used": ["dbo.VW_MB_POWERBI_STOCK_REPORT"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex056",
+    "category": "stock",
+    "question": "Goods in transit by branch",
+    "sql": "SELECT TargetBranchAlias AS DestBranch, SUM(GitQty) AS GITQty, SUM(GitCostValue) AS GITCostValue FROM dbo.VW_MB_POWERBI_CBS_WITH_GIT WITH (NOLOCK) WHERE GitQty > 0 GROUP BY TargetBranchAlias ORDER BY GITQty DESC",
+    "explanation": "Goods currently in transit to each branch",
+    "views_used": ["dbo.VW_MB_POWERBI_CBS_WITH_GIT"],
+    "chart_type": "bar"
+  },
+
+  {
+    "id": "ex061",
+    "category": "customer",
+    "question": "How many unique customers purchased this month",
+    "sql": "SELECT COUNT(DISTINCT CustomerId) AS UniqueCustomers FROM dbo.VwAICustomerDetails WITH (NOLOCK) WHERE YEAR(CAST(CreatedOn AS date)) <= YEAR(GETDATE()) AND ActiveStatus = 1",
+    "explanation": "Unique customer count — uses VwAICustomerDetails. Note: for transaction-based customer count use VwAISalesData if available.",
+    "views_used": ["dbo.VwAICustomerDetails"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex062",
+    "category": "customer",
+    "question": "Top 10 customers by sales value",
+    "sql": "SELECT TOP 10 c.CustomerFirstName + ' ' + c.CustomerLastName AS CustomerName, c.ContactMobile, SUM(s.MrpValue) AS TotalSales, COUNT(DISTINCT s.XnNo) AS TotalInvoices FROM dbo.VW_MB_POWERBI_APP_REPORT s WITH (NOLOCK) INNER JOIN dbo.VwAICustomerDetails c WITH (NOLOCK) ON s.CustomerId = c.CustomerId WHERE CAST(s.[XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(s.[XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY c.CustomerFirstName, c.CustomerLastName, c.ContactMobile ORDER BY TotalSales DESC",
+    "explanation": "Top customers by MrpValue this month — joins VW_MB_POWERBI_APP_REPORT with VwAICustomerDetails on CustomerId",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT", "dbo.VwAICustomerDetails"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex063",
+    "category": "customer",
+    "question": "Customers with birthday this month",
+    "sql": "SELECT CustomerFirstName + ' ' + CustomerLastName AS Name, ContactMobile, ContactEmail, BranchName, MONTH(BirthdayDt) AS BirthMonth, DAY(BirthdayDt) AS BirthDay FROM dbo.VwAICustomerDetails WITH (NOLOCK) WHERE MONTH(BirthdayDt) = MONTH(GETDATE()) AND ActiveStatus = 1 ORDER BY DAY(BirthdayDt)",
+    "explanation": "Customers with birthday this month. Filter by MONTH only — never by YEAR for birthdays.",
+    "views_used": ["dbo.VwAICustomerDetails"],
+    "chart_type": "table"
+  },
+  {
+    "id": "ex064",
+    "category": "customer",
+    "question": "New customers registered this month",
+    "sql": "SELECT COUNT(*) AS NewCustomers FROM dbo.VwAICustomerDetails WITH (NOLOCK) WHERE YEAR(CAST(CreatedOn AS date)) = YEAR(GETDATE()) AND MONTH(CAST(CreatedOn AS date)) = MONTH(GETDATE()) AND ActiveStatus = 1",
+    "explanation": "New customer registrations this month using CreatedOn date",
+    "views_used": ["dbo.VwAICustomerDetails"],
+    "chart_type": "kpi_card"
+  },
+  {
+    "id": "ex065",
+    "category": "customer",
+    "question": "Customer group-wise sales this month",
+    "sql": "SELECT c.CustomerGroupName, SUM(s.[MrpValue]) AS TotalSales, COUNT(DISTINCT s.CustomerId) AS Customers, COUNT(DISTINCT s.[XnNo]) AS Invoices FROM dbo.VW_MB_POWERBI_APP_REPORT s WITH (NOLOCK) INNER JOIN dbo.VwAICustomerDetails c WITH (NOLOCK) ON s.CustomerId = c.CustomerId WHERE CAST(s.[XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(s.[XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY c.CustomerGroupName ORDER BY TotalSales DESC",
+    "explanation": "Sales by loyalty tier / customer group — uses MrpValue on VW_MB_POWERBI_APP_REPORT joined with VwAICustomerDetails",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT", "dbo.VwAICustomerDetails"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex066",
+    "category": "customer",
+    "question": "Customers with anniversary this month",
+    "sql": "SELECT CustomerFirstName + ' ' + CustomerLastName AS Name, ContactMobile, BranchName, DAY(AnniversaryDt) AS AnnivDay FROM dbo.VwAICustomerDetails WITH (NOLOCK) WHERE MONTH(AnniversaryDt) = MONTH(GETDATE()) AND AnniversaryDt IS NOT NULL AND ActiveStatus = 1 ORDER BY DAY(AnniversaryDt)",
+    "explanation": "Customers with wedding anniversary this month",
+    "views_used": ["dbo.VwAICustomerDetails"],
+    "chart_type": "table"
+  },
+
+  {
+    "id": "ex071",
+    "category": "supplier",
+    "question": "Top 10 suppliers by gross revenue this month",
+    "sql": "SELECT TOP 10 [SupplierName] AS Supplier, SUM([MrpValue]) AS TotalSales, SUM([AppQty]) AS TotalQty, COUNT(DISTINCT [XnNo]) AS BillCount FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY [SupplierName] ORDER BY TotalSales DESC",
+    "explanation": "Top suppliers/salespersons ranked by gross revenue this month using VW_MB_POWERBI_APP_REPORT",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex072",
+    "category": "supplier",
+    "question": "Supplier sell-through rate this month",
+    "sql": "SELECT TOP 20 a.[SupplierName] AS Supplier, SUM(a.[MrpValue]) AS SalesValue, SUM(p.[MrpValue]) AS PurchaseValue, SUM(a.[MrpValue]) / NULLIF(SUM(p.[MrpValue]), 0) * 100 AS SellThroughPct FROM dbo.VW_MB_POWERBI_APP_REPORT a WITH (NOLOCK) LEFT JOIN dbo.VW_MB_POWERBI_PUR_REPORT p WITH (NOLOCK) ON a.[SupplierName] = p.[SupplierName] AND CAST(p.[XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) WHERE CAST(a.[XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(a.[XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY a.[SupplierName] ORDER BY SellThroughPct DESC",
+    "explanation": "Supplier sell-through = MrpValue sales / MrpValue purchase",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT", "dbo.VW_MB_POWERBI_PUR_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex073",
+    "category": "supplier",
+    "question": "Salesperson performance this month",
+    "sql": "SELECT TOP 10 [SupplierName] AS Salesperson, SUM([MrpValue]) AS TotalSales, COUNT(DISTINCT [XnNo]) AS BillCount, SUM([AppQty]) AS TotalQty FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY [SupplierName] ORDER BY TotalSales DESC",
+    "explanation": "Top salespersons by gross revenue this month — SupplierName column is salesperson, no JOIN needed",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT"],
+    "chart_type": "bar"
+  },
+  {
+    "id": "ex074",
+    "category": "supplier",
+    "question": "Supplier-wise category mix this month",
+    "sql": "SELECT TOP 20 [SupplierName] AS Supplier, [CategoryShortName] AS Category, SUM([MrpValue]) AS TotalSales, SUM([AppQty]) AS TotalQty FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date) GROUP BY [SupplierName], [CategoryShortName] ORDER BY [SupplierName], TotalSales DESC",
+    "explanation": "Which categories each supplier sells in — uses VW_MB_POWERBI_APP_REPORT with MrpValue",
+    "views_used": ["dbo.VW_MB_POWERBI_APP_REPORT"],
+    "chart_type": "table"
+  }
+]

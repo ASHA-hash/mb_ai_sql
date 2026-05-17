@@ -14,17 +14,18 @@ module.exports.DATASET_REGISTRY = [
   // ── AI-Optimised core views ──────────────────────────────────────────────
   {
     key: "sales",
-    defaultTable: "dbo.VwAISalesData",
+    defaultTable: "dbo.VW_MB_POWERBI_APP_REPORT",
     envOverride: "SALES_VIEW",
-    label: "Sales transactions (VwAISalesData) — InvoiceDt, InvoiceId, InvoiceNo, BranchId, CustomerId, ItemId, SalesPrice, Quantity, SaleAmountBeforeTax, TaxAmount, SaleNetAmount, SalesPersonId",
-    filterPrefix: "SALES",
-    routingHint: "sales revenue invoice SaleNetAmount quantity footfall customer purchase history salesperson avg order value aov period comparison trend today yesterday",
+    label: "Sales / approval lines (APP_REPORT) — MrpValue revenue; use distinct XnNo for bills (not SUM BillCount)",
+    filterPrefix: "MB_POWERBI_APP_REPORT",
+    defaultDateColumn: "XnDt",
+    routingHint: "sales revenue turnover MrpValue AppQty XnDt branch department category approval trend mtd qtd ytd",
   },
   {
     key: "stock",
     defaultTable: "dbo.VwAIStockData",
     envOverride: "STOCK_VIEW",
-    label: "Stock on hand (VwAIStockData) — ItemId, BranchId, StockQty",
+    label: "Stock snapshot (VwAIStockData) — ItemId×BranchId qty; SUM on TOP N is not total inventory",
     filterPrefix: "STOCK",
     routingHint: "current stock on hand inventory quantity available branch item",
     skipDateParamsIfNoColumn: true,
@@ -34,7 +35,7 @@ module.exports.DATASET_REGISTRY = [
     key: "customers",
     defaultTable: "dbo.VwAICustomerDetails",
     envOverride: "CUSTOMER_VIEW",
-    label: "Customer master (VwAICustomerDetails) — CustomerId, CustomerFirstName, CustomerLastName, ContactMobile, ContactEmail, City, State, CustomerGroupName, BranchName, BirthdayDt, AnniversaryDt, CreditLimit, ActiveStatus",
+    label: "Customer master (VwAICustomerDetails) — contacts & limits per row; do not SUM CreditLimit on TOP slice",
     filterPrefix: "CUSTOMERS",
     routingHint: "customer buyer client name mobile email city birthday anniversary credit limit top customers loyal",
     skipDateParamsIfNoColumn: true,
@@ -44,7 +45,7 @@ module.exports.DATASET_REGISTRY = [
     key: "branches",
     defaultTable: "dbo.VwAIBranch",
     envOverride: "BRANCH_VIEW",
-    label: "Branch master (VwAIBranch) — BranchId, BranchName, BranchShortName, Address, Locality, PinCode, City, State, Country",
+    label: "Branch master (VwAIBranch) — store list (~116 rows); use sales/APP_REPORT for revenue by BranchAlias",
     filterPrefix: "BRANCHES",
     routingHint: "branch store outlet location city state active warehouse BranchId BranchName zero sales",
     skipDateParamsIfNoColumn: true,
@@ -52,7 +53,9 @@ module.exports.DATASET_REGISTRY = [
   {
     key: "vw_ai_salesperson",
     defaultTable: "dbo.VwAISalesPerson",
-    label: "Salesperson master (VwAISalesPerson) — SalesPersonId, SalesPersonName, SalesPersonShortName",
+    /* Override with e.g. dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID if MstSalesPerson denies SELECT (see .env.example). */
+    envOverride: "VW_AI_SALESPERSON_VIEW",
+    label: "Salesperson master (VwAISalesPerson) — IDs & names only; use sales / mb_powerbi_sls_data_without_itemid for revenue",
     filterPrefix: "VW_AI_SALESPERSON",
     routingHint: "salesperson sales rep agent performance name who sold",
     skipDateParamsIfNoColumn: true,
@@ -68,7 +71,7 @@ module.exports.DATASET_REGISTRY = [
   {
     key: "vw_mst_items",
     defaultTable: "dbo.VwMstItems",
-    label: "Item master (VwMstItems) — ItemId, Itemcode, ArticleNo, Description, ArticleShortName, ItemMRP, ItemWSP, ItemEXP, PurchasePrice, InvDepartmentName, InvCategoryName, InvSubCategoryName, SupplierName, SupplierAlias, Para1Name(Color), Para2Name(Size), Para3Name(Fabric), Para4Name(Property/Fit), HSNCode, GstClassification",
+    label: "Item catalog (VwMstItems) — SKU master; ItemMRP/WSP per row only — use stock/sales for totals",
     filterPrefix: "VW_MST_ITEMS",
     routingHint: "product item article MRP cost price description department category color size fabric property HSN GST supplier item master",
     skipDateParamsIfNoColumn: true,
@@ -88,6 +91,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_SLS_REPORT",
     label: "PBI Sales Report (VW_MB_POWERBI_SLS_REPORT) — XnMemoDate, DepartmentShortName, CategoryShortName, BranchAlias, SupplierAlias, SupplierName, ArticleNo, Para1Name(Color), Para2Name(Size), Fabric, SubFabric, Concept, ItemMRP, Property, NetSlsQty, NetAmount, NetSlsCostValue, SlsExtCostValue",
     filterPrefix: "MB_POWERBI_SLS_REPORT",
+    defaultDateColumn: "XnMemoDate",
     routingHint: "sales revenue net amount by branch department category supplier article concept fabric date trend monthly daily NetAmount NetSlsQty cost value",
   },
   {
@@ -95,13 +99,24 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
     label: "PBI Sales Transactions (VW_MB_POWERBI_SLSXNS_REPORT) — BranchAlias, DepartmentShortName, CategoryShortName, SupplierName, SupplierAlias, ArticleNo, Color, Size, Fabric, Concept, ItemMRP, CostPrice, XnDt, XnDtMonth, SlsQty, SlsMrpValue, SlsCostValue, SlsNetAmount, SlrQty(returns), SlrNetAmount, NetSlsQty, NetSlsNetAmount, NetSlsCostValue, CGSTAmount, SGSTAmount, IGSTAmount, BillCount",
     filterPrefix: "MB_POWERBI_SLSXNS_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "sales transactions xns returns SlrQty gross sales net sales bill count GST CGST SGST IGST detailed line item",
+  },
+  {
+    key: "mb_powerbi_sls_data_without_itemid",
+    defaultTable: "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+    label: "PBI Sales lines + SalesPersonName (VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID) — use when VwAISalesPerson/MstSalesPerson denies SELECT. CashmemoDt, SalesPersonName, BranchAlias, CustomerName, DepartmentShortName, CategoryShortName, SalesNetAmount, SalesQuantity…",
+    filterPrefix: "MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+    defaultDateColumn: "CashmemoDt",
+    routingHint: "salesperson sales rep staff name customer transaction lines CashmemoDt SalesNetAmount",
+    skipDateParamsIfNoColumn: true,
   },
   {
     key: "mb_powerbi_sls_billcount",
     defaultTable: "dbo.VW_MB_POWERBI_SLS_BILLCOUNT",
     label: "PBI Bill Count (VW_MB_POWERBI_SLS_BILLCOUNT) — BranchId, CashmemoDt, BillCount",
     filterPrefix: "MB_POWERBI_SLS_BILLCOUNT",
+    defaultDateColumn: "CashmemoDt",
     routingHint: "bill count footfall invoices bills per day average bill value",
   },
   {
@@ -109,6 +124,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_SLS_ARTICLE_REPORT",
     label: "PBI Sales by Article (VW_MB_POWERBI_SLS_ARTICLE_REPORT) — CategoryShortName, ArticleNo, XnMemoDate, Fabric, SubFabric, ArticleMRP, Concept, NetSlsQty, NetAmount, NetSlsCostValue",
     filterPrefix: "MB_POWERBI_SLS_ARTICLE_REPORT",
+    defaultDateColumn: "XnMemoDate",
     routingHint: "sales by article fabric concept category date article level NetAmount NetSlsQty",
   },
   {
@@ -116,6 +132,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA",
     label: "PBI MIS Supplier Sales (VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA) — XnMemoDate_MONTH, SupplierName, SupplierAlias, DepartmentShortName, CategoryShortName, NetSlsQty, NetSlsCostValue, NetAmount, NetAmountBeforeTax, MrpValue",
     filterPrefix: "MB_POWERBI_MIS_SUPPLIER_SLS_DATA",
+    defaultDateColumn: "XnMemoDate",
     routingHint: "supplier sales MIS monthly supplier-wise performance sell-through MrpValue NetAmount",
   },
 
@@ -125,6 +142,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_PUR_REPORT",
     label: "PBI Purchase Report (VW_MB_POWERBI_PUR_REPORT) — PurchaseDt, PurInvoiceDt, PurInvoiceNo, DepartmentShortName, CategoryShortName, BranchAlias, SupplierAlias, SupplierName, ArticleNo, Para1Name(Color), Para2Name(Size), Fabric, SubFabric, Concept, ItemMRP, Property, PurQty",
     filterPrefix: "MB_POWERBI_PUR_REPORT",
+    defaultDateColumn: "PurchaseDt",
     routingHint: "purchase buying procurement inward quantity PurQty supplier branch department category article",
   },
   {
@@ -132,6 +150,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_PURXNS_REPORT",
     label: "PBI Purchase Transactions (VW_MB_POWERBI_PURXNS_REPORT) — BranchAlias, DepartmentShortName, CategoryShortName, SupplierName, SupplierAlias, ArticleNo, Color, Size, XnDt, PurInvDate, PurInvNo, CostPrice, ItemMRP, PurQty, PurCostValue, PurNetAmount, PurMrpValue, PurCGSTAmount, PurSGSTAmount, PurIGSTAmount, PrtQty(returns), PrtCostValue, PrtNetAmount, NetPurQty, NetPurCost, NetPurNetAmount",
     filterPrefix: "MB_POWERBI_PURXNS_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "purchase transactions xns returns PrtQty net purchase cost value GST CGST SGST IGST invoice challan detailed",
   },
   {
@@ -139,6 +158,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_PRT_REPORT",
     label: "PBI Purchase Returns (VW_MB_POWERBI_PRT_REPORT) — PurReturnDt, PurInvoiceDt, PurInvoiceNo, DepartmentShortName, CategoryShortName, BranchAlias, SupplierAlias, SupplierName, ArticleNo, ItemMRP, PrtQty",
     filterPrefix: "MB_POWERBI_PRT_REPORT",
+    defaultDateColumn: "PurReturnDt",
     routingHint: "purchase return PRT return to supplier return quantity PrtQty",
   },
   {
@@ -146,6 +166,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST",
     label: "PBI Purchase Qty with Cost (VW_MB_POWERBI_PUR_QTY_WITH_COST) — PurchaseDt, DepartmentShortName, BranchAlias, SupplierAlias, CategoryShortName, PurQty, PurCost",
     filterPrefix: "MB_POWERBI_PUR_QTY_WITH_COST",
+    defaultDateColumn: "PurchaseDt",
     routingHint: "purchase cost PurCost quantity PurQty department branch supplier",
   },
   {
@@ -153,6 +174,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
     label: "PBI Supplier Purchase Report (VW_MB_POWERBI_SUPPLIER_PUR_REPORT) — DepartmentShortName, CategoryShortName, ArticleNo, SupplierName, SupplierAlias, BranchAlias, PurDate, PurchasePrice, ItemMRP, ItemWSP, PurQty, Color, Size, Fabric, Concept, Silhoutte, Dupatta",
     filterPrefix: "MB_POWERBI_SUPPLIER_PUR_REPORT",
+    defaultDateColumn: "PurDate",
     routingHint: "supplier purchase articles bought from supplier PurQty PurchasePrice WSP MRP style attributes silhouette dupatta",
   },
 
@@ -178,6 +200,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_STI_REPORT",
     label: "PBI Stock Transfer In (VW_MB_POWERBI_STI_REPORT) — SourceBranchAlias, SourceBranchId, TargetBranchAlias, TargetBranchId, DepartmentShortName, CategoryShortName, SupplierName, ArticleNo, Color, Size, XnDt, StiQty, MrpValue, CostValue, NetAmount, CGSTAmount, SGSTAmount, IGSTAmount",
     filterPrefix: "MB_POWERBI_STI_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "stock transfer in STI received transfer StiQty source target branch",
   },
   {
@@ -185,6 +208,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_STO_REPORT",
     label: "PBI Stock Transfer Out (VW_MB_POWERBI_STO_REPORT) — SourceBranchAlias, SourceBranchId, TargetBranchAlias, TargetBranchId, DepartmentShortName, CategoryShortName, SupplierName, ArticleNo, Color, Size, XnDt, StoQty, MrpValue, CostValue, NetAmount, CGSTAmount, SGSTAmount, IGSTAmount",
     filterPrefix: "MB_POWERBI_STO_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "stock transfer out STO sent dispatch StoQty source target branch",
   },
 
@@ -194,6 +218,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_APP_REPORT",
     label: "PBI Approval Report (VW_MB_POWERBI_APP_REPORT) — BranchAlias, DepartmentShortName, CategoryShortName, SupplierName, SupplierAlias, ArticleNo, Color, Size, ItemMRP, CostPrice, XnDt, AppQty, MrpValue, CostValue, NetAmount, CGSTAmount, SGSTAmount, IGSTAmount, BillCount",
     filterPrefix: "MB_POWERBI_APP_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "approval APP AppQty approval quantity value supplier branch",
   },
   {
@@ -201,6 +226,7 @@ module.exports.DATASET_REGISTRY = [
     defaultTable: "dbo.VW_MB_POWERBI_APR_REPORT",
     label: "PBI Approval Return Report (VW_MB_POWERBI_APR_REPORT) — BranchAlias, DepartmentShortName, CategoryShortName, SupplierName, SupplierAlias, ArticleNo, Color, Size, ItemMRP, CostPrice, XnDt, AppQty, MrpValue, CostValue, NetAmount, BillCount",
     filterPrefix: "MB_POWERBI_APR_REPORT",
+    defaultDateColumn: "XnDt",
     routingHint: "approval return APR approval return quantity supplier branch",
   },
 
@@ -238,25 +264,7 @@ module.exports.DATASET_REGISTRY = [
     skipDateParamsIfNoColumn: true,
   },
 
-  // ── Master tables ────────────────────────────────────────────────────────
-  {
-    key: "salesperson",
-    defaultTable: "dbo.MstSalesPerson",
-    envOverride: "SALESPERSON_TABLE",
-    label: "Salesperson master table (MstSalesPerson)",
-    filterPrefix: "SALESPERSON",
-    routingHint: "salesperson master table",
-    skipDateParamsIfNoColumn: true,
-  },
-  {
-    key: "stock_units",
-    defaultTable: "dbo.MstStockUnit",
-    envOverride: "STOCK_TABLE",
-    label: "Stock units master table (MstStockUnit)",
-    filterPrefix: "STOCK_UNITS",
-    routingHint: "stock unit master UOM",
-    skipDateParamsIfNoColumn: true,
-  },
+  // ── Master / entry views (no dbo.Mst* tables — app login typically lacks SELECT on masters) ──
   {
     key: "vw_mst_branch_entry",
     defaultTable: "dbo.VwMstBranchEntry",

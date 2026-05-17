@@ -1,0 +1,219 @@
+{
+  "generated_at_utc": "2026-05-15T15:32:05.932Z",
+  "database": "zRetailHQ0",
+  "server": "38.45.94.39",
+  "byKey": {
+    "sales": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_APP_REPORT",
+      "message": null
+    },
+    "stock": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwAIStockData",
+      "message": null
+    },
+    "customers": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwAICustomerDetails",
+      "message": null
+    },
+    "branches": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwAIBranch",
+      "message": null
+    },
+    "vw_ai_salesperson": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwAISalesPerson",
+      "message": null
+    },
+    "vw_ai_supplier": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwAISupplier",
+      "message": null
+    },
+    "vw_mst_items": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VwMstItems",
+      "message": null
+    },
+    "vw_aimst_items": {
+      "ok": false,
+      "denied": true,
+      "table": "dbo.VwAIMstItems",
+      "message": "The SELECT permission was denied on the object 'VwAIMstItems', database 'zRetailHQ0', schema 'dbo'."
+    },
+    "mb_powerbi_sls_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SLS_REPORT",
+      "message": null
+    },
+    "mb_powerbi_slsxns_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
+      "message": null
+    },
+    "mb_powerbi_sls_billcount": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SLS_BILLCOUNT",
+      "message": null
+    },
+    "mb_powerbi_sls_data_without_itemid": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+      "message": null
+    },
+    "mb_powerbi_sls_article_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SLS_ARTICLE_REPORT",
+      "message": null
+    },
+    "mb_powerbi_mis_supplier_sls_data": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA",
+      "message": null
+    },
+    "mb_powerbi_pur_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_PUR_REPORT",
+      "message": null
+    },
+    "mb_powerbi_purxns_report": {
+      "ok": false,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_PURXNS_REPORT",
+      "message": "Timeout: Request failed to complete in 20000ms"
+    },
+    "mb_powerbi_prt_report": {
+      "ok": false,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_PRT_REPORT",
+      "message": "Timeout: Request failed to complete in 20000ms"
+    },
+    "mb_powerbi_pur_qty_with_cost": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST",
+      "message": null
+    },
+    "mb_powerbi_supplier_pur_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
+      "message": null
+    },
+    "mb_powerbi_stock_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_STOCK_REPORT",
+      "message": null
+    },
+    "mb_powerbi_cbs_with_git": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_CBS_WITH_GIT",
+      "message": null
+    },
+    "mb_powerbi_sti_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_STI_REPORT",
+      "message": null
+    },
+    "mb_powerbi_sto_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_STO_REPORT",
+      "message": null
+    },
+    "mb_powerbi_app_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_APP_REPORT",
+      "message": null
+    },
+    "mb_powerbi_apr_report": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_APR_REPORT",
+      "message": null
+    },
+    "mb_powerbi_branch_list": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_BRANCH_LIST",
+      "message": null
+    },
+    "mb_powerbi_category_master": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_CATEGORY_MASTER",
+      "message": null
+    },
+    "mb_powerbi_product_master": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_PRODUCT_MASTER",
+      "message": null
+    },
+    "mb_powerbi_vendor_master": {
+      "ok": true,
+      "denied": false,
+      "table": "dbo.VW_MB_POWERBI_VENDOR_MASTER",
+      "message": null
+    },
+    "vw_mst_branch_entry": {
+      "ok": false,
+      "denied": true,
+      "table": "dbo.VwMstBranchEntry",
+      "message": "The SELECT permission was denied on the object 'VwMstBranchEntry', database 'zRetailHQ0', schema 'dbo'."
+    }
+  },
+  "deniedKeys": [
+    "vw_aimst_items",
+    "vw_mst_branch_entry"
+  ],
+  "okKeys": [
+    "sales",
+    "stock",
+    "customers",
+    "branches",
+    "vw_ai_salesperson",
+    "vw_ai_supplier",
+    "vw_mst_items",
+    "mb_powerbi_sls_report",
+    "mb_powerbi_slsxns_report",
+    "mb_powerbi_sls_billcount",
+    "mb_powerbi_sls_data_without_itemid",
+    "mb_powerbi_sls_article_report",
+    "mb_powerbi_mis_supplier_sls_data",
+    "mb_powerbi_pur_report",
+    "mb_powerbi_pur_qty_with_cost",
+    "mb_powerbi_supplier_pur_report",
+    "mb_powerbi_stock_report",
+    "mb_powerbi_cbs_with_git",
+    "mb_powerbi_sti_report",
+    "mb_powerbi_sto_report",
+    "mb_powerbi_app_report",
+    "mb_powerbi_apr_report",
+    "mb_powerbi_branch_list",
+    "mb_powerbi_category_master",
+    "mb_powerbi_product_master",
+    "mb_powerbi_vendor_master"
+  ]
+}

@@ -1,26 +1,38 @@
 /**
  * Shared filter / WHERE context for analytics queries (dashboard + reconciliation).
- * Uses ANALYTICS_BASE_TABLE + SALES_ANALYTICS_* env vars to resolve the correct
- * table and dimension columns (which may differ from the raw sales view).
+ * Column names are resolved from metadata + canonical zRetailHQ0 roles (XnDt, MrpValue, …).
  */
 "use strict";
 
 const sql = require("mssql");
 const { getFilterColumns, sanitizeColumnName } = require("../filter-query");
+const { resolveAnalyticsColumns, buildTrendSql } = require("./analytics-column-map");
 
-function salesDimColumns() {
-  const amt    = sanitizeColumnName(process.env.SALES_ANALYTICS_AMOUNT_COLUMN     || "SaleNetAmount") || "SaleNetAmount";
-  const branch = sanitizeColumnName(process.env.SALES_ANALYTICS_BRANCH_DIM        || "BranchName")    || "BranchName";
-  const dept   = sanitizeColumnName(process.env.SALES_ANALYTICS_DEPARTMENT_DIM    || "DepartmentName")|| "DepartmentName";
-  const cat    = sanitizeColumnName(process.env.SALES_ANALYTICS_CATEGORY_DIM      || "CategoryName")  || "CategoryName";
-  return { amount: amt, branch, dept, cat };
+function salesDimColumns(effectiveTable, datasetKey) {
+  return resolveAnalyticsColumns(effectiveTable, datasetKey);
+}
+
+/** Shared SELECT list for dashboard / home KPI aggregates. */
+function buildKpiSelectSql(dims, dateCol, rowCntAgg, wmSelect) {
+  const billExpr = dims.invoice ? `COUNT(DISTINCT [${dims.invoice}])` : rowCntAgg;
+  const custExpr = dims.customer ? `COUNT(DISTINCT [${dims.customer}])` : "CAST(NULL AS BIGINT)";
+  const qtyExpr = dims.qty
+    ? `CAST(SUM(ISNULL([${dims.qty}], 0)) AS DECIMAL(38, 4))`
+    : "CAST(NULL AS DECIMAL(38, 4))";
+  return `
+      CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS total_sales,
+      ${rowCntAgg} AS txn_count,
+      ${billExpr} AS bill_count,
+      ${custExpr} AS customer_count,
+      ${qtyExpr} AS quantity_sold,
+      COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
+      CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
+      ${wmSelect}`;
 }
 
 /**
  * Resolve the date column for the effective analytics table.
- * Checks for a per-table env var first, e.g.
- *   VW_MB_POWERBI_SLSXNS_REPORT_FILTER_DATE_COLUMN=XnDt
- * then falls back to the dataset-keyed var (SALES_FILTER_DATE_COLUMN).
+ * Env per-table → dataset filter prefix → metadata canonical (XnDt).
  */
 function resolveAnalyticsDateCol(effectiveTable, datasetKey) {
   const tableBase = String(effectiveTable || "")
@@ -35,7 +47,11 @@ function resolveAnalyticsDateCol(effectiveTable, datasetKey) {
   }
 
   const dateCfg = getFilterColumns(datasetKey);
-  return sanitizeColumnName(dateCfg.date) || "";
+  const fromPrefix = sanitizeColumnName(dateCfg.date);
+  if (fromPrefix) return fromPrefix;
+
+  const dims = resolveAnalyticsColumns(effectiveTable, datasetKey);
+  return dims.date || "";
 }
 
 function appendCrossFilterParts(request, crossFilter, allowed) {
@@ -61,8 +77,8 @@ function appendCrossFilterParts(request, crossFilter, allowed) {
  * Handles date, branch, dept, category, and cross-filter predicates.
  */
 function buildFilterContext(pool, table, datasetKey, q, crossFilter) {
-  var dims = salesDimColumns();
   var effectiveTable = table;
+  var dims = salesDimColumns(effectiveTable, datasetKey);
   var dateCol = resolveAnalyticsDateCol(effectiveTable, datasetKey);
   if (!dateCol) {
     var e = new Error(datasetKey + "/" + effectiveTable + ": date column not configured for analytics filters");
@@ -74,7 +90,6 @@ function buildFilterContext(pool, table, datasetKey, q, crossFilter) {
   var req = pool.request();
   var whereParts = [];
 
-  // Date range
   var from = String((q && q.from) ? q.from : "").trim();
   var to   = String((q && q.to)   ? q.to   : "").trim();
   if (from && to) {
@@ -83,37 +98,48 @@ function buildFilterContext(pool, table, datasetKey, q, crossFilter) {
     whereParts.push("CAST([" + dateCol + "] AS DATE) BETWEEN CAST(@a_from AS DATE) AND CAST(@a_to AS DATE)");
   }
 
-  // Branch filter
   var branchVal = String((q && q.branch) ? q.branch : "").trim();
-  if (branchVal) {
+  if (branchVal && dims.branch) {
     req.input("a_branch", sql.NVarChar(500), "%" + branchVal + "%");
     whereParts.push("CAST([" + dims.branch + "] AS NVARCHAR(500)) LIKE @a_branch");
   }
 
-  // Department filter
   var deptVal = String((q && q.department) ? q.department : "").trim();
-  if (deptVal) {
+  if (deptVal && dims.dept) {
     req.input("a_dept", sql.NVarChar(500), "%" + deptVal + "%");
     whereParts.push("CAST([" + dims.dept + "] AS NVARCHAR(500)) LIKE @a_dept");
   }
 
-  // Category filter
   var catVal = String((q && q.category) ? q.category : "").trim();
-  if (catVal) {
+  if (catVal && dims.cat) {
     req.input("a_cat", sql.NVarChar(500), "%" + catVal + "%");
     whereParts.push("CAST([" + dims.cat + "] AS NVARCHAR(500)) LIKE @a_cat");
   }
 
-  // Cross-filter (drill from chart click)
-  var cfParts = appendCrossFilterParts(req, crossFilter, [dims.branch, dims.dept, dims.cat]);
+  var cfParts = appendCrossFilterParts(req, crossFilter, [dims.branch, dims.dept, dims.cat].filter(Boolean));
   var allWhere = whereParts.concat(cfParts);
   var whereSql = allWhere.length ? " WHERE " + allWhere.join(" AND ") : "";
 
   return { req: req, whereSql: whereSql, table: table, dateCol: dateCol, dims: dims };
 }
 
+function parseAnalyticsTopN(raw, fallback) {
+  const fbSrc =
+    fallback != null && String(fallback).trim() !== ""
+      ? fallback
+      : process.env.ANALYTICS_TOP_N || "20";
+  const fb = parseInt(String(fbSrc), 10) || 20;
+  const cap = parseInt(String(process.env.ANALYTICS_TOP_N_MAX || "200"), 10) || 200;
+  const n = parseInt(String(raw != null ? raw : ""), 10);
+  if (!Number.isFinite(n) || n < 1) return Math.min(cap, Math.max(5, fb));
+  return Math.min(cap, Math.max(5, n));
+}
+
 module.exports = {
   salesDimColumns: salesDimColumns,
+  buildKpiSelectSql: buildKpiSelectSql,
+  buildTrendSql: buildTrendSql,
+  parseAnalyticsTopN: parseAnalyticsTopN,
   appendCrossFilterParts: appendCrossFilterParts,
   buildFilterContext: buildFilterContext,
   resolveAnalyticsDateCol: resolveAnalyticsDateCol,

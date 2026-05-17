@@ -1,0 +1,185 @@
+[
+  {
+    "term": "MTD Sales",
+    "aliases": ["month to date", "this month sales", "current month revenue", "this month", "month sales", "mtd revenue", "mtd gross revenue"],
+    "definition": "Total gross revenue from the 1st of the current calendar month to today. Calculated as SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT where CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date).",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "YTD Sales",
+    "aliases": ["year to date", "financial year sales", "fy sales", "this year sales", "ytd revenue", "ytd gross revenue"],
+    "definition": "Total gross revenue from April 1 of the current Indian Financial Year to today. Indian FY runs April 1 to March 31. SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT.",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE())>=4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE())-1 END, 4, 1) AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "QTD Sales",
+    "aliases": ["quarter to date", "this quarter sales", "qtd revenue", "quarterly sales", "qtd gross revenue"],
+    "definition": "Total gross revenue from the start of the current Indian FY quarter to today. Indian quarters: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar. SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT.",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) >= CASE WHEN MONTH(GETDATE()) IN (4,5,6) THEN DATEFROMPARTS(YEAR(GETDATE()),4,1) WHEN MONTH(GETDATE()) IN (7,8,9) THEN DATEFROMPARTS(YEAR(GETDATE()),7,1) WHEN MONTH(GETDATE()) IN (10,11,12) THEN DATEFROMPARTS(YEAR(GETDATE()),10,1) ELSE DATEFROMPARTS(YEAR(GETDATE()),1,1) END AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "Today Sales",
+    "aliases": ["today", "today's sales", "sales today", "current day sales", "today revenue"],
+    "definition": "Total gross revenue for today only. SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT where CAST(XnDt AS date) = CAST(GETDATE() AS date).",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "Yesterday Sales",
+    "aliases": ["yesterday", "yesterday's sales", "sales yesterday", "prior day sales"],
+    "definition": "Total gross revenue for yesterday. SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT where CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date)).",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "PY Sales",
+    "aliases": ["prior year", "last year", "previous year sales", "ly sales", "same period last year", "last year revenue"],
+    "definition": "Gross revenue for the same period in the previous year. Subtract 1 from YEAR() in the WHERE clause. Use SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT.",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE YEAR(CAST([XnDt] AS date))=YEAR(GETDATE())-1 AND MONTH(CAST([XnDt] AS date))=MONTH(GETDATE())",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales"
+  },
+  {
+    "term": "Gross Revenue",
+    "aliases": ["gross sales", "revenue", "total sales", "turnover", "sales amount", "net sales", "mrp value", "total revenue", "sales value"],
+    "definition": "Primary revenue metric. Use SUM(MrpValue) on dbo.VW_MB_POWERBI_APP_REPORT. MrpValue is the gross sales value column. NEVER use SaleNetAmount, NetSlsNetAmount, NetAmount, or any other revenue column — only MrpValue on this view.",
+    "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "revenue_column": "MrpValue",
+    "date_column": "XnDt",
+    "category": "sales",
+    "strict_rule": "ALWAYS use MrpValue on VW_MB_POWERBI_APP_REPORT. Never use SaleNetAmount, NetSlsNetAmount, or any other column name."
+  },
+  {
+    "term": "Bill Count",
+    "aliases": ["bills", "invoice count", "footfall", "transactions", "number of bills", "number of invoices", "bill volume"],
+    "definition": "Number of distinct sales invoices/bills. Use COUNT(DISTINCT XnNo) on VW_MB_POWERBI_APP_REPORT. XnNo is the invoice/bill number column.",
+    "sql_pattern": "COUNT(DISTINCT [XnNo]) FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Average Bill Value",
+    "aliases": ["abv", "avg bill", "average transaction value", "atv", "avg order value", "aov", "average bill", "average invoice value"],
+    "definition": "Average revenue per invoice. = SUM(MrpValue) / NULLIF(COUNT(DISTINCT XnNo), 0). Use NULLIF to avoid divide by zero.",
+    "sql_pattern": "SUM([MrpValue]) / NULLIF(COUNT(DISTINCT [XnNo]), 0) FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Quantity Sold",
+    "aliases": ["units sold", "qty", "quantity sold", "pieces sold", "pcs sold", "total qty", "app qty", "appqty"],
+    "definition": "Total quantity/pieces sold. Use SUM(AppQty) on VW_MB_POWERBI_APP_REPORT. AppQty is the quantity column.",
+    "sql_pattern": "SUM([AppQty]) FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Top Branches",
+    "aliases": ["branch performance", "store performance", "best branch", "top store", "branch ranking", "branch sales"],
+    "definition": "Branches ranked by gross revenue. GROUP BY BranchAlias, ORDER BY SUM(MrpValue) DESC. Use VW_MB_POWERBI_APP_REPORT. BranchAlias is the branch/store name column. Never use BranchId or BranchName.",
+    "sql_pattern": "SELECT [BranchAlias] AS Branch, SUM([MrpValue]) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) GROUP BY [BranchAlias] ORDER BY TotalSales DESC",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Top Salespersons",
+    "aliases": ["salesperson performance", "staff sales", "who sold most", "top salesperson", "best salesperson", "employee performance", "staff performance"],
+    "definition": "Salespersons ranked by gross revenue. Use SupplierName column from VW_MB_POWERBI_APP_REPORT — no JOIN needed. GROUP BY SupplierName, ORDER BY SUM(MrpValue) DESC.",
+    "sql_pattern": "SELECT [SupplierName] AS Salesperson, SUM([MrpValue]) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) GROUP BY [SupplierName] ORDER BY TotalSales DESC",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales",
+    "strict_rule": "Use SupplierName from VW_MB_POWERBI_APP_REPORT. No JOINs needed. Never use VwAISalesData or VwAISalesPerson."
+  },
+  {
+    "term": "Top Categories",
+    "aliases": ["category performance", "best category", "category sales", "category breakdown", "category ranking"],
+    "definition": "Product categories ranked by gross revenue or quantity. Use CategoryShortName on VW_MB_POWERBI_APP_REPORT. Never use CategoryId or CategoryName.",
+    "sql_pattern": "SELECT [CategoryShortName] AS Category, SUM([MrpValue]) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) GROUP BY [CategoryShortName] ORDER BY TotalSales DESC",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Top Departments",
+    "aliases": ["department performance", "best department", "department sales", "department breakdown", "department ranking"],
+    "definition": "Departments ranked by gross revenue. Use DepartmentShortName on VW_MB_POWERBI_APP_REPORT. Never use DepartmentId or DepartmentName.",
+    "sql_pattern": "SELECT [DepartmentShortName] AS Department, SUM([MrpValue]) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) GROUP BY [DepartmentShortName] ORDER BY TotalSales DESC",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Top Articles",
+    "aliases": ["best selling products", "top products", "top items", "best articles", "highest selling articles", "top selling items"],
+    "definition": "Articles ranked by quantity or revenue. Use ArticleNo from VW_MB_POWERBI_APP_REPORT (no ArticleName column). AppQty = quantity, MrpValue = revenue.",
+    "sql_pattern": "SELECT [ArticleNo], SUM([AppQty]) AS TotalQty, SUM([MrpValue]) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) GROUP BY [ArticleNo] ORDER BY TotalQty DESC",
+    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "category": "sales"
+  },
+  {
+    "term": "Stock Quantity",
+    "aliases": ["current stock", "stock on hand", "inventory", "closing stock", "available qty", "stock level"],
+    "definition": "Current physical stock quantity at branches. Use StockQty from VW_MB_POWERBI_STOCK_REPORT.",
+    "sql_pattern": "SUM(StockQty) FROM dbo.VW_MB_POWERBI_STOCK_REPORT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_STOCK_REPORT",
+    "category": "inventory"
+  },
+  {
+    "term": "Goods In Transit",
+    "aliases": ["git", "in transit", "transfer pending", "goods in movement"],
+    "definition": "Stock dispatched from one branch but not yet received at destination. Use GitQty from VW_MB_POWERBI_CBS_WITH_GIT.",
+    "sql_pattern": "SUM(GitQty) FROM dbo.VW_MB_POWERBI_CBS_WITH_GIT WITH (NOLOCK)",
+    "view": "dbo.VW_MB_POWERBI_CBS_WITH_GIT",
+    "category": "inventory"
+  },
+  {
+    "term": "Purchase Amount",
+    "aliases": ["purchase value", "inward value", "buying cost", "vendor purchase", "top vendor", "supplier purchase"],
+    "definition": "Total purchase amount from suppliers. Use SUM(NetPurNetAmount) on VW_MB_POWERBI_PURXNS_REPORT (or PurchasePrice×PurQty on SUPPLIER_PUR_REPORT). PUR_REPORT has PurQty only — not MrpValue.",
+    "sql_pattern": "SELECT [SupplierName] AS Vendor, SUM([NetPurNetAmount]) AS TotalPurchase FROM dbo.VW_MB_POWERBI_PURXNS_REPORT WITH (NOLOCK) GROUP BY [SupplierName] ORDER BY TotalPurchase DESC",
+    "view": "dbo.VW_MB_POWERBI_PURXNS_REPORT",
+    "category": "purchase"
+  },
+  {
+    "term": "New Customers",
+    "aliases": ["new registrations", "new members", "customer acquisition"],
+    "definition": "Customers registered in a given period. Use CreatedOn from VwAICustomerDetails.",
+    "sql_pattern": "COUNT(*) FROM dbo.VwAICustomerDetails WHERE CreatedOn >= <start_date>",
+    "view": "dbo.VwAICustomerDetails",
+    "category": "customer"
+  },
+  {
+    "term": "Birthday Customers",
+    "aliases": ["birthday this month", "customers with birthday", "birthday list"],
+    "definition": "Customers with birthday in the current month. Filter by MONTH(BirthdayDt) = MONTH(GETDATE()). NEVER filter by year — birthday year is birth year, not current year.",
+    "sql_pattern": "WHERE MONTH(BirthdayDt) = MONTH(GETDATE())",
+    "view": "dbo.VwAICustomerDetails",
+    "category": "customer"
+  },
+  {
+    "term": "Sell-Through Rate",
+    "aliases": ["sell through", "stt", "sellthrough %", "stock turnover rate"],
+    "definition": "Percentage of purchased stock that has been sold. = Net Sales Qty / Purchase Qty * 100.",
+    "sql_pattern": "SUM(AppQty) / NULLIF(SUM(PurQty), 0) * 100",
+    "category": "performance"
+  }
+]

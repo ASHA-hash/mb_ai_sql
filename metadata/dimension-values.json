@@ -1,0 +1,13 @@
+{
+  "generatedAt": null,
+  "database": null,
+  "sourceViews": [],
+  "dimensions": {
+    "BranchAlias": [],
+    "Category": [],
+    "Department": [],
+    "SupplierName": []
+  },
+  "views": {},
+  "_note": "Run npm run build:dimension-index when DB is available to populate distinct values."
+}

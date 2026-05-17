@@ -12,7 +12,8 @@ async function repairSql({ apiKey, model, question, context, failedSql, errorMes
     "Rules:",
     "- Return one SELECT SQL only.",
     "- Use only allowed views and listed columns.",
-    "- On dbo.VwAISalesData use SaleNetAmount for revenue; on VW_MB_POWERBI_SLS_* use NetAmount if present in column list.",
+    "- Sales revenue: dbo.VW_MB_POWERBI_APP_REPORT → SUM(MrpValue); SLSXNS/SLS_REPORT → SUM(NetAmount) or NetSlsNetAmount.",
+    "- Never use dbo.VwAISalesData. Date column on APP_REPORT is XnDt. Salesperson → SupplierName.",
     "- Keep SQL Server syntax.",
   ].join("\n");
 

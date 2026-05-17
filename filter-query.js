@@ -6,6 +6,26 @@
 
 const { DATASET_REGISTRY } = require("./datasets-registry");
 
+/** Legacy UI / bookmarks — map table short names → registry keys. */
+const DATASET_KEY_ALIASES = {
+  mstsalesperson: "vw_ai_salesperson",
+  mststockunit: "stock",
+  vstocksalesperson: "vw_ai_salesperson",
+  mb_powerbi_app_report: "sales",
+  vw_mb_powerbi_app_report: "sales",
+  vw_mb_powerbi_sls_report: "mb_powerbi_sls_report",
+  vw_mb_powerbi_slsxns_report: "mb_powerbi_slsxns_report",
+};
+
+function normalizeDatasetKey(datasetKey) {
+  const n = String(datasetKey || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/^dbo\./, "");
+  return DATASET_KEY_ALIASES[n] || n;
+}
+
 function sanitizeColumnName(raw) {
   const s = String(raw || "").trim();
   if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/.test(s)) {
@@ -15,7 +35,7 @@ function sanitizeColumnName(raw) {
 }
 
 function getDatasetEntry(datasetKey) {
-  const n = String(datasetKey || "").toLowerCase().trim();
+  const n = normalizeDatasetKey(datasetKey);
   return DATASET_REGISTRY.find((r) => r.key === n) || null;
 }
 
@@ -41,7 +61,10 @@ function getFilterColumns(datasetKey) {
     };
   }
   return {
-    date: process.env[`${p}_FILTER_DATE_COLUMN`] || "",
+    date:
+      process.env[`${p}_FILTER_DATE_COLUMN`] ||
+      (e && e.defaultDateColumn ? String(e.defaultDateColumn).trim() : "") ||
+      "",
     branch: process.env[`${p}_FILTER_BRANCH_COLUMN`] || "",
     status: process.env[`${p}_FILTER_STATUS_COLUMN`] || "",
     department: process.env[`${p}_FILTER_DEPARTMENT_COLUMN`] || "",
@@ -165,6 +188,8 @@ function datasetDateOrderByDescSql(datasetKey) {
 }
 
 module.exports = {
+  DATASET_KEY_ALIASES,
+  normalizeDatasetKey,
   getDatasetEntry,
   getFilterColumns,
   getFilterMatchMode,

@@ -152,7 +152,7 @@ FROM slice;
     cols = [d[0] for d in cur.description]
     out = dict(zip(cols, row))
 
-    print("\n=== Aggregates on TOP slice (≈ API dump without ORDER BY) ===")
+    print("\n=== Aggregates on TOP slice (~ API dump without ORDER BY) ===")
     for k in cols:
         v = out[k]
         if v is None:
@@ -168,17 +168,30 @@ FROM slice;
     sr = int(out.get("slice_rows") or 0)
     sp = out.get("sum_credit")
     print("\n=== Interpretation ===")
-    print(f"  Dashboard ‘{sr:,} row(s)’ with cap {limit:,}: slice row count should match if total ≥ limit.")
+    print(f"  Dashboard '{sr:,} row(s)' with cap {limit:,}: slice row count should match if total >= limit.")
     if total < limit:
         print(f"  View has only {total:,} rows — UI shows all of them.")
     print(
-        "  If KPI shows Σ CreditLimit = 0 and avg = 0 over ~20k rows, SQL should show sum_credit ≈ 0 "
-        "and credit_positive_rows = 0 (all limits zero or null)."
+        "  SUM(CreditLimit) on a TOP slice is NOT total credit exposure — often all zeros in sample."
     )
     print(
-        "  Note: TOP without ORDER BY means the 20k rows are not ‘newest first’ unless the server adds "
-        "ordering elsewhere — totals over CreditLimit still reflect ‘some’ 20k row subset when total > cap."
+        "  Expected dashboard: customer count, with-mobile, active, distinct branches — NOT Sum CreditLimit KPI."
     )
+    print(
+        "  Note: No date column — TOP without ORDER BY is an arbitrary sample, not 'newest customers'."
+    )
+
+    cur.execute(f"""
+    SELECT
+      SUM(CASE WHEN NULLIF(LTRIM(RTRIM([ContactMobile])), '') IS NOT NULL THEN 1 ELSE 0 END) AS with_mobile,
+      SUM(CASE WHEN [ActiveStatus] = 1 OR LOWER(CAST([ActiveStatus] AS varchar(20))) = 'true' THEN 1 ELSE 0 END) AS active_rows
+    FROM ({inner}) s
+    """)
+    row2 = cur.fetchone()
+    if row2:
+        print(f"\n=== Slice profile (dashboard-style KPIs) ===")
+        print(f"  With ContactMobile : {int(row2[0] or 0):,}")
+        print(f"  ActiveStatus true  : {int(row2[1] or 0):,}")
 
     conn.close()
     return 0

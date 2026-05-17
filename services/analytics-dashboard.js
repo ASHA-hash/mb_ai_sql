@@ -21,7 +21,13 @@ const {
 } = require("./analytics-quality");
 const { notifyAnomalyAlerts } = require("./anomaly-alerts");
 const { assertRangeSpan, parseDedupeKeyColumns } = require("./analytics-pipeline");
-const { buildFilterContext, salesDimColumns } = require("./analytics-sql-context");
+const {
+  buildFilterContext,
+  salesDimColumns,
+  buildKpiSelectSql,
+  buildTrendSql,
+  parseAnalyticsTopN,
+} = require("./analytics-sql-context");
 const {
   computeReconciliation,
   buildCompositeVerificationFingerprint,
@@ -160,12 +166,14 @@ async function loadDashboardWidgetsPayload(pool, params) {
   const nl = nolock();
   const qh = queryHint(spanDays);
 
+  const wmCol = sanitizeColumnName(process.env.SALES_ANALYTICS_WATERMARK_COLUMN || "");
+  const wmSelect = wmCol
+    ? `, CAST(MAX(CAST([${wmCol}] AS DATETIME2)) AS varchar(40)) AS source_watermark`
+    : "";
+
   const kpiSql = `
     SELECT
-      CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS total_sales,
-      ${rowCntAgg} AS txn_count,
-      COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
-      CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
+      ${buildKpiSelectSql(dims, dateCol, rowCntAgg, wmSelect)}
     FROM ${table}${nl}${whereSql}${qh}`;
 
   const branchSql = `
@@ -359,11 +367,7 @@ async function loadDashboardPayload(pool, params, tier = "full") {
 
   const kpiSql = `
     SELECT
-      CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS total_sales,
-      ${rowCntAgg} AS txn_count,
-      COUNT(DISTINCT CAST([${dateCol}] AS DATE)) AS active_days,
-      CAST(MAX(CAST([${dateCol}] AS DATE)) AS varchar(10)) AS range_max_date
-      ${wmSelect}
+      ${buildKpiSelectSql(dims, dateCol, rowCntAgg, wmSelect)}
     FROM ${table}${nl}${whereSql}${qh}`;
 
   const branchSql = `
@@ -393,26 +397,16 @@ async function loadDashboardPayload(pool, params, tier = "full") {
     GROUP BY CAST([${dims.cat}] AS NVARCHAR(500))
     ORDER BY metric_value DESC${qh}`;
 
-  let trendSql;
-  if (trendMode === "day") {
-    trendSql = `
-      SELECT
-        CONVERT(varchar(10), CAST([${dateCol}] AS DATE), 23) AS period_label,
-        CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
-        ${rowCntAgg} AS txn_count
-      FROM ${table}${nl}${trendWhereSql}
-      GROUP BY CAST([${dateCol}] AS DATE)
-      ORDER BY period_label${qh}`;
-  } else {
-    trendSql = `
-      SELECT
-        CONCAT(YEAR(CAST([${dateCol}] AS DATE)), '-', RIGHT('0' + CAST(MONTH(CAST([${dateCol}] AS DATE)) AS varchar(2)), 2)) AS period_label,
-        CAST(SUM(ISNULL([${dims.amount}], 0)) AS DECIMAL(38, 4)) AS metric_value,
-        ${rowCntAgg} AS txn_count
-      FROM ${table}${nl}${trendWhereSql}
-      GROUP BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))
-      ORDER BY YEAR(CAST([${dateCol}] AS DATE)), MONTH(CAST([${dateCol}] AS DATE))${qh}`;
-  }
+  const trendSql = buildTrendSql({
+    table,
+    trendMode,
+    dateCol,
+    dims,
+    trendWhereSql,
+    rowCntAgg,
+    nl,
+    qh,
+  });
 
   const dupLazy = () => maybeFetchDuplicateRatio(req, table, whereSql, parseDedupeKeyColumns());
 
@@ -442,6 +436,9 @@ async function loadDashboardPayload(pool, params, tier = "full") {
   const kpiRow = kpiR.recordset && kpiR.recordset[0] ? kpiR.recordset[0] : {};
   const totalSales = parseFloat(kpiRow.total_sales) || 0;
   const txnCount = parseInt(String(kpiRow.txn_count), 10) || 0;
+  const billCount = parseInt(String(kpiRow.bill_count), 10) || 0;
+  const customerCount = parseInt(String(kpiRow.customer_count), 10) || 0;
+  const quantitySold = parseFloat(kpiRow.quantity_sold) || 0;
 
   const branchRows = (branchR.recordset || []).map((r) => ({
     label: String(r.label || "").trim() || "(blank)",
@@ -712,6 +709,9 @@ async function loadDashboardPayload(pool, params, tier = "full") {
     kpi: {
       totalSales,
       txnCount,
+      billCount: billCount || txnCount,
+      customerCount,
+      quantitySold,
       activeDays: parseInt(String(kpiRow.active_days), 10) || 0,
     },
     widgets: {
@@ -810,7 +810,7 @@ async function runAnalyticsDashboard(pool, body) {
   /* 3. The planner returns effectiveTable, not table — normalise here. */
   const table      = plan.effectiveTable || null;
   const tier       = String(body.loadPhase || "full").toLowerCase();
-  const topN       = 20;
+  const topN       = parseAnalyticsTopN(body.topN);
   const maxTrend   = 180;
 
   /* Helper: call getOrSet with the correct 4-argument signature and merge
@@ -883,10 +883,14 @@ async function runAnalyticsDashboard(pool, body) {
 async function warmAnalyticsCache(pool) {
   if (String(process.env.ANALYTICS_WARMUP || "1").trim() === "0") return;
 
-  // Periods ordered cheapest → slowest so fast ones populate cache quickly.
-  // Heavy periods (90d, 180d, ytd) get an inter-period pause so they don't
-  // hold all pool connections simultaneously with active user requests.
-  const periods = ["mtd", "30d", "qtd", "90d", "180d", "ytd"];
+  // Warm the most-used periods on startup so first user click is instant.
+  // 180d is included because users commonly click it — it runs after the fast
+  // three so the pool is settled. Override via ANALYTICS_WARMUP_PERIODS env var.
+  const defaultPeriods = ["mtd", "30d", "qtd", "last_180d"];
+  const envPeriods = process.env.ANALYTICS_WARMUP_PERIODS;
+  const periods = envPeriods
+    ? envPeriods.split(",").map(s => s.trim()).filter(Boolean)
+    : defaultPeriods;
 
   // Pause between periods (ms) — gives pool connections time to be released
   // before the next heavy query fires. Configurable via env.

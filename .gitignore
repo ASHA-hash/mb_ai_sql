@@ -9,6 +9,7 @@ FEATURE_CHECKLIST.md
 
 # Large local DB exports — do not commit (breaks GitHub push)
 exports_py/
+exports/
 **/*.jsonl
 
 # INFORMATION_SCHEMA snapshot (environment-specific — regenerate: npm run export:registry-schema)

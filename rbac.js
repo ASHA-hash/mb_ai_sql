@@ -59,6 +59,9 @@ async function initStorage() {
     // old bootstrapped roles had a restricted dataset list instead of "*").
     try {
       await rbacPg.syncRolesFromFile(CONFIG_PATH);
+      // CRITICAL: refresh cachedConfig after sync so login tokens embed the updated
+      // datasets/features from users-config.json (not the stale pre-sync snapshot).
+      cachedConfig = await rbacPg.fetchFullConfig();
       console.log("[rbac] roles synced from users-config.json → PostgreSQL");
     } catch (syncErr) {
       console.warn("[rbac] role sync failed (non-fatal):", syncErr.message);

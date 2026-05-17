@@ -123,6 +123,18 @@ function resolvePeriodRange(preset, custom, now) {
     };
   }
 
+  if (p === "last_60d" || p === "60d") {
+    const end = new Date(ref);
+    const start = new Date(ref);
+    start.setDate(start.getDate() - 59);
+    return {
+      preset: "last_60d",
+      from: toIso(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+      to: toIso(end.getFullYear(), end.getMonth() + 1, end.getDate()),
+      days: 60,
+    };
+  }
+
   if (p === "last_90d" || p === "90d") {
     const end   = new Date(ref);
     const start = new Date(ref);

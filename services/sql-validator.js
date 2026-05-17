@@ -222,24 +222,27 @@ function validateRevenueUsage(sql, context) {
   const shouldApplyGuard = hasAggregate && (domain === "sales" || hasRevenueIntentToken || hasAmountLikeToken);
   if (!shouldApplyGuard) return;
 
-  const usesMRP = upperSql.includes("MRPVALUE") || upperSql.includes("ITEMMRP");
-  // SaleAmountBeforeTax is a real column in dbo.VwAISalesData — only block it for PowerBI views
+  const allowedRevenue =
+    /\bSUM\s*\(\s*(?:ISNULL\s*\(\s*)?\[?(?:MRPVALUE|NETAMOUNT|NETSLSNETAMOUNT|SALENETAMOUNT|APPNETVALUE|NETSLSNETAMOUNT)\]?/i.test(
+      sql
+    );
+  const usesItemMrp =
+    /\bSUM\s*\(\s*(?:ISNULL\s*\(\s*)?\[?ITEMMRP\]?/i.test(sql) ||
+    /\bSUM\s*\(\s*(?:ISNULL\s*\(\s*)?\[?MRP\](?!\s*VALUE)/i.test(sql);
   const isAiSalesView = upperSql.includes("VWAISALESDATA");
   const usesBeforeTax =
     upperSql.includes("NETAMOUNTBEFORETAX") ||
     (!isAiSalesView && upperSql.includes("SALEAMOUNTBEFORETAX"));
-  // Only block cost-as-revenue when clearly used as a SUM revenue metric without a paired NetAmount
   const usesCostOnly =
     (upperSql.includes("SUM(COSTVALUE)") ||
-     upperSql.includes("SUM(PURCOST)") ||
-     upperSql.includes("SUM(NETSLSCOSTVALUE)")) &&
-    !upperSql.includes("NETAMOUNT") &&
-    !upperSql.includes("SALENETAMOUNT");
+      upperSql.includes("SUM(PURCOST)") ||
+      upperSql.includes("SUM(NETSLSCOSTVALUE)")) &&
+    !allowedRevenue;
 
-  if (usesMRP || usesBeforeTax || usesCostOnly) {
+  if ((usesItemMrp || usesBeforeTax || usesCostOnly) && !allowedRevenue) {
     throw createValidationError(
-      "Revenue must use NetAmount (PowerBI views) or SaleNetAmount (VwAISalesData). " +
-      "MRP, NetAmountBeforeTax, and cost-only fields are not valid revenue metrics.",
+      "Revenue must use SUM(MrpValue), SUM(NetAmount), or SUM(NetSlsNetAmount) from an allowlisted Power BI view. " +
+        "Do not use ItemMRP, cost-only fields, or amount-before-tax as revenue.",
       "invalid_revenue_metric"
     );
   }
@@ -255,9 +258,98 @@ function validateSql(sql, context) {
   return clean;
 }
 
+/**
+ * Structural accuracy gate (LangGraph check_sql) — no DB round-trip.
+ * Catches revenue metric drift and unbounded line-level scans before execute_sql.
+ */
+function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
+  const sql = String(generatedSql || "").trim();
+  const q = String(userQuestion || "").toLowerCase();
+  if (!sql) {
+    return { isValid: false, reason: "No SQL was generated." };
+  }
+
+  const upper = sql.toUpperCase();
+  const asksPurchase =
+    /\b(purchase|procurement|pur_report|purxns|inward|grn)\b/.test(q) ||
+    (/\b(vendor|supplier)\b/.test(q) && /\b(purchase|pur_|procurement)\b/.test(q));
+
+  const asksRevenue =
+    !asksPurchase &&
+    (/\b(revenue|sales|turnover|salenetamount|gross|net\s*sales|mrp|mtd|ytd|qtd|invoice|bills?)\b/.test(q) ||
+      (/\b(highest|top|best|leading)\b/.test(q) &&
+        /\b(branch|branches|salesperson|staff|category|categories|department|dept|article|product|store)\b/.test(q)));
+
+  const amountTokens = ["MRPVALUE", "NETAMOUNT", "NETSLSNETAMOUNT", "SALENETAMOUNT", "APPNETVALUE"];
+  const purchaseAmountTokens = [
+    "NETPURNETAMOUNT",
+    "PURNETAMOUNT",
+    "PURMRPVALUE",
+    "PURCOSTVALUE",
+    "PURCHASEPRICE",
+    "NETPURCOST",
+    "PURNETAMOUNT",
+  ];
+  const hasRevenueAgg = amountTokens.some((t) => upper.includes(`SUM(${t}`) || upper.includes(`SUM([${t}]`) || upper.includes(`SUM( ${t}`));
+  const hasPurchaseAgg = purchaseAmountTokens.some(
+    (t) => upper.includes(`SUM(${t}`) || upper.includes(`SUM([${t}]`) || upper.includes(`SUM( ${t}`) || upper.includes(`SUM(ISNULL([${t}]`)
+  );
+  const hasAnyAgg =
+    /\bSUM\s*\(/i.test(sql) ||
+    /\bCOUNT\s*\(/i.test(sql) ||
+    /\bAVG\s*\(/i.test(sql) ||
+    /\bMIN\s*\(/i.test(sql) ||
+    /\bMAX\s*\(/i.test(sql);
+
+  if (asksPurchase && hasAnyAgg && !hasPurchaseAgg && !hasRevenueAgg) {
+    return {
+      isValid: false,
+      reason:
+        "Purchase questions must aggregate purchase amount (e.g. SUM(NetPurNetAmount) on PURXNS, or SUM(PurchasePrice*PurQty) on SUPPLIER_PUR_REPORT).",
+    };
+  }
+
+  if (asksRevenue && hasAnyAgg && !hasRevenueAgg) {
+    const preferred = String(context?.amountCol || "MrpValue");
+    return {
+      isValid: false,
+      reason:
+        `The user requested revenue/sales metrics, but the query does not aggregate canonical revenue ` +
+        `(SUM(${preferred}) or SUM(NetAmount)). Do not use quantity-only or cost-only fields.`,
+    };
+  }
+
+  const hasTop = TOP_PATTERN.test(sql);
+  if (upper.includes("SELECT") && !hasAnyAgg && !hasTop) {
+    return {
+      isValid: false,
+      reason:
+        "Unbounded non-aggregated scan detected. Apply server-side aggregation (SUM, COUNT, AVG) " +
+        "or include TOP (100) when returning raw rows.",
+    };
+  }
+
+  if (/\bSELECT\s+\*/i.test(sql) && !hasAnyAgg && !hasTop) {
+    return {
+      isValid: false,
+      reason: "SELECT * without aggregation or TOP is blocked — specify columns and aggregate.",
+    };
+  }
+
+  const legacyView = /\bVWAISALESDATA\b/i.test(sql);
+  if (legacyView && String(context?.domain || "").toLowerCase() === "sales") {
+    return {
+      isValid: false,
+      reason: "Use dbo.VW_MB_POWERBI_APP_REPORT (allowlisted) instead of dbo.VwAISalesData.",
+    };
+  }
+
+  return { isValid: true };
+}
+
 /** True if SQL appears to constrain by a dynamic date (GETDATE, DATEADD, YEAR/MONTH on dates, CAST-as-date patterns). */
 function hasDatePredicate(sql) {
   return DATE_FILTER_PATTERN.test(String(sql || ""));
 }
 
-module.exports = { validateSql, hasDatePredicate };
+module.exports = { validateSql, validateSqlAccuracy, hasDatePredicate };

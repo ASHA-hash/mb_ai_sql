@@ -4,7 +4,12 @@
  */
 const OpenAI = require("openai");
 const { validateSql } = require("./services/sql-validator");
+const { validatePerformanceShape } = require("./services/query-performance");
 const { DATASET_REGISTRY } = require("./datasets-registry");
+const {
+  buildAiSalesFactPromptBlock,
+  remapLegacyColumnNames,
+} = require("./services/canonical-sales-sql");
 
 /** Domain hint for revenue guard + validation (sales | purchase | stock | generic). */
 function inferAiDomain(question) {
@@ -47,14 +52,21 @@ function buildAiValidationContext(opts = {}) {
  * @param {ReturnType<typeof buildAiValidationContext>} validationContext
  */
 function finalizeGeneratedSelectSql(sqlRaw, validationContext) {
-  let s = String(sqlRaw || "").trim();
+  let s = remapLegacyColumnNames(String(sqlRaw || "").trim());
   s = fixCommonTsqlMistakes(s);
   s = assertSafeSelectSql(s);
   const maxRows = parseInt(String(process.env.AI_SQL_MAX_RESULT_ROWS || "500"), 10) || 500;
   const capped = Math.min(Math.max(maxRows, 1), 2000);
   s = enforceTopLimit(s, capped);
+  const question = validationContext?.question || "";
   try {
-    return validateSql(s, validationContext);
+    validatePerformanceShape(s, question);
+  } catch (e) {
+    if (!e.status) e.status = 400;
+    throw e;
+  }
+  try {
+    return validateSql(s, { ...validationContext, question });
   } catch (e) {
     if (!e.status) e.status = 400;
     throw e;
@@ -183,6 +195,8 @@ STRICT RULES — violating any rule causes a runtime error
 5. No INSERT, UPDATE, DELETE, DDL, EXEC, OPENROWSET, SQL comments (-- or /* */), or multiple statements.
 6. No trailing semicolons.
 
+${buildAiSalesFactPromptBlock()}
+
 ════════════════════════════════════════════════════
 DATE ARITHMETIC — T-SQL ONLY (critical — wrong syntax = SQL Server error)
 ════════════════════════════════════════════════════
@@ -230,8 +244,9 @@ DATE PATTERNS (replace DateCol with actual column from focused schema):
       AND CAST(DateCol AS date) <= CAST(GETDATE() AS date)
 
 DATE COLUMN NAMES — use the column from the FOCUSED TABLE block:
-- Sales views: typically InvoiceDt, InvoiceDate, SaleDt
-- Purchase views: typically PurchaseDt, DocDt, PurchaseDate
+- Primary sales fact (VW_MB_POWERBI_APP_REPORT): XnDt
+- Other sales Power BI views: XnDt, XnMemoDate, CashmemoDt
+- Purchase views: PurchaseDt, PurInvoiceDt
 - If no date column is listed, omit the date filter and return all rows.
 
 Date predicates may appear in a WHERE clause OR in a JOIN ON clause — both are valid T-SQL.
@@ -240,14 +255,14 @@ Date predicates may appear in a WHERE clause OR in a JOIN ON clause — both are
 DOMAIN KNOWLEDGE — retail fashion/apparel ERP
 ════════════════════════════════════════════════════
 - ONLY use column names visible in the FOCUSED TABLE block or schema below.
-- If a concept has no matching column (e.g. "category", "NetAmount"), omit it or use the closest listed column.
-- NEVER invent: NetAmount, InvCategoryName, CategoryName, ProductName, VendorName unless they appear in the schema.
-- On dbo.VwAISalesData: use SaleNetAmount for the sale amount column (when listed).
-- On purchase PowerBI views: use the column whose name contains Amount, Value, NetAmt, or Cost.
-- For readable product/item names: JOIN sales with item master (dbo.VwMstItems or dbo.VwAIMstItems) on ItemId and SELECT Description / ArticleShortName / ItemCode.
-- For customer details: JOIN or use dbo.VwAICustomerDetails when present in focused schema.
-- For salesperson names: JOIN or use dbo.VwAISalesPerson when present.
-- For branch names: JOIN or use dbo.VwAIBranch on BranchId when branch name is needed.
+- If a concept has no matching column, use the closest listed column from the CANONICAL SALES FACT block.
+- NEVER invent columns. NEVER use dbo.VwAISalesData or dbo.VwAISalesPerson — not allowlisted.
+- Sales revenue on VW_MB_POWERBI_APP_REPORT: SUM(MrpValue). User saying "SaleNetAmount" → MrpValue.
+- On SLSXNS / SLS_REPORT: NetAmount or NetSlsNetAmount when listed.
+- On purchase PowerBI views: PurNetAmount, PurCostValue, or amount columns from schema.
+- Branch / department / category: BranchAlias, DepartmentShortName, CategoryShortName on Power BI views (no master join).
+- Salesperson / staff / rep: GROUP BY SupplierName or SupplierAlias (no SalesPerson table in 28-view schema).
+- Product/article on APP_REPORT: ArticleNo when present; else use PRODUCT_MASTER only if allowlisted.
 
 COLUMN ALIASES (same concept, different names across views):
 - Para1Name = Color  (SLS_REPORT, PUR_REPORT, STOCK_REPORT, VwMstItems)
@@ -269,8 +284,9 @@ NET QUANTITY / VALUE FORMULAS:
 - Use pre-computed Net* columns where they exist — do NOT subtract manually unless Net* is absent.
 
 KEY METRIC COLUMNS BY VIEW:
-- Revenue/sales value  → NetAmount (VW_MB_POWERBI_SLS_REPORT, SLSXNS_REPORT)
-                      OR SaleNetAmount (dbo.VwAISalesData)
+- Revenue/sales value  → MrpValue (VW_MB_POWERBI_APP_REPORT — primary)
+                      OR NetAmount / NetSlsNetAmount (SLS_REPORT, SLSXNS_REPORT)
+                      Map user term "SaleNetAmount" to MrpValue on APP_REPORT
 - Sales cost of goods  → NetSlsCostValue (SLS_REPORT, SLSXNS_REPORT)
 - Gross margin         → NetAmount - NetSlsCostValue
 - Purchase cost        → PurCost (PUR_QTY_WITH_COST) or PurCostValue (PURXNS_REPORT)
@@ -312,7 +328,7 @@ dbo.VW_MB_POWERBI_STOCK_REPORT     → PurInvoiceDt, DepartmentShortName, Catego
 dbo.VW_MB_POWERBI_CBS_WITH_GIT     → PurInvoiceDt, DepartmentShortName, CategoryShortName, BranchAlias, SupplierName, ArticleNo, Para1Name, Para2Name, StockQty, GitQty, CbsCostValue, CbsMrpValue
 dbo.VW_MB_POWERBI_STO_REPORT       → XnDt, DepartmentShortName, CategoryShortName, BranchAlias, SupplierName, ArticleNo, Para1Name, Para2Name, StoQty, StoNetValue
 dbo.VW_MB_POWERBI_STI_REPORT       → XnDt, DepartmentShortName, CategoryShortName, BranchAlias, SupplierName, ArticleNo, Para1Name, Para2Name, StiQty, StiNetValue
-dbo.VW_MB_POWERBI_APP_REPORT       → XnDt, DepartmentShortName, CategoryShortName, BranchAlias, SupplierName, ArticleNo, Para1Name, Para2Name, AppQty, AppNetValue
+dbo.VW_MB_POWERBI_APP_REPORT       → XnDt, XnDtMonth, XnNo, XnId, BranchAlias, DepartmentShortName, CategoryShortName, SupplierName, SupplierAlias, ArticleNo, Para1Name, Para2Name, AppQty, MrpValue, CostValue, NetAmount
 dbo.VW_MB_POWERBI_APR_REPORT       → XnDt, DepartmentShortName, CategoryShortName, BranchAlias, SupplierName, ArticleNo, Para1Name, Para2Name, AprQty, AprNetValue
 dbo.VW_MB_POWERBI_VENDOR_MASTER    → SupplierId, SupplierName, SupplierAlias, Address, City, State, Country, GSTIN, PANNo, CreditLimit, CreditDays, MSMEStatus, SupplierGroupName, ActiveStatus
 dbo.VW_MB_POWERBI_BRANCH_LIST      → BranchId, BranchAlias, BranchName, City, State, Country, ActiveStatus

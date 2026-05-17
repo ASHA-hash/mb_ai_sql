@@ -1,0 +1,623 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "database": "zRetailHQ0",
+  "target_view": "dbo.VW_MB_POWERBI_APP_REPORT",
+  "semantic_mappings": {
+    "metrics": {
+      "SaleNetAmount": {
+        "canonical_column": "MrpValue",
+        "description": "Gross sales value before expenses. Total retail revenue amount. Use SUM(MrpValue)."
+      },
+      "net_sales": {
+        "canonical_column": "MrpValue",
+        "description": "Total revenue collection. Maps directly to MrpValue."
+      },
+      "turnover": {
+        "canonical_column": "MrpValue",
+        "description": "Gross intake value. Maps directly to MrpValue."
+      },
+      "revenue": {
+        "canonical_column": "MrpValue",
+        "description": "Total financial intake. Maps directly to MrpValue."
+      },
+      "quantity": {
+        "canonical_column": "AppQty",
+        "description": "Physical items or volume sold. Pieces moved. Use SUM(AppQty)."
+      },
+      "pcs": {
+        "canonical_column": "AppQty",
+        "description": "Count of individual product units. Maps directly to AppQty."
+      },
+      "product_cost": {
+        "canonical_column": "CostValue",
+        "description": "Total investment spent to source items. Use SUM(CostValue)."
+      },
+      "unit_price": {
+        "canonical_column": "ItemMRP",
+        "description": "The sticker price tag on a single unit. Use AVG(ItemMRP) or ItemMRP."
+      },
+      "profit": {
+        "canonical_column": "MrpValue",
+        "description": "When profit/margin is asked without cost breakdown, use MrpValue minus CostValue in SQL."
+      }
+    },
+    "dimensions": {
+      "salesperson": {
+        "canonical_column": "SupplierName",
+        "description": "No employee column exists. Default to SupplierName as proxy for vendor/salesperson performance."
+      },
+      "staff": {
+        "canonical_column": "SupplierName",
+        "description": "Fallback operational entity dimension. Maps directly to SupplierName."
+      },
+      "store": {
+        "canonical_column": "BranchAlias",
+        "description": "Physical retail shop outlet location name."
+      },
+      "location": {
+        "canonical_column": "BranchAlias",
+        "description": "Geographic retail placement indicator. Maps directly to BranchAlias."
+      },
+      "date": {
+        "canonical_column": "XnDt",
+        "description": "The true calendar transaction execution date. Format is YYYY-MM-DD."
+      },
+      "month": {
+        "canonical_column": "XnDtMonth",
+        "description": "Textual month label (e.g. May 2026). Prefer for GROUP BY when present."
+      },
+      "department": {
+        "canonical_column": "DepartmentShortName",
+        "description": "Merchandise department dimension."
+      },
+      "category": {
+        "canonical_column": "CategoryShortName",
+        "description": "Merchandise category dimension."
+      }
+    }
+  },
+  "forced_date_logic": {
+    "engine": "T-SQL / SQL Server",
+    "target_field": "XnDt",
+    "intervals": {
+      "mtd": "CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+      "qtd": "CAST(XnDt AS date) >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE()) BETWEEN 4 AND 6 THEN YEAR(GETDATE()) WHEN MONTH(GETDATE()) BETWEEN 7 AND 9 THEN YEAR(GETDATE()) WHEN MONTH(GETDATE()) BETWEEN 10 AND 12 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE())-1 END, CASE WHEN MONTH(GETDATE()) BETWEEN 4 AND 6 THEN 4 WHEN MONTH(GETDATE()) BETWEEN 7 AND 9 THEN 7 WHEN MONTH(GETDATE()) BETWEEN 10 AND 12 THEN 10 ELSE 1 END, 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+      "ytd": "CAST(XnDt AS date) >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE())>=4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE())-1 END, 4, 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+      "30d": "CAST(XnDt AS date) >= DATEADD(day, -30, CAST(GETDATE() AS date))",
+      "90d": "CAST(XnDt AS date) >= DATEADD(day, -90, CAST(GETDATE() AS date))",
+      "180d": "CAST(XnDt AS date) >= DATEADD(month, -6, CAST(GETDATE() AS date))",
+      "today": "CAST(XnDt AS date) = CAST(GETDATE() AS date)",
+      "yesterday": "CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))"
+    }
+  },
+  "_info": "Rich business semantic layer for zRetailHQ0 retail ERP. Used by RAG indexer to inject business context into AI prompts.",
+  "dbo.VW_MB_POWERBI_SLSXNS_REPORT": {
+    "purpose": "Primary sales transactions view. The single best view for all sales analysis — revenue, quantity, returns, GST. Each row is one article sold/returned on one transaction.",
+    "primaryUseCase": "MTD/QTD/YTD sales, branch performance, department/category breakdown, supplier sell-through, net revenue after returns",
+    "dateColumn": "XnDt",
+    "branchColumn": "BranchAlias",
+    "revenueColumn": "NetSlsNetAmount",
+    "keyColumns": {
+      "XnDt": "Transaction date (datetime). Always CAST to date for WHERE comparisons. Use for MTD/QTD/YTD/date range filters.",
+      "XnDtMonth": "Pre-formatted month label (e.g. 'Apr-2026'). Use for monthly GROUP BY instead of FORMAT().",
+      "BranchAlias": "Branch short code e.g. '01-SE', '02-MU'. Use this on all PowerBI views. NEVER use BranchId on this view.",
+      "DepartmentShortName": "Short department name e.g. 'WOMEN', 'MENS', 'KIDS'. Primary dimension for department analysis.",
+      "CategoryShortName": "Short category name e.g. 'SAREE', 'KURTA'. Primary dimension for category analysis.",
+      "SupplierName": "Full supplier/vendor name. Use for supplier-wise analysis.",
+      "SupplierAlias": "Short supplier code. Alternative to SupplierName.",
+      "ArticleNo": "Article/style number. Use for product-level analysis.",
+      "Color": "Color of the garment (Para1).",
+      "Size": "Size of the garment (Para2).",
+      "Fabric": "Fabric type e.g. Cotton, Silk, Georgette.",
+      "Concept": "Design concept or collection name.",
+      "ItemMRP": "Maximum Retail Price per unit. NOT revenue.",
+      "CostPrice": "Purchase cost per unit. NOT revenue. Use for margin analysis.",
+      "SlsQty": "Gross sales quantity before returns.",
+      "SlsMrpValue": "Gross MRP value of sales. NOT net revenue.",
+      "SlsCostValue": "Cost value of goods sold. Use for profit margin.",
+      "SlsNetAmount": "Gross net sales amount BEFORE deducting returns.",
+      "SlrQty": "Sales return quantity. Positive number representing returns.",
+      "SlrNetAmount": "Sales return amount. Deduct from SlsNetAmount to get net.",
+      "NetSlsQty": "Net sales quantity = SlsQty - SlrQty. Use for unit sales.",
+      "NetSlsNetAmount": "NET REVENUE = SlsNetAmount - SlrNetAmount. PRIMARY REVENUE METRIC. Always use this for sales revenue.",
+      "NetSlsCostValue": "Net cost value. Use for gross profit = NetSlsNetAmount - NetSlsCostValue.",
+      "NetSlsMrpValue": "Net MRP value. Use for discount analysis: MRP - Net = discount.",
+      "CGSTAmount": "Central GST amount collected.",
+      "SGSTAmount": "State GST amount collected.",
+      "IGSTAmount": "Integrated GST for inter-state transactions.",
+      "BillCount": "Number of invoices/bills. Use for footfall and average bill value = NetSlsNetAmount/BillCount."
+    },
+    "commonFilters": ["XnDt date range", "BranchAlias = '01-SE'", "DepartmentShortName", "CategoryShortName", "SupplierAlias"],
+    "neverUse": ["BranchId (not in this view)", "InvoiceDt (not in this view)", "SaleNetAmount (not in this view)", "MrpValue for revenue", "CostValue for revenue"]
+  },
+
+  "dbo.VwAISalesData": {
+    "purpose": "Core sales transaction table with invoice-level detail. Best for customer analysis, salesperson performance, invoice lookup. Each row is one item on one invoice.",
+    "primaryUseCase": "Customer purchase history, salesperson ranking, invoice detail, JOIN with VwMstItems for product info, JOIN with VwAIBranch for branch names",
+    "dateColumn": "InvoiceDt",
+    "branchColumn": "BranchId",
+    "revenueColumn": "SaleNetAmount",
+    "keyColumns": {
+      "InvoiceDt": "Invoice/transaction date (datetime). CAST to date for comparisons.",
+      "InvoiceId": "Unique invoice identifier.",
+      "InvoiceNo": "Invoice number (human-readable). COUNT(DISTINCT InvoiceNo) = bill count.",
+      "BranchId": "Numeric branch ID. JOIN VwAIBranch ON BranchId to get branch name. NEVER use BranchAlias here.",
+      "CustomerId": "Customer identifier. JOIN VwAICustomerDetails ON CustomerId.",
+      "ItemId": "Item/product identifier. JOIN VwMstItems ON ItemId for product details.",
+      "SalesPrice": "Unit selling price.",
+      "Quantity": "Units sold per line item.",
+      "SaleAmountBeforeTax": "Pre-tax sales amount. NOT the final revenue metric.",
+      "TaxAmount": "Tax collected.",
+      "SaleNetAmount": "NET REVENUE for this view = post-tax net amount. PRIMARY REVENUE for VwAISalesData.",
+      "SalesPersonId": "Salesperson identifier. JOIN VwAISalesPerson ON SalesPersonId."
+    },
+    "commonFilters": ["InvoiceDt date range", "BranchId = 1", "CustomerId"],
+    "joinHints": [
+      "JOIN dbo.VwAIBranch b ON s.BranchId = b.BranchId  -- to get BranchName/ShortName",
+      "JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId  -- to get product name/category/dept",
+      "JOIN dbo.VwAICustomerDetails c ON s.CustomerId = c.CustomerId  -- for customer details",
+      "JOIN dbo.VwAISalesPerson sp ON s.SalesPersonId = sp.SalesPersonId  -- for salesperson name"
+    ],
+    "neverUse": ["BranchAlias (not in this view)", "NetSlsNetAmount (not in this view)"]
+  },
+
+  "dbo.VW_MB_POWERBI_SLS_REPORT": {
+    "purpose": "Summarised sales report with product attributes. Good for article-level analysis with supplier and branch breakdown.",
+    "dateColumn": "XnMemoDate",
+    "branchColumn": "BranchAlias",
+    "revenueColumn": "NetAmount",
+    "keyColumns": {
+      "XnMemoDate": "Transaction memo date. Use for date filtering.",
+      "NetAmount": "Net sales amount. Revenue metric for this view.",
+      "NetSlsQty": "Net quantity sold.",
+      "NetSlsCostValue": "Net cost of goods sold.",
+      "SlsExtCostValue": "Extended cost value.",
+      "Para1Name": "Color attribute.",
+      "Para2Name": "Size attribute.",
+      "Fabric": "Fabric type.",
+      "Concept": "Design concept.",
+      "BranchAlias": "Branch code.",
+      "SupplierAlias": "Supplier short code.",
+      "ArticleNo": "Article number."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_SLS_ARTICLE_REPORT": {
+    "purpose": "Article/product level sales report. Best for article-level sell-through analysis by category and fabric.",
+    "dateColumn": "XnMemoDate",
+    "keyColumns": {
+      "ArticleNo": "Article number for product analysis.",
+      "CategoryShortName": "Category of the article.",
+      "Fabric": "Fabric type.",
+      "Concept": "Design concept.",
+      "ArticleMRP": "Article MRP.",
+      "NetSlsQty": "Net quantity sold.",
+      "NetAmount": "Net revenue.",
+      "NetSlsCostValue": "Net cost."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_SLS_BILLCOUNT": {
+    "purpose": "Bill count / footfall per branch per day. Simplest view — use for footfall trends.",
+    "dateColumn": "CashmemoDt",
+    "branchColumn": "BranchId",
+    "keyColumns": {
+      "BranchId": "Numeric branch ID. JOIN VwAIBranch for name.",
+      "CashmemoDt": "Date of transactions.",
+      "BillCount": "Number of bills/transactions that day."
+    },
+    "neverUse": ["BranchAlias (not in this view — use BranchId and JOIN VwAIBranch)"]
+  },
+
+  "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID": {
+    "purpose": "Sales transaction view with branch/customer/salesperson details but without item ID. Good for sales rep analysis and customer-level reporting without product join.",
+    "dateColumn": "CashmemoDt",
+    "branchColumn": "BranchAlias",
+    "revenueColumn": "SalesNetAmount",
+    "keyColumns": {
+      "BranchAlias": "Branch code.",
+      "BranchName": "Full branch name.",
+      "BranchRegion": "Geographic region.",
+      "BranchAreaManager": "Area manager name.",
+      "CashmemoDt": "Transaction date.",
+      "SalesPersonName": "Name of salesperson who made the sale.",
+      "SalespersonEmpId": "Salesperson employee ID.",
+      "CustomerName": "Customer full name.",
+      "CustomerMobileNumber": "Customer mobile.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "SalesQuantity": "Quantity sold.",
+      "SalesCost": "Cost of goods.",
+      "SalesNetAmount": "Net revenue for this view.",
+      "NetAmountBeforeTax": "Pre-tax amount."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_MIS_SUPPLIER_SLS_DATA": {
+    "purpose": "Monthly supplier-wise sales MIS report. Best for monthly supplier performance analysis.",
+    "dateColumn": "XnMemoDate",
+    "keyColumns": {
+      "XnMemoDate_MONTH": "Month number (1-12).",
+      "XnMemoDate_MONTHNAME": "Month name e.g. 'April 2026'.",
+      "SupplierName": "Supplier full name.",
+      "SupplierAlias": "Supplier short code.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "NetSlsQty": "Net quantity sold to end customers.",
+      "NetAmount": "Net revenue.",
+      "NetAmountBeforeTax": "Pre-tax revenue.",
+      "MrpValue": "MRP value. For discount analysis.",
+      "NetSlsCostValue": "Cost of goods sold."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_PUR_REPORT": {
+    "purpose": "Purchase report — what was bought from suppliers, by branch and department. Each row is one article purchased.",
+    "dateColumn": "PurchaseDt",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "PurchaseDt": "Date goods were received/purchased.",
+      "PurInvoiceDt": "Supplier invoice date.",
+      "PurInvoiceNo": "Supplier invoice number.",
+      "BranchAlias": "Branch that received goods.",
+      "SupplierName": "Supplier name.",
+      "SupplierAlias": "Supplier short code.",
+      "DepartmentShortName": "Department of purchased item.",
+      "CategoryShortName": "Category of purchased item.",
+      "ArticleNo": "Article number.",
+      "ItemMRP": "MRP of purchased item.",
+      "PurQty": "Quantity purchased."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_PURXNS_REPORT": {
+    "purpose": "Detailed purchase transactions including returns (PRT). Best for net purchase analysis and GST reconciliation.",
+    "dateColumn": "XnDt",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "XnDt": "Transaction date.",
+      "PurInvDate": "Purchase invoice date.",
+      "PurInvNo": "Purchase invoice number.",
+      "BranchAlias": "Receiving branch.",
+      "SupplierName": "Supplier name.",
+      "SupplierAlias": "Supplier short code.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "ArticleNo": "Article number.",
+      "CostPrice": "Per-unit cost price.",
+      "ItemMRP": "Item MRP.",
+      "PurQty": "Purchase quantity.",
+      "PurCostValue": "Total cost of purchases.",
+      "PurNetAmount": "Purchase net amount.",
+      "PurMrpValue": "Purchase MRP value.",
+      "PurCGSTAmount": "CGST on purchases.",
+      "PurSGSTAmount": "SGST on purchases.",
+      "PurIGSTAmount": "IGST on purchases.",
+      "PrtQty": "Purchase return quantity.",
+      "PrtNetAmount": "Purchase return amount.",
+      "NetPurQty": "Net purchase qty = PurQty - PrtQty.",
+      "NetPurCost": "Net purchase cost.",
+      "NetPurNetAmount": "Net purchase amount after returns. PRIMARY PURCHASE REVENUE METRIC."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_PRT_REPORT": {
+    "purpose": "Purchase return transactions only. Use for return-to-supplier analysis.",
+    "dateColumn": "PurReturnDt",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "PurReturnDt": "Date of purchase return.",
+      "PurInvoiceDt": "Original purchase invoice date.",
+      "BranchAlias": "Branch returning goods.",
+      "SupplierName": "Supplier goods returned to.",
+      "ArticleNo": "Article returned.",
+      "ItemMRP": "MRP of returned item.",
+      "PrtQty": "Return quantity."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_PUR_QTY_WITH_COST": {
+    "purpose": "Compact purchase summary with quantity and cost. Best for quick purchase trend and cost analysis.",
+    "dateColumn": "PurchaseDt",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "PurchaseDt": "Purchase date.",
+      "BranchAlias": "Receiving branch.",
+      "SupplierAlias": "Supplier code.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "PurQty": "Purchased quantity.",
+      "PurCost": "Purchase cost value."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT": {
+    "purpose": "Supplier-wise purchase detail with product attributes. Best for supplier purchase analysis with style details.",
+    "dateColumn": "PurDate",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "PurDate": "Purchase date.",
+      "SupplierName": "Supplier full name.",
+      "SupplierAlias": "Supplier short code.",
+      "BranchAlias": "Branch.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "ArticleNo": "Article number.",
+      "PurchasePrice": "Purchase price per unit.",
+      "ItemMRP": "MRP per unit.",
+      "ItemWSP": "Wholesale price.",
+      "PurQty": "Quantity purchased.",
+      "Concept": "Design concept.",
+      "Silhoutte": "Garment silhouette style.",
+      "Dupatta": "Whether includes dupatta."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_STOCK_REPORT": {
+    "purpose": "Current stock on hand by article, branch, category. Best for inventory analysis and stock ageing.",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "BranchAlias": "Branch holding the stock.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "SupplierName": "Supplier of the stock.",
+      "ArticleNo": "Article number.",
+      "Para1Name": "Color.",
+      "Para2Name": "Size.",
+      "Fabric": "Fabric type.",
+      "Concept": "Concept.",
+      "ItemId": "Item ID. JOIN VwMstItems for full details.",
+      "ItemMRP": "MRP per unit.",
+      "PurInvoiceDt": "Purchase invoice date (for ageing analysis).",
+      "StockQty": "Current stock quantity on hand."
+    },
+    "commonUseCase": "Stock at branch X, total stock by category, articles with zero stock, slow-moving stock (high stock low sales)"
+  },
+
+  "dbo.VW_MB_POWERBI_CBS_WITH_GIT": {
+    "purpose": "Closing Balance Stock + Goods In Transit. Complete inventory picture including goods in transit between branches.",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "BranchAlias": "Branch.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "ArticleNo": "Article number.",
+      "CostPrice": "Unit cost price.",
+      "MRP": "Unit MRP.",
+      "SupplierName": "Supplier.",
+      "PurInvoiceDt": "Purchase date for ageing.",
+      "GitQty": "Goods In Transit quantity — received at source, not yet at destination.",
+      "GitCostValue": "Cost value of goods in transit.",
+      "StockQty": "Physical stock on hand at branch.",
+      "CbsCostValue": "Closing balance stock at cost value.",
+      "CbsMrpValue": "Closing balance stock at MRP value."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_APP_REPORT": {
+    "purpose": "Primary AI / text-to-SQL sales fact (28-view allowlist). Approval/consignment lines — use MrpValue for revenue, AppQty for units, XnDt for dates.",
+    "primaryUseCase": "MTD/QTD/YTD sales, branch/category/supplier breakdown, AI Query default target_view",
+    "dateColumn": "XnDt",
+    "branchColumn": "BranchAlias",
+    "revenueColumn": "MrpValue",
+    "keyColumns": {
+      "XnDt": "Approval transaction date.",
+      "BranchAlias": "Branch.",
+      "SupplierName": "Supplier.",
+      "ArticleNo": "Article.",
+      "AppQty": "Approval quantity — goods on consignment.",
+      "MrpValue": "PRIMARY REVENUE METRIC for AI queries. User term SaleNetAmount maps here. Use SUM(MrpValue).",
+      "CostValue": "Cost value.",
+      "NetAmount": "Net value of approval transaction.",
+      "BillCount": "Number of approval bills."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_APR_REPORT": {
+    "purpose": "Approval returns — goods returned to supplier from consignment/approval.",
+    "dateColumn": "XnDt",
+    "branchColumn": "BranchAlias",
+    "keyColumns": {
+      "XnDt": "Return date.",
+      "BranchAlias": "Branch.",
+      "SupplierName": "Supplier.",
+      "ArticleNo": "Article.",
+      "AppQty": "Returned approval quantity.",
+      "NetAmount": "Return value."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_STI_REPORT": {
+    "purpose": "Stock Transfer In — goods received at target branch from source branch. Use for inter-branch transfer analysis.",
+    "dateColumn": "XnDt",
+    "keyColumns": {
+      "XnDt": "Transfer date.",
+      "SourceBranchAlias": "Branch that sent goods.",
+      "SourceBranchId": "Source branch ID.",
+      "TargetBranchAlias": "Branch that received goods.",
+      "TargetBranchId": "Target branch ID.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "SupplierName": "Supplier.",
+      "ArticleNo": "Article.",
+      "StiQty": "Stock transfer in quantity.",
+      "NetAmount": "Net transfer value.",
+      "MrpValue": "MRP value transferred."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_STO_REPORT": {
+    "purpose": "Stock Transfer Out — goods dispatched from source branch to target branch.",
+    "dateColumn": "XnDt",
+    "keyColumns": {
+      "XnDt": "Transfer date.",
+      "SourceBranchAlias": "Dispatching branch.",
+      "TargetBranchAlias": "Destination branch.",
+      "StoQty": "Stock transfer out quantity.",
+      "NetAmount": "Net transfer value."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_BRANCH_LIST": {
+    "purpose": "Branch master list. Use for listing all branches, filtering active branches, identifying warehouses.",
+    "keyColumns": {
+      "BranchId": "Numeric branch ID.",
+      "BranchName": "Full branch name.",
+      "ShortName": "Short branch code.",
+      "City": "City where branch is located.",
+      "State": "State.",
+      "ActiveStatus": "1 = Active, 0 = Inactive. Always filter WHERE ActiveStatus=1 unless asked for all.",
+      "IsWarehouse": "1 = Warehouse, 0 = Retail store."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_CATEGORY_MASTER": {
+    "purpose": "Category hierarchy master — Department > Category > Sub-category. Use for category drill-down or listing all categories.",
+    "keyColumns": {
+      "InvDepartmentName": "Department full name.",
+      "InvDepartmentShortName": "Department short name.",
+      "InvCategoryName": "Category full name.",
+      "InvCategoryShortName": "Category short name.",
+      "InvSubCategoryName": "Sub-category name.",
+      "InvSubCategoryShortName": "Sub-category short name."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_PRODUCT_MASTER": {
+    "purpose": "Complete product master with all style attributes. Use for product catalogue analysis and attribute-based filtering.",
+    "keyColumns": {
+      "ItemId": "Unique item identifier.",
+      "Itemcode": "Item code.",
+      "ArticleNo": "Article/style number.",
+      "DepartmentShortName": "Department.",
+      "CategoryShortName": "Category.",
+      "Colour": "Color attribute.",
+      "size": "Size attribute.",
+      "SupplierName": "Supplier.",
+      "FabricShortName": "Fabric type.",
+      "Property": "Fit/property (Regular, Slim, etc.).",
+      "Collection": "Collection name.",
+      "Concept": "Design concept.",
+      "Silhoutte": "Garment silhouette.",
+      "NECKLINE": "Neckline type.",
+      "SleeveType": "Sleeve type.",
+      "PurchasePrice": "Cost price.",
+      "ItemMRP": "Maximum retail price.",
+      "ItemWSP": "Wholesale price."
+    }
+  },
+
+  "dbo.VW_MB_POWERBI_VENDOR_MASTER": {
+    "purpose": "Vendor/supplier master with complete details including GST, credit terms, MSME status.",
+    "keyColumns": {
+      "PartyId": "Unique supplier ID.",
+      "PartyName": "Full supplier name.",
+      "PartyAlias": "Supplier short code.",
+      "City": "Supplier city.",
+      "State": "Supplier state.",
+      "TaxGSTINNo": "GST registration number.",
+      "TaxPanNo": "PAN number.",
+      "CreditDays": "Credit period in days.",
+      "CreditLimit": "Credit limit amount.",
+      "DiscountPercentage": "Trade discount %.",
+      "MarginPercentage": "Margin %.",
+      "MSMEBizType": "MSME business type.",
+      "MSMECategory": "MSME category (Micro/Small/Medium).",
+      "ContactEmail1": "Primary contact email.",
+      "ContactPhone1": "Primary contact phone."
+    }
+  },
+
+  "dbo.VwAIBranch": {
+    "purpose": "Branch master. Use for JOIN to get branch names from BranchId in VwAISalesData.",
+    "keyColumns": {
+      "BranchId": "Numeric branch ID — use to JOIN with VwAISalesData.",
+      "BranchName": "Full branch name.",
+      "BranchShortName": "Short branch name.",
+      "City": "City.",
+      "State": "State."
+    },
+    "joinHints": ["JOIN dbo.VwAIBranch b ON s.BranchId = b.BranchId  -- always use this when showing branch names with VwAISalesData"]
+  },
+
+  "dbo.VwAICustomerDetails": {
+    "purpose": "Customer master with contact details, loyalty group, birthday/anniversary. Join with VwAISalesData for customer purchase analysis.",
+    "keyColumns": {
+      "CustomerId": "Customer identifier — JOIN with VwAISalesData.",
+      "CustomerFirstName": "First name.",
+      "CustomerLastName": "Last name.",
+      "ContactMobile": "Mobile number.",
+      "ContactEmail": "Email.",
+      "City": "Customer city.",
+      "State": "State.",
+      "CustomerGroupName": "Loyalty/customer group e.g. Silver, Gold, Platinum.",
+      "BranchName": "Home branch.",
+      "BirthdayDt": "Birthday. For birthday month: MONTH(BirthdayDt)=MONTH(GETDATE()). NEVER filter by year.",
+      "AnniversaryDt": "Wedding anniversary. Same month-only filter rule as birthday.",
+      "CreditLimit": "Customer credit limit.",
+      "ActiveStatus": "1=Active customer.",
+      "CreatedOn": "Customer registration date. Use for new customer acquisition analysis.",
+      "LastUpdate": "Last profile update."
+    },
+    "neverUse": ["YEAR(BirthdayDt) = YEAR(GETDATE()) — always 0 rows since birthday year is birth year, not current year"]
+  },
+
+  "dbo.VwAISalesPerson": {
+    "purpose": "Salesperson master. JOIN with VwAISalesData for salesperson performance ranking.",
+    "keyColumns": {
+      "SalesPersonId": "Salesperson ID — JOIN with VwAISalesData.SalesPersonId.",
+      "SalesPersonName": "Full name.",
+      "SalesPersonShortName": "Short name."
+    }
+  },
+
+  "dbo.VwAIStockData": {
+    "purpose": "Current stock snapshot — simplest stock view. One row per item per branch.",
+    "keyColumns": {
+      "ItemId": "Item ID — JOIN VwMstItems for product details.",
+      "BranchId": "Branch ID — JOIN VwAIBranch for branch name.",
+      "StockQty": "Current quantity on hand."
+    }
+  },
+
+  "dbo.VwAISupplier": {
+    "purpose": "Supplier master for AI views. JOIN with VwAISalesData not directly possible — use VwMstItems.PurPartyId.",
+    "keyColumns": {
+      "PurPartyId": "Supplier ID.",
+      "PartyName": "Full supplier name.",
+      "ShortName": "Short name.",
+      "PartyAlias": "Alias code.",
+      "City": "Supplier city.",
+      "State": "State."
+    }
+  },
+
+  "dbo.VwMstItems": {
+    "purpose": "Complete item/product master. JOIN with VwAISalesData ON ItemId for product-level sales analysis. Contains all product attributes.",
+    "keyColumns": {
+      "ItemId": "Item identifier — JOIN with VwAISalesData.ItemId.",
+      "Itemcode": "Item code.",
+      "ArticleNo": "Article/style number.",
+      "Description": "Full product description.",
+      "ArticleShortName": "Short article name.",
+      "ItemMRP": "Maximum retail price.",
+      "ItemWSP": "Wholesale price.",
+      "PurchasePrice": "Cost price.",
+      "InvDepartmentName": "Department name.",
+      "InvDepartmentShortName": "Department short name.",
+      "InvCategoryName": "Category name.",
+      "InvCategoryShortName": "Category short name.",
+      "InvSubCategoryName": "Sub-category name.",
+      "Para1Name": "Color attribute.",
+      "Para2Name": "Size attribute.",
+      "Para3Name": "Fabric type.",
+      "Para4Name": "Property/Fit.",
+      "SupplierName": "Supplier name.",
+      "SupplierAlias": "Supplier alias.",
+      "HSNCode": "HSN code for GST.",
+      "GstClassification": "GST rate classification.",
+      "PurInvoiceDt": "Last purchase invoice date.",
+      "PurInvoiceNo": "Last purchase invoice number."
+    }
+  }
+}

@@ -7,6 +7,42 @@
 
 const sql = require("mssql");
 const { enforceTopLimit } = require("../ai-sql");
+const { queryTimeoutMs, maxRowsForChat, validatePerformanceShape } = require("./query-performance");
+const { formatSystemObservation, isRecoverableDbError } = require("./metadata-translation-engine");
+const {
+  getCanonicalSalesTable,
+  getCanonicalSalesContext,
+  buildMtdWhereClause,
+  isSalesDomainQuestion,
+} = require("./canonical-sales-sql");
+
+/** Columns safe for DISTINCT / TOP discovery (no PII beyond business dimensions). */
+const DISCOVERABLE_COLUMNS = new Set([
+  "BranchAlias",
+  "SupplierName",
+  "CategoryShortName",
+  "DepartmentShortName",
+  "ArticleNo",
+  "Itemcode",
+]);
+
+function assertSafeIdentifier(name, label) {
+  const c = String(name || "")
+    .replace(/\[|\]/g, "")
+    .trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(c)) {
+    throw new Error(`Invalid ${label}: ${name}`);
+  }
+  return c;
+}
+
+function normalizeViewShort(viewName) {
+  const raw = String(viewName || getCanonicalSalesTable())
+    .replace(/^dbo\./i, "")
+    .replace(/\[|\]/g, "")
+    .trim();
+  return assertSafeIdentifier(raw, "view");
+}
 
 /**
  * Keyword-based view scorer — returns top-N most relevant views.
@@ -50,11 +86,12 @@ async function toolFindViewsForQuestion(pool, question, preferViewRaw) {
     if (/\b(product|item|article|sku|style|color|size|fabric)\b/.test(q) && (vl.includes("product") || v.startsWith("VwMst") || v.startsWith("VwAIMst")))
       score += 2;
     if (/\b(bill count|footfall|transaction count|billcount)\b/.test(q) && vl.includes("billcount")) score += 4;
-    if (/\b(salesperson|sales rep|agent|staff)\b/.test(q) && vl.includes("salesperson")) score += 3;
+    if (/\b(salesperson|sales rep|agent|staff)\b/.test(q) && (vl.includes("app_report") || vl.includes("supplier")))
+      score += 4;
     if (/\b(category|department|division|segment)\b/.test(q) && (vl.includes("category") || v.startsWith("VwMst") || v.startsWith("VwAIMst")))
       score += 2;
     if (/\b(average order value|aov|avg order)\b/.test(q)) {
-      if (v === "VwAISalesData" || v === "VwAIBranch") score += 4;
+      if (vl.includes("slsxns") || vl.includes("app_report") || vl.includes("sls_report")) score += 4;
     }
     if (/\b(mis|supplier.*sales|monthly.*sales)\b/.test(q) && vl.includes("mis")) score += 3;
     if (/\b(article|concept|silhouette|fabric|neckline)\b/.test(q) && vl.includes("article")) score += 3;
@@ -75,7 +112,8 @@ async function toolFindViewsForQuestion(pool, question, preferViewRaw) {
     top = [preferMatch, ...top.filter((v) => v !== preferMatch)].slice(0, 5);
   }
 
-  const recommended = top.length > 0 ? top : ["VwAISalesData", "VwAIBranch", "VwMstItems"];
+  const recommended =
+    top.length > 0 ? top : ["VW_MB_POWERBI_APP_REPORT", "VW_MB_POWERBI_SLSXNS_REPORT", "VW_MB_POWERBI_BRANCH_LIST"];
 
   return {
     recommended_views: recommended,
@@ -185,7 +223,7 @@ async function toolGetSampleRows(pool, viewName, limit) {
       warning =
         `⚠️ WARNING: ${viewName} has only ${totalRows} row(s) total. ` +
         `This is a master/lookup table. In ranking/TOP-N queries ALWAYS JOIN to it ` +
-        `from the fact table (e.g. FROM VwAISalesData s INNER JOIN ${viewName} m ON ...). ` +
+        `from the fact table (e.g. FROM VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) or allowlisted view). ` +
         `NEVER use it as the primary FROM table or you will get at most ${totalRows} results.`;
     }
   }
@@ -201,53 +239,279 @@ async function toolGetSampleRows(pool, viewName, limit) {
 
 async function toolGetDistinctValues(pool, viewName, columnName, limit) {
   const lim = Math.min(limit || 50, 200);
+  const view = assertSafeIdentifier(String(viewName).replace(/^dbo\./i, ""), "view");
+  const col = assertSafeIdentifier(columnName, "column");
   const r = await pool.request().query(`
-    SELECT DISTINCT TOP ${lim} [${columnName}]
-    FROM dbo.[${viewName}]
-    WHERE [${columnName}] IS NOT NULL
-    ORDER BY [${columnName}]
+    SELECT DISTINCT TOP ${lim} [${col}]
+    FROM dbo.[${view}] WITH (NOLOCK)
+    WHERE [${col}] IS NOT NULL
+    ORDER BY [${col}]
   `);
-  return r.recordset.map((row) => row[columnName]);
+  return r.recordset.map((row) => row[col]);
+}
+
+/**
+ * High-speed sampling — returns actual distinct strings from a column (no LLM guessing).
+ * @param {import("mssql").ConnectionPool} pool
+ * @param {string} columnName allowlisted dimension column
+ * @param {string} [searchTerm] optional LIKE filter
+ * @param {{ viewName?: string, limit?: number }} [opts]
+ */
+async function discoverColumnValues(pool, columnName, searchTerm = "", opts = {}) {
+  const col = assertSafeIdentifier(columnName, "column");
+  if (!DISCOVERABLE_COLUMNS.has(col)) {
+    return { column: col, values: [], error: "column_not_allowlisted_for_discovery" };
+  }
+
+  const view = normalizeViewShort(opts.viewName);
+  const limit = Math.min(Math.max(parseInt(String(opts.limit || 10), 10) || 10, 1), 50);
+  const term = String(searchTerm || "").trim().toLowerCase();
+
+  let query =
+    `SELECT DISTINCT TOP (${limit}) CAST([${col}] AS nvarchar(400)) AS v ` +
+    `FROM dbo.[${view}] WITH (NOLOCK) WHERE [${col}] IS NOT NULL`;
+  const req = pool.request();
+  if (term) {
+    query += ` AND LOWER(CAST([${col}] AS nvarchar(400))) LIKE @search`;
+    req.input("search", sql.NVarChar(400), `%${term}%`);
+  }
+  query += ` ORDER BY [${col}]`;
+
+  try {
+    req.timeout = Math.min(queryTimeoutMs(), 45000);
+    const result = await req.query(query);
+    const values = (result.recordset || [])
+      .map((row) => row.v)
+      .filter((v) => v != null && String(v).trim() !== "");
+    return { column: col, view: `dbo.${view}`, values };
+  } catch (error) {
+    return { column: col, view: `dbo.${view}`, values: [], error: error.message };
+  }
+}
+
+/**
+ * Top-N dimension labels by revenue (MTD window) — grounds "highest salesperson" style queries.
+ */
+async function discoverTopDimensionByRevenue(pool, dimensionCol, opts = {}) {
+  const col = assertSafeIdentifier(dimensionCol, "column");
+  if (!DISCOVERABLE_COLUMNS.has(col)) {
+    return { column: col, rows: [], error: "column_not_allowlisted_for_discovery" };
+  }
+
+  const view = normalizeViewShort(opts.viewName);
+  const limit = Math.min(Math.max(parseInt(String(opts.limit || 10), 10) || 10, 1), 30);
+  const ctx = getCanonicalSalesContext();
+  const dateCol = assertSafeIdentifier(ctx.dateCol, "dateCol");
+  const amountCol = assertSafeIdentifier(ctx.amountCol, "amountCol");
+  const whereClause =
+    String(opts.whereClause || "").trim() || buildMtdWhereClause(dateCol);
+
+  const query =
+    `SELECT TOP (${limit}) CAST([${col}] AS nvarchar(400)) AS label, ` +
+    `SUM(CAST([${amountCol}] AS float)) AS metric_value ` +
+    `FROM dbo.[${view}] WITH (NOLOCK) ` +
+    `WHERE [${col}] IS NOT NULL AND ${whereClause} ` +
+    `GROUP BY [${col}] ORDER BY metric_value DESC`;
+
+  try {
+    const req = pool.request();
+    req.timeout = Math.min(queryTimeoutMs(), 60000);
+    const result = await req.query(query);
+    const rows = (result.recordset || []).map((r) => ({
+      label: String(r.label ?? "").trim(),
+      metric_value: parseFloat(r.metric_value) || 0,
+    }));
+    return {
+      column: col,
+      view: `dbo.${view}`,
+      rows,
+      values: rows.map((r) => r.label).filter(Boolean),
+    };
+  } catch (error) {
+    return { column: col, view: `dbo.${view}`, rows: [], values: [], error: error.message };
+  }
+}
+
+function formatLiveColumnSamplesBlock(samplesByKey) {
+  if (!samplesByKey || typeof samplesByKey !== "object") return "";
+  const lines = [
+    "================================================================================",
+    "VERIFIED LIVE DATABASE COLUMN VALUES (use exact strings in WHERE / GROUP BY)",
+    "================================================================================",
+    "CRITICAL:",
+    "1. Use ONLY the exact strings below — do not guess spelling or capitalization.",
+    "2. Salesperson / staff / rep → column SupplierName on VW_MB_POWERBI_APP_REPORT.",
+    "3. Wrap MrpValue, AppQty, CostValue in SUM / COUNT / AVG — never return raw line scans.",
+  ];
+
+  const order = [
+    ["BranchAlias", "Available Branches (BranchAlias)"],
+    ["SupplierName", "Available Salespeople (SupplierName)"],
+    ["CategoryShortName", "Available Categories (CategoryShortName)"],
+    ["DepartmentShortName", "Available Departments (DepartmentShortName)"],
+  ];
+
+  for (const [key, title] of order) {
+    const entry = samplesByKey[key];
+    if (!entry) continue;
+    const vals = Array.isArray(entry.values) ? entry.values : [];
+    if (!vals.length) continue;
+    const preview = vals.slice(0, 12).map((v) => JSON.stringify(String(v))).join(", ");
+    lines.push(`- ${title}: ${preview}`);
+    if (entry.topByRevenue) {
+      lines.push(`  (ranked MTD by ${entry.amountCol || "MrpValue"} — highest first)`);
+    }
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+/**
+ * Cognitive loop: sample live column values before SQL generation.
+ */
+async function discoverLiveSamplesForQuestion(pool, question, viewName) {
+  const q = String(question || "").toLowerCase();
+  const view = normalizeViewShort(viewName);
+  const ctx = getCanonicalSalesContext();
+  const samples = {};
+  const tasks = [];
+
+  const wantsRank =
+    /\b(highest|lowest|best|worst|top|rank|leading|maximum|minimum)\b/.test(q);
+  const useTopByRevenue = wantsRank && isSalesDomainQuestion(question);
+
+  function addDiscover(col, { topByRevenue = false, searchTerm = "" } = {}) {
+    tasks.push(
+      (async () => {
+        const out = topByRevenue
+          ? await discoverTopDimensionByRevenue(pool, col, { viewName: view })
+          : await discoverColumnValues(pool, col, searchTerm, { viewName: view, limit: 12 });
+        samples[col] = {
+          values: out.values || [],
+          topByRevenue: Boolean(topByRevenue && out.rows?.length),
+          amountCol: ctx.amountCol,
+          error: out.error || null,
+        };
+      })()
+    );
+  }
+
+  if (/\b(branch|branches|store|outlet)\b/.test(q)) {
+    addDiscover(ctx.branchCol, { topByRevenue: useTopByRevenue });
+  }
+  if (/\b(salesperson|sales\s*person|salesman|sales\s*rep|staff|rep|employee)\b/.test(q)) {
+    addDiscover(ctx.staffDimCol, { topByRevenue: true });
+  }
+  if (/\b(supplier|vendor)\b/.test(q) && !samples[ctx.staffDimCol]) {
+    addDiscover(ctx.staffDimCol, { topByRevenue: useTopByRevenue });
+  }
+  if (/\b(categor|category)\b/.test(q)) {
+    addDiscover(ctx.catCol, { topByRevenue: useTopByRevenue });
+  }
+  if (/\b(department|dept)\b/.test(q)) {
+    addDiscover(ctx.deptCol, { topByRevenue: useTopByRevenue });
+  }
+
+  if (!tasks.length && isSalesDomainQuestion(question)) {
+    addDiscover(ctx.branchCol, { topByRevenue: false });
+    if (/\b(revenue|sales|amount)\b/.test(q)) {
+      addDiscover(ctx.staffDimCol, { topByRevenue: true });
+    }
+  }
+
+  await Promise.all(tasks);
+  const text = formatLiveColumnSamplesBlock(samples);
+  return { samples, text };
 }
 
 const FORBIDDEN_SQL_RE =
   /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|MERGE|EXEC(UTE)?|GRANT|REVOKE|DENY|OPENROWSET|OPENDATASOURCE|BULK|WAITFOR|XP_|SP_EXECUTESQL)\b/i;
 
-async function toolRunSelect(pool, sqlStr) {
-  const cleaned = String(sqlStr || "")
+const MAX_SELF_HEAL_ATTEMPTS = 3;
+
+/**
+ * Execute SELECT with validation + driver try/catch; returns rows or self-heal payload.
+ */
+async function executeSqlWithSelfHealing(pool, sqlString, opts = {}) {
+  const attemptCount = opts.attemptCount || 1;
+  const cleaned = String(sqlString || "")
     .replace(/--[^\n]*/g, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/;+\s*$/g, "")
     .trim();
 
   if (!cleaned.toUpperCase().startsWith("SELECT")) {
-    return { error: "BLOCKED: Statement must start with SELECT. No other statements are allowed." };
+    throw new Error("BLOCKED: Statement must start with SELECT.");
   }
   if (FORBIDDEN_SQL_RE.test(cleaned)) {
-    return {
-      error: "BLOCKED: Contains a forbidden keyword (INSERT/UPDATE/DELETE/DROP/EXEC etc.). Only SELECT is permitted.",
-    };
+    throw new Error("BLOCKED: Forbidden keyword in read-only pipeline.");
   }
 
-  const safeSql = enforceTopLimit(cleaned, 1000);
+  const safeSql = enforceTopLimit(cleaned, maxRowsForChat());
 
   try {
+    if (!opts.skipPerformanceValidation) {
+      validatePerformanceShape(safeSql, opts.question || "");
+    }
     const req = pool.request();
-    req.timeout = 30000;
+    req.timeout = queryTimeoutMs();
     const result = await req.query(safeSql);
     const rows = result.recordset || [];
+    const cap = maxRowsForChat();
     return {
+      ok: true,
       row_count: rows.length,
       columns: rows.length > 0 ? Object.keys(rows[0]) : [],
-      data: rows.slice(0, 500),
+      data: rows.slice(0, cap),
+      sql: safeSql,
     };
-  } catch (dbErr) {
+  } catch (error) {
+    const errMsg = error.message || String(error);
+    const observation = formatSystemObservation(
+      { message: errMsg, failed_sql: safeSql },
+      safeSql,
+      attemptCount
+    );
+
+    if (attemptCount >= MAX_SELF_HEAL_ATTEMPTS) {
+      const fatal = new Error(
+        `Execution failed after maximum self-healing limit. Final Database Driver Error: ${errMsg}`
+      );
+      fatal.system_observation = observation;
+      fatal.failed_sql = safeSql;
+      throw fatal;
+    }
+
     return {
-      error: dbErr.message,
+      ok: false,
+      error: errMsg,
       failed_sql: safeSql,
-      hint: "SQL execution failed. Call get_view_columns to verify column names and rewrite the query.",
+      system_observation: observation,
+      recoverable: isRecoverableDbError(errMsg),
+      attemptCount,
+      needsRetry: true,
     };
   }
+}
+
+async function toolRunSelect(pool, sqlStr, opts = {}) {
+  const outcome = await executeSqlWithSelfHealing(pool, sqlStr, opts);
+  if (outcome.ok) {
+    return {
+      row_count: outcome.row_count,
+      columns: outcome.columns,
+      data: outcome.data,
+    };
+  }
+  return {
+    error: outcome.error,
+    failed_sql: outcome.failed_sql,
+    system_observation: outcome.system_observation,
+    recoverable: outcome.recoverable,
+    hint: outcome.system_observation,
+    attemptCount: outcome.attemptCount,
+  };
 }
 
 async function dispatchAgenticTool(pool, toolName, args, fallbackQuestion, preferViewHint) {
@@ -265,8 +529,19 @@ async function dispatchAgenticTool(pool, toolName, args, fallbackQuestion, prefe
       return toolGetSampleRows(pool, a.view_name, a.limit);
     case "get_distinct_values":
       return toolGetDistinctValues(pool, a.view_name, a.column_name, a.limit);
+    case "discover_column_values":
+      return discoverColumnValues(pool, a.column_name, a.search_term || "", {
+        viewName: a.view_name,
+        limit: a.limit,
+      });
+    case "discover_live_samples":
+      return discoverLiveSamplesForQuestion(
+        pool,
+        a.question || fallbackQuestion || "",
+        a.view_name || preferViewHint || ""
+      );
     case "run_select":
-      return toolRunSelect(pool, a.sql || "");
+      return toolRunSelect(pool, a.sql || "", { question: fallbackQuestion || "" });
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -277,6 +552,13 @@ module.exports = {
   toolGetViewColumns,
   toolGetSampleRows,
   toolGetDistinctValues,
+  discoverColumnValues,
+  discoverTopDimensionByRevenue,
+  discoverLiveSamplesForQuestion,
+  formatLiveColumnSamplesBlock,
+  DISCOVERABLE_COLUMNS,
   toolRunSelect,
+  executeSqlWithSelfHealing,
   dispatchAgenticTool,
+  MAX_SELF_HEAL_ATTEMPTS,
 };

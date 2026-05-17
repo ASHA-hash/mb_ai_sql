@@ -1,0 +1,14 @@
+{
+  "karthikeyanasha24@gmail.com": [
+    "Top 10 vendors by purchase amount this month",
+    "Compare this month vs last month gross revenue by branch",
+    "Monthly sales trend for the last 6 months grouped by month",
+    "Store",
+    "Top 10 branches by total gross revenue (MrpValue) this month",
+    "Top 10 salespersons by gross revenue this month",
+    "Top 10 branches by gross revenue this month",
+    "Monthly sales trend for the last 6 months by InvoiceDt",
+    "Today's sales transactions with InvoiceNo, InvoiceDt, ItemId, Quantity, SaleNetAmount",
+    "Highest revenue salesperson this month by SaleNetAmount"
+  ]
+}

@@ -238,13 +238,11 @@ function buildSalesPurchaseCompareSql(question, schemaMeta) {
   ].join("\n");
 }
 
-function isVendorPurchaseTopNQuestion(question) {
-  const q = String(question || "").toLowerCase();
-  return /\b(top\s*\d+|top|highest|best)\b/.test(q) &&
-    /\b(vendor|supplier)\b/.test(q) &&
-    /\b(purchase|purchases)\b/.test(q) &&
-    /\b(amount|value|cost|net)\b/.test(q);
-}
+const {
+  isVendorPurchaseTopNQuestion,
+  buildVendorPurchaseTopNSql: buildVendorPurchaseTopNSqlCanonical,
+  VENDOR_PUR_TOPN_SQL,
+} = require("./canonical-purchase-sql");
 
 function getObjectColumns(schemaMeta, tableName) {
   const target = String(tableName || "").toLowerCase();
@@ -260,53 +258,11 @@ function pickFirstColumn(cols, preferred) {
   return null;
 }
 
-function buildVendorPurchaseTopNSql(schemaMeta, question) {
-  const q = String(question || "");
-  const nMatch = q.match(/\btop\s*(\d+)\b/i);
-  const topN = safeTopN(nMatch ? nMatch[1] : 10);
-
-  const supplierView = "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT";
-  const purView = "dbo.VW_MB_POWERBI_PUR_REPORT";
-  const supplierCols = getObjectColumns(schemaMeta, supplierView);
-  const purCols = getObjectColumns(schemaMeta, purView);
-  const useSupplierView = supplierCols.length > 0;
-  const sourceView = useSupplierView ? supplierView : purView;
-  const cols = useSupplierView ? supplierCols : purCols;
-  if (!cols.length) return null;
-
-  const amountCol = pickFirstColumn(cols, [
-    "NetAmount",
-    "PurCost",
-    "PurchaseAmount",
-    "Amount",
-    "Value",
-    "NetValue",
-    "PurNetAmount",
-    "CostValue",
-    "PurValue",
-  ]);
-  if (!amountCol) return null;
-
-  const vendorCol = pickFirstColumn(cols, [
-    "SupplierName",
-    "VendorName",
-    "PartyName",
-    "SupplierAlias",
-    "VendorAlias",
-    "Supplier",
-  ]);
-  if (!vendorCol) return null;
-
-  const labelExpr = `ISNULL(NULLIF(LTRIM(RTRIM(CAST(p.[${vendorCol}] AS NVARCHAR(300)))),''),'Unknown')`;
-  return [
-    `SELECT TOP (${topN})`,
-    `  ${labelExpr} AS VendorName,`,
-    `  SUM(ISNULL(p.[${amountCol}],0)) AS TotalPurchaseAmount`,
-    `FROM ${sourceView} p`,
-    `GROUP BY ${labelExpr}`,
-    `HAVING SUM(ISNULL(p.[${amountCol}],0)) > 0`,
-    `ORDER BY TotalPurchaseAmount DESC`,
-  ].join("\n");
+function buildVendorPurchaseTopNSql(schemaMeta, question, fromDate, toDate) {
+  return (
+    buildVendorPurchaseTopNSqlCanonical(schemaMeta, question, fromDate, toDate) ||
+    VENDOR_PUR_TOPN_SQL
+  );
 }
 
 function getCachedRows(cacheKey) {
@@ -975,9 +931,11 @@ async function parseIntentStrict({ apiKey, model, question, dictionary, schemaMe
     `User query: ${String(question || "").slice(0, 1200)}`,
   ].join("\n");
 
+  const { openAiOmitsTemperature } = require("./llm-params");
+  const modelId = model || "gpt-4o-mini";
   const completion = await openai.chat.completions.create({
-    model: model || "gpt-4o-mini",
-    temperature: 0,
+    model: modelId,
+    ...(openAiOmitsTemperature(modelId) ? {} : { temperature: 0 }),
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -1657,6 +1615,45 @@ function buildInterpretationForResult({ dictionary, question, structuredPlan, in
 }
 
 async function runDeterministicQuery({ apiKey, model, question, pool, fromDate, toDate }) {
+  const dictionaryEarly = loadSemanticDictionary();
+  const semanticGraphEarly = loadSemanticGraph();
+  const structuredPlanEarly = buildStructuredPlan(question);
+
+  /* Always-on fast patterns (not gated by DETERMINISTIC_LEGACY_TEMPLATES). */
+  if (isVendorPurchaseTopNQuestion(question)) {
+    const sql = buildVendorPurchaseTopNSql({ objects: [] }, question, fromDate, toDate);
+    if (sql) {
+      const cacheKey = `sql:${sql}`;
+      const rows = getCachedRows(cacheKey) || (await pool.request().query(sql)).recordset || [];
+      if (!getCachedRows(cacheKey)) setCachedRows(cacheKey, rows);
+      const pintent = { intent: "top_n", confidence: "high", clarification_question: null };
+      const prel = { ok: true, reason: "vendor_purchase_topn_template" };
+      return {
+        handled: true,
+        sql,
+        data: rows,
+        intent: pintent,
+        reliability: prel,
+        chartPolicy: chartPolicyFromResultShape(rows),
+        summary: buildDeterministicSummary("top_n", rows),
+        confidence: { level: rows.length ? "high" : "medium", note: rows.length ? "" : "No rows in range — widen dates or check PURXNS data." },
+        retriesUsed: 0,
+        interpretation: buildInterpretationForResult({
+          dictionary: dictionaryEarly,
+          question,
+          structuredPlan: structuredPlanEarly,
+          intent: pintent,
+          reliability: prel,
+        }),
+      };
+    }
+  }
+
+  // Legacy rigid SQL templates disabled — metadata-driven LangGraph/agentic pipeline handles queries.
+  if (!/^(1|true|yes)$/i.test(String(process.env.DETERMINISTIC_LEGACY_TEMPLATES || "0").trim())) {
+    return { handled: false, reason: "metadata_driven_pipeline" };
+  }
+
   const dictionary = loadSemanticDictionary();
   if (!dictionary) return { handled: false, reason: "missing_dictionary" };
   const semanticGraph = loadSemanticGraph();
@@ -1822,29 +1819,6 @@ async function runDeterministicQuery({ apiKey, model, question, pool, fromDate, 
       retriesUsed: 0,
       interpretation: buildInterpretationForResult({ dictionary, question, structuredPlan, intent: pintent, reliability: prel }),
     };
-  }
-
-  if (isVendorPurchaseTopNQuestion(question)) {
-    const sql = buildVendorPurchaseTopNSql(schemaMeta, question);
-    if (sql) {
-      const cacheKey = `sql:${sql}`;
-      const rows = getCachedRows(cacheKey) || (await pool.request().query(sql)).recordset || [];
-      if (!getCachedRows(cacheKey)) setCachedRows(cacheKey, rows);
-      const pintent = { intent: "top_n", confidence: "high", clarification_question: null };
-      const prel = { ok: true, reason: "vendor_purchase_topn_template" };
-      return {
-        handled: true,
-        sql,
-        data: rows,
-        intent: pintent,
-        reliability: prel,
-        chartPolicy: chartPolicyFromResultShape(rows),
-        summary: buildDeterministicSummary("top_n", rows),
-        confidence: { level: "high", note: "" },
-        retriesUsed: 0,
-        interpretation: buildInterpretationForResult({ dictionary, question, structuredPlan, intent: pintent, reliability: prel }),
-      };
-    }
   }
 
   let intent;

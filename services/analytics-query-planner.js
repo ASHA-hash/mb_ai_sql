@@ -6,6 +6,7 @@
 
 const sql = require("mssql");
 const { resolveDatasetTable, sanitizeTableName } = require("./analytics-reconciliation");
+const { DEFAULT_ANALYTICS_TABLE } = require("./analytics-column-map");
 
 /**
  * Human-readable spec for ops / docs. Keys mirror env vars and branch points in planAnalyticsDashboard.
@@ -89,14 +90,23 @@ async function estimateObjectRowCount(pool, qualifiedTable) {
  * @param {string} datasetKey
  * @returns {string | null}
  */
+/** Analytics table — not the same as GET /api/dataset (which may still use SALES_VIEW). */
+function resolveAnalyticsFactTable(datasetKey) {
+  const override = sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "");
+  if (override) return override;
+  const dk = String(datasetKey || "sales").toLowerCase().trim();
+  if (dk === "sales") {
+    return sanitizeTableName(DEFAULT_ANALYTICS_TABLE);
+  }
+  return resolveDatasetTable(datasetKey) || sanitizeTableName(DEFAULT_ANALYTICS_TABLE);
+}
+
 function resolveEffectiveTable(datasetKey) {
   const rollupDaily = sanitizeTableName(process.env.ANALYTICS_ROLLUP_DAILY_TABLE || "");
   if (rollupDaily && String(process.env.ANALYTICS_USE_LINE_ROLLUP || "").trim() === "1") {
     return rollupDaily;
   }
-  const base = resolveDatasetTable(datasetKey);
-  const override = sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "");
-  return override || base;
+  return resolveAnalyticsFactTable(datasetKey);
 }
 
 /**
@@ -152,10 +162,8 @@ async function planAnalyticsDashboard(pool, ctx) {
   }
   const cacheTtlMs = Math.max(5000, Math.floor(baseTtl * ttlMult));
 
-  /** Raw / canonical table */
-  const rawFromRegistry = resolveDatasetTable(datasetKey);
-  const baseOverride = sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "");
-  const canonicalRaw = baseOverride || rawFromRegistry;
+  /** Raw / canonical table (dashboard — canonical Power BI view, not legacy SALES_VIEW) */
+  const canonicalRaw = resolveAnalyticsFactTable(datasetKey);
 
   const rollupDaily = sanitizeTableName(process.env.ANALYTICS_ROLLUP_DAILY_TABLE || "");
   const useLineRollupEnv = String(process.env.ANALYTICS_USE_LINE_ROLLUP || "").trim() === "1";
@@ -209,9 +217,9 @@ async function planAnalyticsDashboard(pool, ctx) {
     }
   } else {
     effectiveTable = canonicalRaw;
-    if (baseOverride) {
+    if (sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "")) {
       tablePath = "base_table_override";
-      trace.push({ rule: "ANALYTICS_BASE_TABLE", table: baseOverride });
+      trace.push({ rule: "ANALYTICS_BASE_TABLE", table: process.env.ANALYTICS_BASE_TABLE });
     } else {
       trace.push({ rule: "dataset_registry", table: canonicalRaw });
     }

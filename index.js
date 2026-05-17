@@ -31,9 +31,26 @@ const {
 } = require("./ai-sql");
 const { runAgenticQuery } = require("./ai-agentic-query");
 const { runLangChainQuery } = require("./ai-langchain-query");
+const {
+  buildAiSalesFactPromptBlock,
+  isSalesDomainQuestion,
+} = require(path.join(rootDir, "services", "canonical-sales-sql"));
 const ragStore         = require("./services/rag-store");
+const ragFastPath      = require("./services/rag-fast-path");
+const asyncExport      = require("./services/async-export");
+const {
+  detectExportIntent,
+  isBroadListQuestion,
+  PERFORMANCE_MANDATE,
+} = require("./services/query-performance");
 const ragSchemaIndexer = require("./services/rag-schema-indexer");
+const { seedOnStartup: seedRagKnowledge } = require("./services/semantic-seeder");
 const { runDeterministicQuery, chartPolicyFromResultShape } = require("./services/deterministic-ai");
+const {
+  prepareQuestionForPipeline,
+  toAdaptiveClarificationResponse,
+} = require("./services/user-guidance");
+const { indexIsStale } = require("./services/dimension-index");
 const { parseQuery, buildIntentConstraints, chartPolicyFromIntent } = require("./services/semantic-parser");
 const { tagColumnsByValues, detectResultShape } = require("./services/data-shape-analyzer");
 const { initMCPClient } = require("./services/mcp-client");
@@ -115,6 +132,184 @@ async function maybeDrillDownSuggestions({ apiKey, model, question, data, intent
     return [];
   }
 }
+
+/**
+ * If RAG has a verified example for this question, run its SQL directly (no LLM).
+ * @returns {Promise<boolean>} true when response was sent
+ */
+function respondAsyncExport(res, { question, sql, pool, userId }) {
+  const queued = asyncExport.queueExportJob({
+    pool,
+    sql,
+    question,
+    userId: userId || null,
+  });
+  return res.json({
+    sql,
+    rowCount: 0,
+    data: [],
+    mode: "async_export",
+    asyncExport: {
+      jobId: queued.jobId,
+      status: queued.status,
+      maxRows: queued.maxRows,
+      statusUrl: `/api/query/export-async/${queued.jobId}`,
+      downloadUrl: `/api/query/export-async/${queued.jobId}/download`,
+    },
+    summary:
+      "Raw export queued in the background. Open the status URL to download the CSV when ready (large extracts are never loaded into chat).",
+    intentType: "export",
+    intentDescription: "Background CSV export — server streams rows to file",
+    chartPolicy: "table",
+    dataSource: "async_export",
+    contractPassed: true,
+    contractIssues: [],
+    contractWarnings: [],
+    columnTags: {},
+    confidence: "high",
+    confidenceNote: "Export runs outside the 180s chat timeout.",
+    retryCount: 0,
+  });
+}
+
+async function tryRagVerifiedFastPath(res, { question, pool, fromDate, toDate, tableHint, apiKey, model, userId }) {
+  if (!ragFastPath.isFastPathEnabled()) return false;
+  if (ragFastPath.shouldSkipForDatePicker(fromDate, toDate)) return false;
+
+  let hit;
+  try {
+    hit = await ragFastPath.resolveVerifiedExample(question);
+  } catch (e) {
+    console.warn("[adaptive] RAG fast-path lookup failed:", e.message);
+    return false;
+  }
+  if (!hit) return false;
+
+  if (detectExportIntent(question)) {
+    respondAsyncExport(res, { question, sql: hit.sql, pool, userId });
+    return true;
+  }
+
+  try {
+    const { execSql, rows } = await ragFastPath.executeVerifiedSql(pool, hit.sql);
+    const data = rowsForJson(rows);
+    const tags = tagColumnsByValues(data);
+    const intent = classifyQueryIntent(question);
+    const shape = detectResultShape(data, tags);
+    const intentType = reconcileIntentTypeForResponse(question, intent.type, data);
+    const chartPolicyBase = shape.chartType || intent.chartPolicy || "auto";
+    const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
+    const drillDownSuggestions = await maybeDrillDownSuggestions({
+      apiKey: String(apiKey).trim(),
+      model,
+      question,
+      data,
+      intentType,
+      tableHint,
+    });
+    const matchLabel = hit.match === "semantic" ? `semantic ${(hit.score * 100).toFixed(0)}%` : "exact";
+    console.log(`[adaptive] RAG fast-path (${matchLabel}) id=${hit.id}`);
+    res.json({
+      sql: execSql,
+      rowCount: data.length,
+      data,
+      mode: "rag_verified",
+      ragExampleId: hit.id,
+      ragMatch: hit.match,
+      tableHint: tableHint || null,
+      summary: null,
+      intentType,
+      intentDescription: `Verified RAG example (${matchLabel}) — executed stored SQL, skipped AI generation`,
+      chartPolicy,
+      resultShape: shape.shape,
+      dataSource: "rag_verified",
+      contractPassed: data.length > 0,
+      contractIssues: data.length === 0 ? ["No rows returned"] : [],
+      contractWarnings: [],
+      columnTags: tags,
+      confidence: "high",
+      confidenceNote:
+        `Used approved RAG SQL for: "${hit.question}". ` +
+        "Switch to LangGraph only when you need a new question variant.",
+      retryCount: 0,
+    });
+    return true;
+  } catch (err) {
+    console.warn("[adaptive] RAG fast-path execution failed, continuing pipeline:", err.message);
+    return false;
+  }
+}
+
+/** Vendor purchase top-N and other always-on templates (runs before RAG/LangGraph). */
+async function tryDeterministicFastPatterns(res, { question, pool, fromDate, toDate, apiKey, model, tableHint }) {
+  try {
+    const deterministic = await runDeterministicQuery({
+      apiKey: String(apiKey || "").trim(),
+      model,
+      question,
+      pool,
+      fromDate,
+      toDate,
+    });
+    if (!deterministic?.handled) return false;
+
+    const data = rowsForJson(deterministic.data || []);
+    const tags = tagColumnsByValues(data);
+    const intentType = reconcileIntentTypeForResponse(
+      question,
+      String(deterministic.intent?.intent || "generic"),
+      data
+    );
+    const shapeChart = chartPolicyFromResultShape(data);
+    const chartPolicyBase =
+      shapeChart !== "table"
+        ? shapeChart
+        : deterministic.chartPolicy ||
+          (intentType === "trend"
+            ? "line"
+            : intentType === "top_n" || intentType === "breakdown"
+              ? "bar"
+              : intentType === "kpi"
+                ? "kpi_card"
+                : "auto");
+    const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
+    const drillDownSuggestions = await maybeDrillDownSuggestions({
+      apiKey: String(apiKey || "").trim(),
+      model,
+      question,
+      data,
+      intentType,
+      tableHint,
+    });
+    res.json({
+      sql: deterministic.sql,
+      rowCount: data.length,
+      data,
+      mode: "deterministic_fast",
+      tableHint: tableHint || null,
+      summary: deterministic.summary || null,
+      intentType,
+      intentDescription: `Fast template (${deterministic.reliability?.reason || "pattern_match"}) — skipped LLM SQL generation`,
+      chartPolicy,
+      resultShape: detectResultShape(data, tags).shape,
+      dataSource: "full_aggregate",
+      contractPassed: data.length > 0,
+      contractIssues: data.length === 0 ? ["No rows returned"] : [],
+      contractWarnings: [],
+      columnTags: tags,
+      confidence: deterministic.confidence?.level || (data.length ? "high" : "medium"),
+      confidenceNote: deterministic.confidence?.note || "",
+      retryCount: 0,
+      interpretation: deterministic.interpretation || null,
+      drillDownSuggestions,
+    });
+    return true;
+  } catch (e) {
+    console.warn("[adaptive] deterministic fast-pattern skipped:", e.message);
+    return false;
+  }
+}
+
 const { buildSchemaDocFromDb } = require(path.join(rootDir, "ai-schema-introspect"));
 const {
   getMirrorUrl,
@@ -165,7 +360,12 @@ const {
   executeDatasetQueryWithReliability,
   executeWithSqlRetryBundle,
 } = require("./services/query-reliability");
-const { resolveAnalyticsDateCol, salesDimColumns } = require("./services/analytics-sql-context");
+const {
+  resolveAnalyticsDateCol,
+  salesDimColumns,
+  buildKpiSelectSql,
+} = require("./services/analytics-sql-context");
+const { DEFAULT_ANALYTICS_TABLE } = require("./services/analytics-column-map");
 
 const SCHEMA_CATALOG_FALLBACK = buildSchemaCatalog(DATASET_REGISTRY);
 const SEMANTIC_DICTIONARY_PATH = path.join(rootDir, "metadata", "semantic_dictionary.json");
@@ -352,12 +552,28 @@ function buildIntentGuidance(question) {
   const lines = [];
   const has = (re) => re.test(q);
 
+  if (isSalesDomainQuestion(question)) {
+    lines.push(buildAiSalesFactPromptBlock());
+  }
+
+  lines.push(PERFORMANCE_MANDATE.trim());
+  if (isBroadListQuestion(question)) {
+    lines.push(
+      "- User asked for a broad list — you MUST aggregate (GROUP BY month/branch/category/supplier) with SUM/COUNT; do NOT return raw line items without TOP."
+    );
+  }
+  if (detectExportIntent(question)) {
+    lines.push(
+      "- User wants a raw EXPORT — still write valid filtered SQL with a date range; chat will queue a background CSV (not millions of rows in the response)."
+    );
+  }
+
   // ── Product / item names ────────────────────────────────────────────────
   if (has(/\b(product|products|item|items|sku|article)\b/) && has(/\b(sales|revenue|amount|top|highest|rank|best)\b/)) {
     lines.push(
       "- Return readable product/item name (Description, ArticleShortName, ItemName, ItemCode) by joining the item master on ItemId. Do NOT return only ItemId.",
-      "- CRITICAL JOIN DIRECTION: always FROM dbo.VwAISalesData s INNER JOIN dbo.VwMstItems i ON s.ItemId = i.ItemId.",
-      "  ❌ NEVER start FROM dbo.VwMstItems — that master table may have very few rows, giving fewer results than TOP N requested.",
+      "- Use dbo.VW_MB_POWERBI_APP_REPORT or another allowlisted Power BI view from schema; ArticleNo is on APP_REPORT.",
+      "  ❌ NEVER use dbo.VwAISalesData or dbo.VwMstItems-only FROM for sales ranking.",
       "- Use ISNULL(i.<name_col>, 'Unknown') AS ProductName where <name_col> is the real column from the schema (e.g. Description, ArticleShortName).",
       "- Use GROUP BY i.<name_col> and ORDER BY TotalSales DESC to get the correct ranking."
     );
@@ -490,9 +706,10 @@ function buildIntentGuidance(question) {
   }
 
   // ── Salesperson performance ──────────────────────────────────────────────
-  if (has(/\b(salesperson|sales rep|sales agent)\b/) && has(/\b(top|highest|revenue|ranking|best|performance)\b/)) {
+  if (has(/\b(salesperson|sales rep|sales agent|staff)\b/) && has(/\b(top|highest|revenue|ranking|best|performance)\b/)) {
     lines.push(
-      "- For salesperson ranking: aggregate SaleNetAmount by SalesPersonId/SalesPersonName. Return the readable name from salesperson master when available."
+      "- For salesperson/staff ranking: FROM dbo.VW_MB_POWERBI_APP_REPORT, GROUP BY SupplierName (or SupplierAlias), SUM(MrpValue) AS TotalSales, ORDER BY TotalSales DESC.",
+      "  There is no SalesPerson column in the 28-view schema — do not use VwAISalesPerson."
     );
   }
 
@@ -506,7 +723,7 @@ function buildIntentGuidance(question) {
   // ── Branch performance comparison ───────────────────────────────────────
   if (has(/\b(branch|branches)\b/) && has(/\b(performance|comparison|compare|ranking|top|best)\b/)) {
     lines.push(
-      "- For branch performance: GROUP BY BranchId/BranchName and aggregate SaleNetAmount. Return branch name for readability."
+      "- For branch performance: FROM dbo.VW_MB_POWERBI_APP_REPORT, GROUP BY BranchAlias, SUM(MrpValue) AS TotalSales."
     );
   }
 
@@ -733,6 +950,7 @@ app.get("/dashboard", (_req, res) => {
   res.redirect(302, "/dashboard.html");
 });
 app.get("/dashboard.html", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
@@ -1175,24 +1393,26 @@ function parseLimit(query) {
 /**
  * Whitelist: dataset keys come only from DATASET_REGISTRY (see datasets-registry.js).
  */
-function resolveDatasetTable(datasetKey) {
-  const e = getDatasetEntry(datasetKey);
-  if (!e) {
-    return null;
-  }
-  let full = e.defaultTable;
-  if (e.envOverride && process.env[e.envOverride]) {
-    full = process.env[e.envOverride];
-  }
-  return sanitizeTableName(full);
-}
+const { resolveDatasetTable } = require(path.join(rootDir, "services", "dataset-table-resolve"));
 
 /**
  * UI + Apps Script: which filters exist per dataset (driven by env columns only).
  */
+function loadDatasetAccessMap() {
+  try {
+    const p = path.join(rootDir, "metadata", "dataset-access.json");
+    if (!fs.existsSync(p)) return null;
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    return j && j.byKey && typeof j.byKey === "object" ? j.byKey : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildConnectorConfig() {
   const hardCap = getDatasetHardCap();
   const pageMax = getDatasetPageMax();
+  const accessByKey = loadDatasetAccessMap();
   const datasets = [];
   for (const entry of DATASET_REGISTRY) {
     const table = resolveDatasetTable(entry.key);
@@ -1207,11 +1427,15 @@ function buildConnectorConfig() {
     const catCol = sanitizeColumnName(cfg.category);
     const p = entry.filterPrefix || "";
     const shortObject = table.includes(".") ? table.split(".").pop() : table;
+    const access = accessByKey && accessByKey[entry.key] ? accessByKey[entry.key] : null;
     datasets.push({
       key: entry.key,
       label: entry.label,
       objectName: table,
       shortName: shortObject,
+      accessOk: access ? Boolean(access.ok) : null,
+      accessDenied: access ? Boolean(access.denied) : null,
+      accessMessage: access && access.message ? String(access.message) : null,
       filters: {
         date: { enabled: Boolean(dateCol), column: dateCol || null },
         financialYear: {
@@ -1474,6 +1698,11 @@ app.get("/api/health", async (req, res) => {
       out.mirror = { ok: false, error: String(err.message) };
     }
   }
+  out.limits = {
+    hardCap: getDatasetHardCap(),
+    pageMax: getDatasetPageMax(),
+    defaultLimit: 500,
+  };
   res.json(out);
 });
 
@@ -1672,7 +1901,8 @@ app.get("/api/mirror-status", rbac.requireFeature("data"), async (req, res) => {
  */
 app.get("/api/dataset/:name", rbac.requireFeature("data"), async (req, res) => {
   const limit = parseLimit(req.query);
-  const dk = String(req.params.name || "").toLowerCase().trim();
+  const { normalizeDatasetKey } = require(path.join(rootDir, "filter-query"));
+  const dk = normalizeDatasetKey(req.params.name);
   if (req.rbac && !rbac.assertDatasetAllowed(req.rbac, dk)) {
     res.status(403).json({
       error: "dataset_denied",
@@ -1746,6 +1976,15 @@ app.get("/api/dataset/:name", rbac.requireFeature("data"), async (req, res) => {
     if (out.degraded) {
       res.setHeader("X-ERP-Query-Degraded", "mirror_after_live_failure");
     }
+    const hardCap = getDatasetHardCap();
+    const rowCount = out.recordset ? out.recordset.length : 0;
+    res.setHeader("X-ERP-Row-Limit", String(limit));
+    res.setHeader("X-ERP-Hard-Cap", String(hardCap));
+    res.setHeader("X-ERP-Row-Count", String(rowCount));
+    res.setHeader(
+      "X-ERP-Rows-Capped",
+      rowCount >= limit && limit >= hardCap ? "1" : "0"
+    );
     res.json(rowsForJson(out.recordset));
   } catch (err) {
     if (err.status === 400) {
@@ -1756,7 +1995,18 @@ app.get("/api/dataset/:name", rbac.requireFeature("data"), async (req, res) => {
       return;
     }
     console.error(err);
-    res.status(500).json({ error: "query_failed", message: String(err.message) });
+    const msg = String(err.message);
+    let hint = null;
+    if (/permission was denied|select permission was denied/i.test(msg) && /MstSalesPerson|VwAISalesPerson/i.test(msg)) {
+      hint =
+        "The database user for this API cannot read the salesperson master chain (often dbo.MstSalesPerson behind dbo.VwAISalesPerson). " +
+        "Fix in SSMS: GRANT SELECT ON dbo.MstSalesPerson TO [your_api_login]; — or set VW_AI_SALESPERSON_VIEW=dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID in .env and restart, " +
+        "or use dataset “mb_powerbi_sls_data_without_itemid” in the Data tab (SalesPersonName on transaction lines).";
+    } else if (/permission was denied|select permission was denied/i.test(msg) && dk === "vw_ai_salesperson") {
+      hint =
+        "Salesperson dataset failed: grant SELECT on underlying master objects, or set VW_AI_SALESPERSON_VIEW=dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID in .env, or load dataset mb_powerbi_sls_data_without_itemid.";
+    }
+    res.status(500).json({ error: "query_failed", message: msg, ...(hint ? { hint } : {}) });
   }
 });
 
@@ -1812,17 +2062,17 @@ app.get("/api/home/kpi", rbac.requireFeature("data"), async (req, res) => {
   const period = String(req.query.period || "today").toLowerCase().trim();
   const nl = String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
 
-  const table = String(process.env.ANALYTICS_BASE_TABLE || "dbo.VwAISalesData").trim();
+  const table = String(process.env.ANALYTICS_BASE_TABLE || DEFAULT_ANALYTICS_TABLE).trim();
   const datCol = resolveAnalyticsDateCol(table, "sales");
   if (!datCol) {
     res.status(500).json({
       ok: false,
       error: "date_column_not_configured",
-      message: "Set per-table *_FILTER_DATE_COLUMN or SALES_FILTER_DATE_COLUMN for the analytics base table.",
+      message: "Set per-table *_FILTER_DATE_COLUMN or MB_POWERBI_APP_REPORT_FILTER_DATE_COLUMN for the analytics base table.",
     });
     return;
   }
-  const dims = salesDimColumns();
+  const dims = salesDimColumns(table, "sales");
   const amtCol = dims.amount;
 
   let whereSql;
@@ -1833,10 +2083,15 @@ app.get("/api/home/kpi", rbac.requireFeature("data"), async (req, res) => {
     whereSql = `WHERE CAST([${datCol}] AS DATE) >= CAST(DATEADD(day, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE)) AS DATE)\n      AND CAST([${datCol}] AS DATE) <= CAST(GETDATE() AS DATE)`;
   }
 
+  const rollupDaily = String(process.env.ANALYTICS_USE_LINE_ROLLUP || "").trim() === "1";
+  const lcCol = String(process.env.ANALYTICS_ROLLUP_LINECOUNT_COLUMN || "LineCount").trim();
+  const rowCntAgg = rollupDaily
+    ? `CAST(SUM(ISNULL([${lcCol}], 0)) AS BIGINT)`
+    : "COUNT(*)";
+
   const sqlText = `
     SELECT
-      CAST(SUM(ISNULL([${amtCol}], 0)) AS DECIMAL(38, 4)) AS total_sales,
-      COUNT(*) AS txn_count
+      ${buildKpiSelectSql(dims, datCol, rowCntAgg, "")}
     FROM ${table}${nl}
     ${whereSql}`;
 
@@ -1852,11 +2107,16 @@ app.get("/api/home/kpi", rbac.requireFeature("data"), async (req, res) => {
       Number.isFinite(homeKpiReqMs) && homeKpiReqMs > 0 ? Math.min(300000, Math.max(30000, homeKpiReqMs)) : 120000;
     const result = await request.query(sqlText);
     const row = (result.recordset || [])[0] || {};
+    const txnCount = parseInt(String(row.txn_count), 10) || 0;
+    const billCount = parseInt(String(row.bill_count), 10) || 0;
     res.json({
       ok: true,
       period,
       totalSales: parseFloat(row.total_sales) || 0,
-      txnCount:   parseInt(String(row.txn_count), 10) || 0,
+      txnCount,
+      billCount: billCount || txnCount,
+      customerCount: parseInt(String(row.customer_count), 10) || 0,
+      quantitySold: parseFloat(row.quantity_sold) || 0,
     });
   } catch (err) {
     console.error(`[home/kpi] ${period} error:`, err.message);
@@ -1884,12 +2144,14 @@ app.post("/api/analytics/dashboard", rbac.requireFeature("data"), async (req, re
     return;
   }
 
+  const t0 = Date.now();
   try {
     const pool = await getPool();
     const out = await executeWithSqlRetryBundle(
       () => runAnalyticsDashboard(pool, req.body || {}),
       "POST /api/analytics/dashboard"
     );
+    res.setHeader("X-ERP-Server-Ms", String(Date.now() - t0));
     res.setHeader("X-ERP-Analytics-Version", String(out.dataVersion || ""));
     res.setHeader("X-ERP-Cache-Hit", out.cacheHit ? "1" : "0");
     if (out.cacheLayer) {
@@ -2267,7 +2529,7 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     });
   }
 
-  const question = String(req.body?.question ?? "").trim();
+  let question = String(req.body?.question ?? "").trim();
   if (!question) {
     return res.status(400).json({ error: "missing_question", message: 'Send JSON { question: "..." }' });
   }
@@ -2275,17 +2537,61 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     return res.status(400).json({ error: "question_too_long", max: 4000 });
   }
 
+  const guidancePrep = prepareQuestionForPipeline(question);
+  if (!guidancePrep.ok) {
+    return res.json(toAdaptiveClarificationResponse(guidancePrep));
+  }
+  question = guidancePrep.question;
+  const userGuidanceMeta = {
+    autoCorrections: guidancePrep.autoCorrections || [],
+    originalQuestion: guidancePrep.originalQuestion,
+    dimensionIndexStale: guidancePrep.indexStale,
+  };
+
   const tableHint = String(req.body?.tableHint ?? "").trim(); // e.g. "dbo.VwAISalesData"
   const fromDate = req.body?.fromDate ? String(req.body.fromDate).trim() : "";
   const toDate = req.body?.toDate ? String(req.body.toDate).trim() : "";
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  // provider: "openai" (default) | "claude" — sent by dashboard AI model toggle
+  const aiProvider  = String(req.body?.provider ?? "openai").toLowerCase().trim();
+  const isClaude    = aiProvider === "claude";
+  const model       = isClaude
+    ? (process.env.ANTHROPIC_MODEL || "claude-opus-4-5")
+    : (process.env.OPENAI_MODEL || "gpt-4o-mini");
+  const claudeApiKey = isClaude ? (process.env.ANTHROPIC_API_KEY || "") : undefined;
   const forceMode = String(req.body?.forceMode ?? "").trim().toLowerCase(); // "langgraph" | ""
 
-  // ── LangGraph forced mode: skip deterministic entirely ────────────────────
+  // ── LangGraph forced mode: fast templates + RAG, then LangGraph ───────────
   if (forceMode === "langgraph") {
     let pool;
     try { pool = await getPool(); } catch (err) {
       return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
+    }
+    if (
+      await tryDeterministicFastPatterns(res, {
+        question,
+        pool,
+        fromDate,
+        toDate,
+        apiKey,
+        model,
+        tableHint,
+      })
+    ) {
+      return;
+    }
+    if (
+      await tryRagVerifiedFastPath(res, {
+        question,
+        pool,
+        fromDate,
+        toDate,
+        tableHint,
+        apiKey,
+        model,
+        userId: req.rbac?.email,
+      })
+    ) {
+      return;
     }
     try {
       const dateContext = buildDateContext();
@@ -2293,14 +2599,35 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
       if (fromDate) userDateRange.from = fromDate;
       if (toDate)   userDateRange.to   = toDate;
       const lg = await runLangChainQuery({
-        apiKey: String(apiKey).trim(),
+        apiKey:       String(apiKey || "").trim(),
         model,
+        provider:     aiProvider,
+        claudeApiKey,
         question,
         pool,
         dateContext,
         userDateRange,
         tableHint: tableHint || undefined,
       });
+      if (lg.clarificationNeeded) {
+        return res.json({
+          clarificationNeeded: true,
+          clarificationQuestion: lg.clarificationQuestion,
+          clarificationOptions: lg.clarificationOptions || [],
+          suggestedOptions: lg.suggestedOptions || [],
+          uiType: lg.uiType || "SUGGESTION_CHIPS",
+          status: "CLARIFICATION_REQUIRED",
+          mode: "pre_flight_clarification",
+          preFlightMs: lg.preFlightMs,
+          clarityScore: lg.clarityScore,
+          tableHint: tableHint || null,
+          userGuidanceMeta,
+        });
+      }
+      if (detectExportIntent(question) && lg.sql) {
+        respondAsyncExport(res, { question, sql: lg.sql, pool, userId: req.rbac?.email });
+        return;
+      }
       const data = rowsForJson(lg.data || []);
       const tags = tagColumnsByValues(data);
       const intent = classifyQueryIntent(question);
@@ -2320,11 +2647,12 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
         sql: lg.sql,
         rowCount: data.length,
         data,
-        mode: "langgraph",
+        mode: lg.fastPath ? "fast_path" : "langgraph",
         tableHint: tableHint || null,
         summary: lg.answer || null,
         intentType: lgIntent,
-        intentDescription: "LangGraph AI — schema discovery → temp=0 SQL → retry → verified answer",
+        intentDescription:
+          "Adaptive agent — schema RAG → intent resolution → T-SQL → self-healing retry (AskYourDatabase-style)",
         chartPolicy: lgChart,
         resultShape: lgShape.shape,
         dataSource: "full_aggregate",
@@ -2429,6 +2757,35 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
   }
 
+  if (
+    await tryDeterministicFastPatterns(res, {
+      question,
+      pool,
+      fromDate,
+      toDate,
+      apiKey,
+      model,
+      tableHint,
+    })
+  ) {
+    return;
+  }
+
+  if (
+    await tryRagVerifiedFastPath(res, {
+      question,
+      pool,
+      fromDate,
+      toDate,
+      tableHint,
+      apiKey,
+      model,
+      userId: req.rbac?.email,
+    })
+  ) {
+    return;
+  }
+
   // Single deterministic path first: strict intent -> semantic mapping -> SQL templates.
   try {
     const deterministic = await runDeterministicQuery({
@@ -2519,14 +2876,59 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
         ? `${question}${semanticConstraints}`
         : question;
       const lg = await runLangChainQuery({
-        apiKey: String(apiKey).trim(),
+        apiKey:       String(apiKey || "").trim(),
         model,
-        question: lgQuestion,
+        provider:     aiProvider,
+        claudeApiKey,
+        question:     lgQuestion,
         pool,
         dateContext,
         userDateRange,
         tableHint: tableHint || undefined,
       });
+      if (lg.clarificationNeeded) {
+        return res.json({
+          clarificationNeeded: true,
+          clarificationQuestion: lg.clarificationQuestion,
+          clarificationOptions: lg.clarificationOptions || [],
+          suggestedOptions: lg.suggestedOptions || [],
+          uiType: lg.uiType || "SUGGESTION_CHIPS",
+          status: "CLARIFICATION_REQUIRED",
+          mode: "pre_flight_clarification",
+          preFlightMs: lg.preFlightMs,
+          clarityScore: lg.clarityScore,
+          tableHint: tableHint || null,
+          userGuidanceMeta,
+        });
+      }
+      if (lg.fastPath && Array.isArray(lg.data) && lg.data.length >= 0) {
+        const data = rowsForJson(lg.data || []);
+        const tags = tagColumnsByValues(data);
+        const intent = classifyQueryIntent(question);
+        const lgShape = detectResultShape(data, tags);
+        const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
+        const lgChart = preferChartForTrendQuestion(question, lgIntent, lgShape.chartType || "kpi_card");
+        return res.json({
+          sql: lg.sql,
+          rowCount: data.length,
+          data,
+          mode: "fast_path",
+          tableHint: tableHint || null,
+          summary: lg.answer || null,
+          intentType: lgIntent,
+          intentDescription: "Pre-flight cached SQL (no LLM planning)",
+          chartPolicy: lgChart,
+          resultShape: lgShape.shape,
+          dataSource: "fast_path_cache",
+          contractPassed: true,
+          contractIssues: [],
+          columnTags: tags,
+          confidence: "high",
+          confidenceNote: `Fast path ${lg.preFlightMs}ms`,
+          retryCount: 0,
+          preFlightMs: lg.preFlightMs,
+        });
+      }
       if (Array.isArray(lg.data) && lg.data.length > 0) {
         const data = rowsForJson(lg.data);
         const tags = tagColumnsByValues(data);
@@ -2577,8 +2979,8 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     if (intent.type === "trend") {
       lines.push(
         "- This is a TREND query. Your SELECT MUST include:",
-        "  1. A date/time label column (e.g. SaleDate, SaleMonth, FORMAT(InvoiceDt,'MMM yyyy') AS SaleMonth).",
-        "  2. At least one numeric metric column (e.g. SUM(SaleNetAmount) AS TotalSales).",
+        "  1. A date/time label column (e.g. XnDt, XnDtMonth, or FORMAT(XnDt,'MMM yyyy') AS SaleMonth).",
+        "  2. At least one numeric metric column (e.g. SUM(MrpValue) AS TotalSales).",
         "  3. An ORDER BY on the date column (ascending).",
         "  Do NOT return only totals without a time axis."
       );
@@ -2613,13 +3015,14 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     } else if (intent.type === "period_dashboard") {
       lines.push(
         "- This question is scoped to a calendar period (today / MTD / YTD / this quarter).",
-        " Include WHERE predicates that match that period exactly on InvoiceDt (or the correct date column).",
-        " Prefer one primary numeric metric (e.g. SUM(SaleNetAmount)); avoid unrelated drill-down columns unless asked."
+        " Use dbo.VW_MB_POWERBI_APP_REPORT, filter on CAST(XnDt AS date), aggregate SUM(MrpValue).",
+        " MTD: XnDt >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND XnDt <= CAST(GETDATE() AS date).",
+        " Map user term SaleNetAmount → MrpValue."
       );
     } else if (intent.type === "kpi") {
       lines.push(
         "- This is a KPI/AGGREGATE query. Return one or more named aggregate columns.",
-        "  e.g. SELECT SUM(SaleNetAmount) AS TotalSales, COUNT(DISTINCT InvoiceNo) AS TotalInvoices FROM ..."
+        "  e.g. SELECT SUM(MrpValue) AS TotalSales, COUNT(DISTINCT XnNo) AS TotalBills FROM dbo.VW_MB_POWERBI_APP_REPORT ..."
       );
     }
     return lines.join("\n");
@@ -2803,9 +3206,9 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
             question:
               `[STATIC SQL VALIDATION FAILED]\n${lastMsg}\n\n` +
               `Regenerate ONE SELECT only. Rules:\n` +
-              `- Use only views from the schema (e.g. dbo.VwAISalesData, dbo.VW_MB_* as listed).\n` +
+              `- Use only allowlisted Power BI views (dbo.VW_MB_POWERBI_*). Never dbo.VwAISalesData.\n` +
               `- Every JOIN must have ON. TOP must be within server limits.\n` +
-              `- Revenue: SaleNetAmount on VwAISalesData, NetAmount on PowerBI PBI views — never MRP-only or cost-only for revenue.\n` +
+              `- Revenue: SUM(MrpValue) on APP_REPORT; NetAmount/NetSlsNetAmount on SLS* views. Map SaleNetAmount → MrpValue.\n` +
               `Original question: ${guidedQuestion}`,
             schemaCatalog: schemaContext,
           });
@@ -2835,11 +3238,11 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
           `- Use ONLY column names from the FOCUSED TABLE block in the schema. Never invent columns.\n` +
           `- For date filters: always use DATEADD(day,-N,CAST(GETDATE() AS DATE)). NEVER subtract integers from dates with "-".\n` +
           `- Date filter may appear in WHERE or in a JOIN ON clause — both are valid.\n` +
-          `- "Today": InvoiceDt >= CAST(GETDATE() AS DATE) AND InvoiceDt < DATEADD(day,1,CAST(GETDATE() AS DATE))\n` +
-          `- "Yesterday": InvoiceDt >= DATEADD(day,-1,CAST(GETDATE() AS DATE)) AND InvoiceDt < CAST(GETDATE() AS DATE)\n` +
-          `- "Last 7 days": InvoiceDt >= DATEADD(day,-7,CAST(GETDATE() AS DATE))\n` +
-          `- "This month": YEAR(InvoiceDt)=YEAR(GETDATE()) AND MONTH(InvoiceDt)=MONTH(GETDATE())\n` +
-          `- Replace InvoiceDt with the actual date column from the focused schema.\n` +
+          `- "Today": XnDt >= CAST(GETDATE() AS DATE) AND XnDt < DATEADD(day,1,CAST(GETDATE() AS DATE))\n` +
+          `- "Yesterday": XnDt >= DATEADD(day,-1,CAST(GETDATE() AS DATE)) AND XnDt < CAST(GETDATE() AS DATE)\n` +
+          `- "Last 7 days": XnDt >= DATEADD(day,-7,CAST(GETDATE() AS DATE))\n` +
+          `- "This month": CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n` +
+          `- Use dbo.VW_MB_POWERBI_APP_REPORT and MrpValue for sales; replace XnDt only if another allowlisted view is in schema.\n` +
           `Original question: ${guidedQuestion}`;
         try {
           sqlAttempt = await nlToSelectSql({
@@ -3104,9 +3507,18 @@ app.post("/api/query/agentic", rbac.requireFeature("ai"), async (req, res) => {
      → execute_sql → error_recovery (×2) → generate_answer
    ───────────────────────────────────────────────────────────── */
 app.post("/api/query/langchain", rbac.requireFeature("ai"), async (req, res) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !String(apiKey).trim()) {
-    return res.status(503).json({ error: "openai_not_configured", message: "Set OPENAI_API_KEY on the server" });
+  // Support both OpenAI and Claude providers
+  const lgProvider    = String(req.body?.provider ?? "openai").toLowerCase().trim();
+  const isLgClaude    = lgProvider === "claude";
+  const lgApiKey      = isLgClaude ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+  const lgModel       = isLgClaude
+    ? (process.env.ANTHROPIC_MODEL || "claude-opus-4-5")
+    : (process.env.OPENAI_MODEL || "gpt-4o-mini");
+
+  if (!lgApiKey || !String(lgApiKey).trim()) {
+    const errKey = isLgClaude ? "anthropic_not_configured" : "openai_not_configured";
+    const errMsg = isLgClaude ? "Set ANTHROPIC_API_KEY on the server" : "Set OPENAI_API_KEY on the server";
+    return res.status(503).json({ error: errKey, message: errMsg });
   }
 
   const question = String(req.body?.question ?? "").trim();
@@ -3130,8 +3542,10 @@ app.post("/api/query/langchain", rbac.requireFeature("ai"), async (req, res) => 
     if (toDate)   userDateRange.to   = toDate;
 
     const result = await runLangChainQuery({
-      apiKey: String(apiKey).trim(),
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      apiKey:       isLgClaude ? undefined : String(lgApiKey).trim(),
+      claudeApiKey: isLgClaude ? String(lgApiKey).trim() : undefined,
+      model:        lgModel,
+      provider:     lgProvider,
       question,
       pool,
       dateContext,
@@ -3545,6 +3959,77 @@ server.on("error", (err) => {
    RAG MEMORY API
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ASYNC EXPORT (large raw CSV — never through chat payload)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** POST /api/query/export-async — queue background CSV from validated SELECT */
+app.post("/api/query/export-async", rbac.requireFeature("ai"), async (req, res) => {
+  const sql = String(req.body?.sql ?? "").trim();
+  const question = String(req.body?.question ?? "export").trim();
+  if (!sql) {
+    return res.status(400).json({ error: "missing_sql", message: "Send { sql, question? }" });
+  }
+  let pool;
+  try {
+    pool = await getPool();
+  } catch (err) {
+    return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
+  }
+  try {
+    const queued = asyncExport.queueExportJob({
+      pool,
+      sql,
+      question,
+      userId: req.rbac?.email,
+    });
+    res.json({
+      ok: true,
+      mode: "async_export",
+      asyncExport: {
+        ...queued,
+        statusUrl: `/api/query/export-async/${queued.jobId}`,
+        downloadUrl: `/api/query/export-async/${queued.jobId}/download`,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.code || "export_queue_failed", message: String(err.message) });
+  }
+});
+
+/** GET /api/query/export-async/:jobId — poll job status */
+app.get("/api/query/export-async/:jobId", rbac.requireFeature("ai"), (req, res) => {
+  const job = asyncExport.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ ok: false, error: "job_not_found" });
+  res.json({
+    ok: true,
+    job: {
+      id: job.id,
+      status: job.status,
+      rowCount: job.rowCount,
+      maxRows: job.maxRows,
+      error: job.error,
+      createdAt: job.createdAt,
+      finishedAt: job.finishedAt,
+      downloadUrl: job.status === "completed" ? job.downloadUrl : null,
+    },
+  });
+});
+
+/** GET /api/query/export-async/:jobId/download — download CSV when complete */
+app.get("/api/query/export-async/:jobId/download", rbac.requireFeature("ai"), (req, res) => {
+  const job = asyncExport.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "job_not_found" });
+  if (job.status !== "completed" || !job.filePath) {
+    return res.status(409).json({ error: "not_ready", status: job.status, message: job.error || "Export still running" });
+  }
+  const fs = require("fs");
+  if (!fs.existsSync(job.filePath)) {
+    return res.status(410).json({ error: "file_gone", message: "Export file expired or removed" });
+  }
+  res.download(job.filePath, `erp_export_${job.id}.csv`);
+});
+
 /** GET /api/rag/stats — store summary */
 app.get("/api/rag/stats", (req, res) => {
   res.json({ ok: true, stats: ragStore.stats() });
@@ -3740,6 +4225,55 @@ app.post("/api/rag/seed-examples", rbac.requireManagerOrAdminApi, async (req, re
   }
 });
 
+/**
+ * POST /api/rag/feedback
+ * Saves a user-verified query pair into the RAG store so the AI learns from corrections.
+ * Body: { question, sql, correct: true|false, correctedSql?, note? }
+ *
+ * When correct=true  → saves question+sql as a verified example (👍)
+ * When correct=false → if correctedSql provided, saves the correction (👎 + fix)
+ */
+app.post("/api/rag/feedback", async (req, res) => {
+  const { question, sql, correct, correctedSql, note } = req.body || {};
+  if (!question) {
+    return res.status(400).json({ ok: false, error: "question is required" });
+  }
+  try {
+    if (correct === true) {
+      if (sql) {
+        const noteText = note
+          ? `✅ User-verified. ${note}`
+          : `✅ User-verified correct answer.`;
+        await ragStore.addExample(question, sql, noteText);
+        return res.json({ ok: true, action: "saved_verified_example" });
+      }
+      console.log(`[feedback] ✅ positive (no SQL attached): "${question}"`);
+      return res.json({ ok: true, action: "positive_feedback_noted" });
+    }
+    if (correct === false && correctedSql) {
+      // 👎 User provided corrected SQL — save correction
+      const noteText = `✅ User-corrected answer. Original was wrong. ${note || ""}`.trim();
+      await ragStore.addExample(question, correctedSql, noteText);
+      return res.json({ ok: true, action: "saved_corrected_example" });
+    }
+    // Negative feedback with no correction — log for awareness
+    console.log(`[feedback] ❌ negative feedback for: "${question}" (no correction provided)`);
+    return res.json({ ok: true, action: "negative_feedback_noted" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** POST /api/rag/reseed — force re-seed from all metadata files */
+app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
+  try {
+    await seedRagKnowledge(true); // force=true
+    res.json({ ok: true, stats: ragStore.stats() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 (async function startServer() {
   try {
     await rbac.initStorage();
@@ -3756,7 +4290,13 @@ app.post("/api/rag/seed-examples", rbac.requireManagerOrAdminApi, async (req, re
     console.warn("[mcp:http] Agentic queries will use in-process tools until MCP HTTP is reachable");
   }
 
-  // Index schema into RAG store in background (non-blocking)
+  // Seed RAG with business semantic layer + query examples + KPI dictionary.
+  // Runs in background — idempotent, only re-seeds when metadata files change.
+  seedRagKnowledge().catch(e =>
+    console.warn("[semantic-seeder] non-fatal:", e.message)
+  );
+
+  // Index raw schema into RAG store in background (non-blocking)
   ragSchemaIndexer.indexSchema().catch(e =>
     console.warn("[rag-schema-indexer] background index failed:", e.message)
   );
@@ -3766,9 +4306,27 @@ app.post("/api/rag/seed-examples", rbac.requireManagerOrAdminApi, async (req, re
   // Disable: ANALYTICS_WARMUP=0 in .env
   getPool().then(pool => scheduleAnalyticsWarmup(pool)).catch(() => {});
 
+  if (!/^(0|false|no)$/i.test(String(process.env.BUILD_DIMENSION_INDEX_ON_STARTUP || "0").trim())) {
+    getPool()
+      .then(async (pool) => {
+        const { buildDimensionIndex } = require("./scripts/build-dimension-index");
+        const { indexIsStale } = require("./services/dimension-index");
+        if (indexIsStale(24)) {
+          await buildDimensionIndex(pool);
+          console.log("[dimension-index] background build complete");
+        }
+      })
+      .catch((e) => console.warn("[dimension-index] startup build skipped:", e.message));
+  }
+
   server.listen(port, "0.0.0.0", () => {
     server.ref();
     console.log(`ERP API listening on http://0.0.0.0:${port} (pid ${process.pid})`);
+    console.log(
+      "[datasets] DATASET_HARD_CAP=%s  DATASET_PAGE_MAX=%s (restart required after .env changes)",
+      getDatasetHardCap(),
+      getDatasetPageMax()
+    );
     console.log(
       "Leave this window open. Health: http://127.0.0.1:%s/api/health  Dashboard: http://127.0.0.1:%s/dashboard.html",
       port,
