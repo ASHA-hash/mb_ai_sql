@@ -1,6 +1,6 @@
 {
   "_comment": "Layer 1 — Semantic Mapping: English business terms → exact DB column names. Used by LangGraph prompt injection before SQL generation.",
-  "_version": "1.0.0",
+  "_version": "1.1.0",
   "_target_view": "dbo.VW_MB_POWERBI_APP_REPORT",
 
   "metrics": {
@@ -12,9 +12,9 @@
     "turnover":             "MrpValue",
     "mrp value":            "MrpValue",
     "mrp":                  "MrpValue",
-    "value":                "MrpValue",
-    "amount":               "MrpValue",
     "gross sales":          "MrpValue",
+    "gross revenue":        "MrpValue",
+    "sale value":           "MrpValue",
     "quantity":             "AppQty",
     "qty":                  "AppQty",
     "pieces":               "AppQty",
@@ -22,7 +22,17 @@
     "pieces sold":          "AppQty",
     "units sold":           "AppQty",
     "items sold":           "AppQty",
-    "app qty":              "AppQty"
+    "app qty":              "AppQty",
+    "cost":                 "CostValue",
+    "cost value":           "CostValue",
+    "product cost":         "CostValue",
+    "item cost":            "CostValue",
+    "cogs":                 "CostValue",
+    "net amount":           "NetAmount",
+    "item mrp":             "ItemMRP",
+    "selling price":        "ItemMRP",
+    "retail price":         "ItemMRP",
+    "mrp price":            "ItemMRP"
   },
 
   "dimensions": {
@@ -53,31 +63,45 @@
     "sold by":              "SupplierName",
     "consignment":          "SupplierName",
     "consignee":            "SupplierName",
+    "vendor alias":         "SupplierAlias",
+    "brand alias":          "SupplierAlias",
+    "supplier alias":       "SupplierAlias",
+    "vendor city":          "SupplierCity",
+    "supplier city":        "SupplierCity",
+    "vendor state":         "SupplierState",
+    "supplier state":       "SupplierState",
     "invoice":              "XnNo",
     "invoice number":       "XnNo",
     "bill":                 "XnNo",
     "bill number":          "XnNo",
     "transaction id":       "XnId",
-    "transaction":          "XnId",
     "xn id":                "XnId",
     "bill count":           "BillCount",
     "number of bills":      "BillCount",
     "invoice count":        "BillCount",
+    "footfall":             "BillCount",
     "article":              "ArticleNo",
+    "articles":             "ArticleNo",
     "article number":       "ArticleNo",
     "style code":           "ArticleNo",
     "sku":                  "ArticleNo",
-    "color":                "Colour",
-    "colour":               "Colour",
-    "size":                 "SizeName",
-    "barcode":              "EAN",
-    "ean":                  "EAN"
+    "product code":         "ArticleNo",
+    "item code":            "ArticleNo",
+    "color":                "Color",
+    "colour":               "Color",
+    "size":                 "Size",
+    "fabric":               "Fabric",
+    "material":             "Fabric",
+    "sub fabric":           "SubFabric",
+    "subfabric":            "SubFabric",
+    "concept":              "Concept",
+    "property":             "Property",
+    "contrast":             "Contrast"
   },
 
   "illegal_columns": [
     "SaleNetAmount",
     "SalesNetAmount",
-    "NetAmount",
     "NetSalesAmount",
     "Quantity",
     "SalesQuantity",
@@ -89,13 +113,15 @@
     "BranchShortName",
     "SaleDate",
     "InvoiceDt",
-    "CashmemoDt"
+    "CashmemoDt",
+    "Colour",
+    "SizeName",
+    "EAN"
   ],
 
   "illegal_column_map": {
     "SaleNetAmount":   "MrpValue",
     "SalesNetAmount":  "MrpValue",
-    "NetAmount":       "MrpValue",
     "NetSalesAmount":  "MrpValue",
     "Quantity":        "AppQty",
     "SalesQuantity":   "AppQty",
@@ -107,7 +133,10 @@
     "BranchShortName": "BranchAlias",
     "SaleDate":        "XnDt",
     "InvoiceDt":       "XnDt",
-    "CashmemoDt":      "XnDt"
+    "CashmemoDt":      "XnDt",
+    "Colour":          "Color",
+    "SizeName":        "Size",
+    "EAN":             "ArticleNo"
   },
 
   "filter_hints": {
@@ -115,6 +144,10 @@
     "DepartmentShortName":  "Use LOWER([DepartmentShortName]) LIKE '%term%'. Values like 'MENSWEAR', 'WOMENSWEAR', 'KIDSWEAR'.",
     "CategoryShortName":    "Use LOWER([CategoryShortName]) LIKE '%term%'. Values like 'FORMAL SHIRTS', 'CASUAL TROUSERS'.",
     "SupplierName":         "Use LOWER([SupplierName]) LIKE '%term%' for salesperson/staff name filters.",
+    "SupplierAlias":        "Use LOWER([SupplierAlias]) LIKE '%term%' for brand/vendor alias filters.",
+    "Color":                "Use LOWER([Color]) LIKE '%term%'. Values like 'WHITE', 'NAVY BLUE', 'BLACK'.",
+    "Size":                 "Use LOWER([Size]) LIKE '%term%'. Values like 'S', 'M', 'L', 'XL', 'XXL'.",
+    "Fabric":               "Use LOWER([Fabric]) LIKE '%term%'. Values like 'COTTON', 'POLYESTER', 'LINEN'.",
     "XnDt":                 "Cast to DATE: CAST([XnDt] AS DATE) BETWEEN '2026-01-01' AND '2026-05-15'",
     "XnDtMonth":            "String month label e.g. 'April 2026'. Use LOWER([XnDtMonth]) LIKE '%april%' or GROUP BY [XnDtMonth]."
   },
@@ -122,9 +155,11 @@
   "aggregation_rules": {
     "MrpValue":  "SUM(ISNULL([MrpValue], 0))",
     "AppQty":    "SUM(ISNULL([AppQty], 0))",
-    "BillCount": "SUM([BillCount]) or COUNT(DISTINCT [XnNo])",
+    "CostValue": "SUM(ISNULL([CostValue], 0))",
+    "NetAmount": "SUM(ISNULL([NetAmount], 0))",
+    "BillCount": "SUM(ISNULL([BillCount], 0)) or COUNT(DISTINCT [XnNo])",
     "XnId":      "COUNT(DISTINCT [XnId])"
   },
 
-  "prompt_injection": "CRITICAL COLUMN RULES FOR dbo.VW_MB_POWERBI_APP_REPORT:\n• Revenue/Sales/Amount → [MrpValue]  (NEVER SaleNetAmount, NetAmount)\n• Quantity/Pieces/Units → [AppQty]   (NEVER Quantity, SalesQuantity)\n• Invoice/Bill number  → [XnNo]      (NEVER InvoiceNo, InvoiceId)\n• Transaction ID       → [XnId]      (NEVER CustomerId, UserKey)\n• Branch/Store/Outlet  → [BranchAlias]\n• Salesperson/Staff    → [SupplierName]\n• Date column          → [XnDt]\n• Month label          → [XnDtMonth]\n• Department           → [DepartmentShortName]\n• Category             → [CategoryShortName]\nString filters: always use LOWER([col]) LIKE '%term%'\nAggregations: SUM(ISNULL([MrpValue],0)), SUM(ISNULL([AppQty],0))"
+  "prompt_injection": "CRITICAL COLUMN RULES FOR dbo.VW_MB_POWERBI_APP_REPORT:\n• Revenue/Sales/Turnover        → [MrpValue]          (NEVER SaleNetAmount, SalesNetAmount)\n• Quantity/Pieces/Units         → [AppQty]            (NEVER Quantity, SalesQuantity)\n• Cost/COGS/Product cost        → [CostValue]         (NEVER CostPrice as metric)\n• Net amount after discounts    → [NetAmount]         (exists in view, use when asked)\n• Invoice/Bill number           → [XnNo]              (NEVER InvoiceNo, InvoiceId)\n• Transaction unique ID         → [XnId]\n• Branch/Store/Outlet           → [BranchAlias]\n• Salesperson/Staff/Consignee   → [SupplierName]\n• Brand alias                   → [SupplierAlias]\n• Date column                   → [XnDt]\n• Month label (string)          → [XnDtMonth]\n• Department                    → [DepartmentShortName]\n• Category                      → [CategoryShortName]\n• Article/SKU/Product code      → [ArticleNo]\n• Color dimension               → [Color]             (NEVER Colour, never SizeName)\n• Size dimension                → [Size]              (NEVER SizeName)\n• Fabric dimension              → [Fabric]\n• Bill/Invoice count            → SUM(ISNULL([BillCount],0)) or COUNT(DISTINCT [XnNo])\nString filters: always use LOWER([col]) LIKE '%term%'\nAggregations: SUM(ISNULL([MrpValue],0)), SUM(ISNULL([AppQty],0)), SUM(ISNULL([CostValue],0))\nRANKING/ALL-TIME queries: NEVER add a date WHERE clause unless the user explicitly asked for a time period."
 }

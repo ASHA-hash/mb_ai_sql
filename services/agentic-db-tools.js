@@ -20,6 +20,7 @@ const {
 const DISCOVERABLE_COLUMNS = new Set([
   "BranchAlias",
   "SupplierName",
+  "SalesPersonName",
   "CategoryShortName",
   "DepartmentShortName",
   "ArticleNo",
@@ -340,13 +341,13 @@ function formatLiveColumnSamplesBlock(samplesByKey) {
     "================================================================================",
     "CRITICAL:",
     "1. Use ONLY the exact strings below — do not guess spelling or capitalization.",
-    "2. Salesperson / staff / rep → column SupplierName on VW_MB_POWERBI_APP_REPORT.",
+    "2. Salesperson / staff / rep → column SalesPersonName on VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID (NOT SupplierName on APP_REPORT — that is vendor/brand).",
     "3. Wrap MrpValue, AppQty, CostValue in SUM / COUNT / AVG — never return raw line scans.",
   ];
 
   const order = [
     ["BranchAlias", "Available Branches (BranchAlias)"],
-    ["SupplierName", "Available Salespeople (SupplierName)"],
+    ["SalesPersonName", "Available Salespeople (SalesPersonName)"],
     ["CategoryShortName", "Available Categories (CategoryShortName)"],
     ["DepartmentShortName", "Available Departments (DepartmentShortName)"],
   ];
@@ -370,6 +371,46 @@ function formatLiveColumnSamplesBlock(samplesByKey) {
 /**
  * Cognitive loop: sample live column values before SQL generation.
  */
+const GROUNDING_STOP = new Set([
+  "sales", "sale", "today", "yesterday", "month", "year", "mtd", "ytd", "qtd",
+  "total", "many", "much", "show", "give", "what", "which", "from", "with", "that",
+  "this", "have", "were", "been", "will", "would", "could", "should", "about",
+]);
+
+/**
+ * LIKE-based grounding for unknown tokens (Layer 2 pre-flight accuracy).
+ */
+async function groundFilterTokensFromQuestion(pool, question, viewName, ctx) {
+  const out = {};
+  const q = String(question || "");
+  const tokens = q
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 4 && !GROUNDING_STOP.has(t));
+  if (!tokens.length) return out;
+
+  const dims = [
+    { col: ctx.branchCol, key: ctx.branchCol },
+    { col: ctx.catCol, key: ctx.catCol },
+    { col: ctx.deptCol, key: ctx.deptCol },
+  ].filter((d) => d.col && DISCOVERABLE_COLUMNS.has(d.col));
+
+  for (const token of tokens.slice(0, 4)) {
+    for (const { col, key } of dims) {
+      if (out[key]?.values?.length) continue;
+      const discovered = await discoverColumnValues(pool, col, token, {
+        viewName,
+        limit: 8,
+      });
+      if (discovered.values?.length) {
+        out[key] = { values: discovered.values, groundedFrom: token, error: null };
+      }
+    }
+  }
+  return out;
+}
+
 async function discoverLiveSamplesForQuestion(pool, question, viewName) {
   const q = String(question || "").toLowerCase();
   const view = normalizeViewShort(viewName);
@@ -401,7 +442,22 @@ async function discoverLiveSamplesForQuestion(pool, question, viewName) {
     addDiscover(ctx.branchCol, { topByRevenue: useTopByRevenue });
   }
   if (/\b(salesperson|sales\s*person|salesman|sales\s*rep|staff|rep|employee)\b/.test(q)) {
-    addDiscover(ctx.staffDimCol, { topByRevenue: true });
+    const staffView = /SLS_DATA_WITHOUT_ITEMID/i.test(view)
+      ? view
+      : normalizeViewShort(process.env.SALESPERSON_TOPN_VIEW || "VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID");
+    tasks.push(
+      (async () => {
+        const out = await discoverTopDimensionByRevenue(pool, "SalesPersonName", {
+          viewName: staffView,
+        });
+        samples.SalesPersonName = {
+          values: out.values || [],
+          topByRevenue: Boolean(out.rows?.length),
+          amountCol: "SalesNetAmount",
+          error: out.error || null,
+        };
+      })()
+    );
   }
   if (/\b(supplier|vendor)\b/.test(q) && !samples[ctx.staffDimCol]) {
     addDiscover(ctx.staffDimCol, { topByRevenue: useTopByRevenue });
@@ -421,6 +477,16 @@ async function discoverLiveSamplesForQuestion(pool, question, viewName) {
   }
 
   await Promise.all(tasks);
+
+  // Ground likely filter typos (e.g. "chenai" → branch LIKE match) on original wording
+  const tokenGrounding = await groundFilterTokensFromQuestion(pool, question, view, ctx);
+  for (const [col, entry] of Object.entries(tokenGrounding)) {
+    if (!samples[col]) samples[col] = entry;
+    else {
+      const merged = [...new Set([...(samples[col].values || []), ...(entry.values || [])])];
+      samples[col] = { ...samples[col], values: merged.slice(0, 15) };
+    }
+  }
   const text = formatLiveColumnSamplesBlock(samples);
   return { samples, text };
 }

@@ -7,7 +7,15 @@
 const fs = require("fs");
 const path = require("path");
 const { loadSchema, formatSchemaForPrompt } = require("./schema-from-json");
-const { VENDOR_PUR_TOPN_SQL } = require("./canonical-purchase-sql");
+const { resolveVendorPurchaseTopNSqlFast } = require("./canonical-purchase-sql");
+const { buildSalespersonTopNSql } = require("./canonical-salesperson-sql");
+const {
+  detectQueryDomain,
+  resolveViewForQuestion,
+  buildContextAwareSemanticBlock,
+  boostRankedViews,
+  translateJargonInContext,
+} = require("./dynamic-semantic-layer");
 
 const SEMANTIC_LAYER_PATH = path.join(__dirname, "..", "metadata", "semantic-layer.json");
 
@@ -124,20 +132,47 @@ const COLUMN_ENVELOPE = {
   "Sale Date":             "XnDt",
   "Transaction date":      "XnDt",
   "InvoiceDt":             "XnDt",
-  "Month":                 "XnDt",
-  "month":                 "XnDt",
+  "Month":                 "XnDtMonth",  // month label column, not the date column
+  "month":                 "XnDtMonth",
+  "Month label":           "XnDtMonth",
 
   // ── Invoice / Bill ───────────────────────────────────────────────────────
   "InvoiceNo":             "XnNo",
   "Invoice":               "XnNo",
   "Bill":                  "XnNo",
   "BillNo":                "XnNo",
+
+  // ── Article / Product ─────────────────────────────────────────────────────
+  "Article":               "ArticleNo",
+  "article":               "ArticleNo",
+  "Articles":              "ArticleNo",
+  "SKU":                   "ArticleNo",
+  "sku":                   "ArticleNo",
+  "Product code":          "ArticleNo",
+  "Item code":             "ArticleNo",
+  "Style code":            "ArticleNo",
+  "Itemcode":              "ArticleNo",
+
+  // ── Garment attributes ─────────────────────────────────────────────────
+  "Color":                 "Color",
+  "colour":                "Color",
+  "Colour":                "Color",
+  "Size":                  "Size",
+  "Fabric":                "Fabric",
+  "fabric":                "Fabric",
+  "Material":              "Fabric",
+  "SubFabric":             "SubFabric",
+
+  // ── Cost ─────────────────────────────────────────────────────────────────
+  "Cost":                  "CostValue",
+  "COGS":                  "CostValue",
+  "Product cost":          "CostValue",
+  "Cost value":            "CostValue",
 };
 
 const BUSINESS_TERM_MAPPINGS = {
   ...COLUMN_ENVELOPE,
-  // Cost columns (not in APP_REPORT but used for drill-down)
-  "Product cost": "CostValue",
+  // Additional aliases not in COLUMN_ENVELOPE
   "Total investment": "CostValue",
   ...SEMANTIC_TERM_MAPPINGS,
 };
@@ -149,9 +184,22 @@ const CANONICAL_COLUMNS = [...new Set(Object.values(BUSINESS_TERM_MAPPINGS))];
  * @param {string} inputTerm
  * @returns {string|null}
  */
-function translateJargonToColumn(inputTerm) {
+function translateJargonToColumn(inputTerm, question, viewName) {
   const raw = String(inputTerm || "").trim();
   if (!raw) return null;
+
+  if (question) {
+    const ctxCol = translateJargonInContext(
+      raw,
+      question,
+      viewName || resolveViewForQuestion(question)
+    );
+    if (ctxCol) return ctxCol;
+    const domain = detectQueryDomain(question);
+    if (domain === "salesperson" && /salesperson|staff|sales\s*rep|employee/i.test(raw)) {
+      return "SalesPersonName";
+    }
+  }
 
   const cfg = loadSemanticConfig();
   const metrics = cfg.semantic_mappings?.metrics || {};
@@ -198,7 +246,19 @@ function getForcedDatePredicate(intervalKey, opts = {}) {
   return pred;
 }
 
-function buildSemanticMappingsPromptBlock() {
+function buildSemanticMappingsPromptBlock(question, viewName) {
+  if (question) {
+    const dynamic = buildContextAwareSemanticBlock(question, viewName);
+    const cfg = loadSemanticConfig();
+    return [
+      dynamic,
+      "",
+      "### GLOBAL ALIASES (fallback only — prefer view-specific roles above)",
+      `Default target_view in JSON: ${cfg.target_view || "dbo.VW_MB_POWERBI_APP_REPORT"}`,
+      `Database: ${cfg.database || "zRetailHQ0"}`,
+    ].join("\n");
+  }
+
   const cfg = loadSemanticConfig();
   const lines = [
     "### SEMANTIC GROUND TRUTH (metadata/semantic-layer.json)",
@@ -234,6 +294,10 @@ const LOGICAL_GROUP_DIMENSIONS = [
   "CategoryShortName",
   "SupplierName",
   "SupplierAlias",
+  "ArticleNo",
+  "Color",
+  "Size",
+  "Fabric",
 ];
 
 const RAW_SCAN_TOP = 100;
@@ -246,22 +310,39 @@ const EXACT_MATCH_CACHE = {
     "SELECT SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = CAST(GETDATE() AS date)",
   "sales today":
     "SELECT SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = CAST(GETDATE() AS date)",
-  "sales by store yesterday":
-    "SELECT BranchAlias, SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date)) GROUP BY BranchAlias ORDER BY TotalSales DESC",
-  "turnover by store yesterday":
-    "SELECT BranchAlias, SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date)) GROUP BY BranchAlias ORDER BY TotalSales DESC",
+  "sales by store yesterday": null,
+  "turnover by store yesterday": null,
   "total sales yesterday":
     "SELECT SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))",
   "sales volume today":
     "SELECT SUM(AppQty) AS TotalVolume FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) = CAST(GETDATE() AS date)",
-  "highest revenue salesperson this month":
-    "SELECT TOP 10 SupplierName AS StaffName, SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date) GROUP BY SupplierName ORDER BY TotalSales DESC",
-  "highest revenue salesperson this month by salenetamount":
-    "SELECT TOP 10 SupplierName AS StaffName, SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date) GROUP BY SupplierName ORDER BY TotalSales DESC",
+  "top 10 salespersons by gross revenue this month": buildSalespersonTopNSql(
+    "top 10 salespersons by gross revenue this month"
+  ),
+  "top salespersons by gross revenue this month": buildSalespersonTopNSql(
+    "top 20 salespersons by gross revenue this month"
+  ),
+  "highest revenue salesperson this month": buildSalespersonTopNSql(
+    "top 10 highest revenue salesperson this month"
+  ),
+  "highest revenue salesperson this month by salenetamount": buildSalespersonTopNSql(
+    "top 10 highest revenue salesperson this month"
+  ),
   "top 5 branches by net sales this month":
     "SELECT TOP 5 BranchAlias AS Branch, SUM(MrpValue) AS TotalSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date) GROUP BY BranchAlias ORDER BY TotalSales DESC",
-  "top 10 vendors by purchase amount this month": VENDOR_PUR_TOPN_SQL,
-  "top vendors by purchase amount this month": VENDOR_PUR_TOPN_SQL.replace(/TOP\s+10/i, "TOP 20"),
+  "top 10 vendors by purchase amount this month": resolveVendorPurchaseTopNSqlFast(
+    "top 10 vendors by purchase amount this month"
+  ),
+  "top vendors by purchase amount this month": resolveVendorPurchaseTopNSqlFast(
+    "top 20 vendors by purchase amount this month"
+  ).replace(/TOP\s+10/i, "TOP 20"),
+  "what is mtd gross revenue":
+    "SELECT SUM(MrpValue) AS MTDSales, COUNT(DISTINCT XnNo) AS BillCount FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+  "what is ytd gross revenue":
+    "SELECT SUM(MrpValue) AS YTDSales, COUNT(DISTINCT XnNo) AS BillCount FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE()) >= 4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE()) - 1 END, 4, 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+  "ytd gross revenue":
+    "SELECT SUM(MrpValue) AS YTDSales FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK) WHERE CAST(XnDt AS date) >= DATEFROMPARTS(CASE WHEN MONTH(GETDATE()) >= 4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE()) - 1 END, 4, 1) AND CAST(XnDt AS date) <= CAST(GETDATE() AS date)",
+  "how many bills today": null, // resolved dynamically via home-kpi-sql (same as Home page)
 };
 
 const FUZZY_FAST_PATH_MAX_DISTANCE = 2;
@@ -285,24 +366,46 @@ function levenshteinDistance(a, b) {
   return row[t];
 }
 
+function resolveExactMatchSql(cacheKey) {
+  if (!Object.prototype.hasOwnProperty.call(EXACT_MATCH_CACHE, cacheKey)) return null;
+  const entry = EXACT_MATCH_CACHE[cacheKey];
+  if (entry === null) {
+    const { buildBillsTodaySqlAlignedWithHome, buildSalesTopNBreakdownSql } = require("./home-kpi-sql");
+    if (cacheKey === "how many bills today") {
+      return buildBillsTodaySqlAlignedWithHome();
+    }
+    if (cacheKey === "sales by store yesterday" || cacheKey === "turnover by store yesterday") {
+      return buildSalesTopNBreakdownSql(cacheKey);
+    }
+    return null;
+  }
+  return entry;
+}
+
 /**
  * Exact hash lookup, then fuzzy match against cache keys (≤2 edits).
  * @returns {{ sql: string, matchType: 'exact'|'fuzzy', matchedKey: string }|null}
  */
 function checkFastPath(userQuestion) {
+  const { isFastPathEnabled } = require("./nlq-pipeline-config");
+  if (!isFastPathEnabled()) return null;
+
   const cleanQuestion = normalizeTerm(userQuestion);
   if (!cleanQuestion) return null;
 
-  if (EXACT_MATCH_CACHE[cleanQuestion]) {
+  const exactSql = resolveExactMatchSql(cleanQuestion);
+  if (exactSql) {
     return {
-      sql: EXACT_MATCH_CACHE[cleanQuestion],
+      sql: exactSql,
       matchType: "exact",
       matchedKey: cleanQuestion,
     };
   }
 
   let best = null;
-  for (const [key, sql] of Object.entries(EXACT_MATCH_CACHE)) {
+  for (const key of Object.keys(EXACT_MATCH_CACHE)) {
+    const sql = resolveExactMatchSql(key);
+    if (!sql) continue;
     const dist = levenshteinDistance(cleanQuestion, key);
     if (dist <= FUZZY_FAST_PATH_MAX_DISTANCE && (!best || dist < best.dist)) {
       best = { sql, matchType: "fuzzy", matchedKey: key, dist };
@@ -314,8 +417,16 @@ function checkFastPath(userQuestion) {
   return null;
 }
 
-function buildMappingDictionaryBlock() {
-  return `${buildSemanticMappingsPromptBlock()}
+function buildMappingDictionaryBlock(question, viewName) {
+  const head = buildSemanticMappingsPromptBlock(question, viewName);
+  if (question) {
+    const view =
+      viewName || resolveViewForQuestion(question);
+    return `${head}
+
+Use column roles for [${view}] above. Global MrpValue / SupplierName / XnDt aliases apply only on dbo.VW_MB_POWERBI_APP_REPORT — not on salesperson or SLSXNS views.`;
+  }
+  return `${head}
 
 ### BUSINESS DICTIONARY MAPPINGS (Plain English -> Canonical Column):
 ${Object.entries(BUSINESS_TERM_MAPPINGS)
@@ -357,16 +468,36 @@ function rankViewsByMappingCoverage(userQuestion, schemaJson) {
     }
   }
 
+  if (
+    /\b(salesperson|salespersons|sales\s*person|sales\s*rep|staff)\b/.test(q) &&
+    /\b(revenue|sales|amount|top|highest|performance|gross)\b/.test(q) &&
+    !/\b(purchase|procurement)\b/.test(q)
+  ) {
+    const slsStaff = ranked.find((r) => /SLS_DATA_WITHOUT_ITEMID/i.test(r.viewName));
+    if (slsStaff) {
+      return [slsStaff, ...ranked.filter((r) => r.viewName !== slsStaff.viewName)];
+    }
+  }
+
   if (/\b(purchase|vendor|vendors|supplier|suppliers|procurement)\b/.test(q) && /\b(amount|value|cost|qty|quantity)\b/.test(q)) {
     const purxns = ranked.find((r) => /PURXNS_REPORT$/i.test(r.viewName));
     const supplierPur = ranked.find((r) => /SUPPLIER_PUR_REPORT$/i.test(r.viewName));
     const pick = purxns || supplierPur;
     if (pick) {
-      return [pick, ...ranked.filter((r) => r.viewName !== pick.viewName)];
+      return boostRankedViews(userQuestion, [pick, ...ranked.filter((r) => r.viewName !== pick.viewName)], schemaJson);
     }
   }
 
-  return ranked;
+  const analytics = String(process.env.ANALYTICS_BASE_TABLE || "").trim();
+  if (analytics && !/\b(salesperson|sales\s*person|purchase|approval)\b/.test(q)) {
+    const full = analytics.startsWith("dbo.") ? analytics : `dbo.${analytics}`;
+    const hit = ranked.find((r) => r.viewName === full);
+    if (hit) {
+      return boostRankedViews(userQuestion, [hit, ...ranked.filter((r) => r.viewName !== full)], schemaJson);
+    }
+  }
+
+  return boostRankedViews(userQuestion, ranked, schemaJson);
 }
 
 /**
@@ -388,11 +519,11 @@ function selectTopViewsForPipeline(userQuestion, opts = {}) {
     }
   }
 
-  const target = loadSemanticConfig().target_view;
-  if (target && schemaJson.views?.[target] && !ordered.includes(target)) {
-    return [target, ...ordered].slice(0, topN);
+  const preferred = resolveViewForQuestion(userQuestion, { schemaJson, tableHint: opts.tableHint });
+  if (preferred && !ordered.includes(preferred)) {
+    return [preferred, ...ordered].slice(0, topN);
   }
-  return ordered.length ? ordered : [target || "dbo.VW_MB_POWERBI_APP_REPORT"];
+  return ordered.length ? ordered : [preferred || "dbo.VW_MB_POWERBI_APP_REPORT"];
 }
 
 function formatRankedSchemaForPrompt(userQuestion, opts = {}) {
@@ -494,7 +625,12 @@ function buildAggregationMandateBlock() {
 
 ### CANONICAL VIEW MANDATE
 Always query: dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)
-Revenue = MrpValue | Qty = AppQty | Date = XnDt | Invoice = XnNo | Branch = BranchAlias | Staff = SupplierName | Category = CategoryShortName | Dept = DepartmentShortName`;
+Revenue/Turnover = MrpValue | Qty/Pieces = AppQty | Cost = CostValue | Net discount = NetAmount
+Date = XnDt | Month label = XnDtMonth | Invoice = XnNo | TxnID = XnId | Bills = BillCount
+Branch/Store = BranchAlias | Staff/Consignee = SupplierName | Brand alias = SupplierAlias
+Category = CategoryShortName | Dept = DepartmentShortName | Article/SKU = ArticleNo
+Color = Color (NEVER Colour) | Size = Size (NEVER SizeName) | Fabric = Fabric
+RANKING/ALL-TIME queries → OMIT date WHERE clause entirely`;
 }
 
 /**
@@ -522,15 +658,23 @@ function formatSystemObservation(err, sql, attemptCount) {
   }
 
   // ── Inject canonical column reminder on every retry ───────────────────────
-  const canonicalHint = `\n[Canonical Column Rules — mandatory]\n` +
-    `• Revenue/Sales/SaleNetAmount/Turnover → SUM([MrpValue])\n` +
-    `• Quantity/Qty/Pcs/Units → SUM([AppQty])\n` +
-    `• Invoice/Bill → [XnNo]\n` +
-    `• Date/Sale Date → [XnDt]\n` +
-    `• Salesperson/Staff → [SupplierName]\n` +
-    `• Store/Branch/Location → [BranchAlias]\n` +
+  const canonicalHint = `\n[Canonical Column Rules — mandatory on retry]\n` +
+    `• Revenue/Sales/Turnover        → SUM([MrpValue])        (NEVER SaleNetAmount, SalesNetAmount)\n` +
+    `• Quantity/Qty/Pcs/Units        → SUM([AppQty])          (NEVER Quantity, SalesQuantity)\n` +
+    `• Cost of goods                 → SUM([CostValue])\n` +
+    `• Net discount amount           → SUM([NetAmount])       (real column — valid)\n` +
+    `• Invoice/Bill number           → [XnNo]                 (NEVER InvoiceNo, InvoiceId)\n` +
+    `• Date column                   → [XnDt]                 (NEVER SaleDate, InvoiceDt)\n` +
+    `• Month string label            → [XnDtMonth]\n` +
+    `• Bills/Footfall count          → SUM(ISNULL([BillCount],0))\n` +
+    `• Salesperson/Staff             → [SupplierName]\n` +
+    `• Store/Branch/Location         → [BranchAlias]          (NEVER BranchName)\n` +
+    `• Article/SKU/Product code      → [ArticleNo]\n` +
+    `• Color dimension               → [Color]                (NEVER Colour, NEVER SizeName)\n` +
+    `• Size dimension                → [Size]                 (NEVER SizeName)\n` +
+    `• Fabric dimension              → [Fabric]\n` +
     `• View: dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\n` +
-    `• MTD date filter: [XnDt] >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)`;
+    `• MTD: [XnDt] >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND [XnDt] <= CAST(GETDATE() AS date)`;
 
   return (
     `[System Observation]\n` +
@@ -576,6 +720,10 @@ function verifySchemaMetadata(schemaJson) {
 module.exports = {
   loadSemanticConfig,
   semanticConfig: loadSemanticConfig,
+  detectQueryDomain,
+  resolveViewForQuestion,
+  buildContextAwareSemanticBlock,
+  translateJargonInContext,
   translateJargonToColumn,
   getForcedDatePredicate,
   buildSemanticMappingsPromptBlock,

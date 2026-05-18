@@ -45,7 +45,22 @@ const {
 } = require("./services/query-performance");
 const ragSchemaIndexer = require("./services/rag-schema-indexer");
 const { seedOnStartup: seedRagKnowledge } = require("./services/semantic-seeder");
+const { seedGoldenExamples } = require("./services/golden-examples-seeder");
 const { runDeterministicQuery, chartPolicyFromResultShape } = require("./services/deterministic-ai");
+const { resolveAdaptiveFastPathSql } = require("./services/adaptive-fast-path");
+const { isFastPathEnabled } = require("./services/nlq-pipeline-config");
+const {
+  buildBillsTodaySqlAlignedWithHome,
+  buildTodaySalesSqlAlignedWithHome,
+  buildTopInvoicesTodaySql,
+  isBillsTodayQuestion,
+  isTodaySalesKpiQuestion,
+  isTopInvoicesTodayQuestion,
+  isTopStoreYesterdayQuestion,
+  buildTopStoreYesterdaySql,
+  resolveHomeAlignedSql,
+} = require("./services/home-kpi-sql");
+const { isSalespersonTopNQuestion } = require("./services/canonical-salesperson-sql");
 const {
   prepareQuestionForPipeline,
   toAdaptiveClarificationResponse,
@@ -172,6 +187,126 @@ function respondAsyncExport(res, { question, sql, pool, userId }) {
   });
 }
 
+/** Home-aligned SQL — scalar KPIs and top invoices today (same fact table as Home). */
+async function tryHomeAlignedKpiSql(res, { question, pool, tableHint, apiKey, model, originalQuestion }) {
+  const hit = resolveHomeAlignedSql(question, originalQuestion);
+  if (!hit?.sql) return false;
+
+  const { sql, label: kpiLabel, chartAsTopN } = hit;
+
+  try {
+    const { execSql, rows } = await ragFastPath.executeVerifiedSql(pool, sql);
+    const data = rowsForJson(rows);
+    const tags = tagColumnsByValues(data);
+    const intent = classifyQueryIntent(question);
+    const intentType = reconcileIntentTypeForResponse(
+      question,
+      chartAsTopN ? "top_n" : intent.type,
+      data
+    );
+    const chartPolicy = chartAsTopN
+      ? chartPolicyFromResultShape(data) || "bar"
+      : preferChartForTrendQuestion(question, intentType, "kpi_card");
+    const drillDownSuggestions = await maybeDrillDownSuggestions({
+      apiKey: String(apiKey || "").trim(),
+      model,
+      question,
+      data,
+      intentType,
+      tableHint,
+    });
+    console.log(`[adaptive] home-aligned KPI (${kpiLabel})`);
+    res.json({
+      sql: execSql,
+      rowCount: data.length,
+      data,
+      mode: "home_kpi_aligned",
+      tableHint: tableHint || null,
+      summary: null,
+      intentType: intentType || "kpi",
+      intentDescription: `Same fact table as Home → ${kpiLabel} (ANALYTICS_BASE_TABLE)`,
+      chartPolicy,
+      dataSource: "home_kpi_aligned",
+      contractPassed: data.length > 0,
+      contractIssues: data.length === 0 ? ["no_rows"] : [],
+      contractWarnings: [],
+      columnTags: tags,
+      confidence: data.length > 0 ? "high" : "low",
+      confidenceNote:
+        data.length > 0
+          ? `Matched Home KPI (${kpiLabel}).`
+          : `Home-aligned SQL ran (${kpiLabel}) but returned 0 rows for today — check if sales exist on ${process.env.ANALYTICS_BASE_TABLE || "ANALYTICS_BASE_TABLE"}.`,
+      retryCount: 0,
+      drillDownSuggestions,
+    });
+    return true;
+  } catch (err) {
+    console.warn("[adaptive] home-aligned KPI failed:", err.message);
+    return false;
+  }
+}
+
+/** Execute canonical / exact-match SQL before RAG or LLM (AskYourDatabase-style). */
+async function tryAdaptiveCanonicalSqlPath(
+  res,
+  { question, pool, fromDate, toDate, tableHint, apiKey, model, userId }
+) {
+  if (!isFastPathEnabled()) return false;
+  const hit = resolveAdaptiveFastPathSql(question, { fromDate, toDate });
+  if (!hit?.sql) return false;
+
+  if (detectExportIntent(question)) {
+    respondAsyncExport(res, { question, sql: hit.sql, pool, userId });
+    return true;
+  }
+
+  try {
+    const { execSql, rows } = await ragFastPath.executeVerifiedSql(pool, hit.sql);
+    const data = rowsForJson(rows);
+    const tags = tagColumnsByValues(data);
+    const intent = classifyQueryIntent(question);
+    const shape = detectResultShape(data, tags);
+    const intentType = reconcileIntentTypeForResponse(question, intent.type, data);
+    const chartPolicyBase = shape.chartType || intent.chartPolicy || "auto";
+    const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
+    const drillDownSuggestions = await maybeDrillDownSuggestions({
+      apiKey: String(apiKey || "").trim(),
+      model,
+      question,
+      data,
+      intentType,
+      tableHint,
+    });
+    console.log(`[adaptive] canonical fast-path (${hit.source})`);
+    res.json({
+      sql: execSql,
+      rowCount: data.length,
+      data,
+      mode: "canonical_fast",
+      canonicalSource: hit.source,
+      tableHint: tableHint || null,
+      summary: null,
+      intentType,
+      intentDescription: `Canonical fast path (${hit.source}) — verified SQL, no LLM`,
+      chartPolicy,
+      resultShape: shape.shape,
+      dataSource: "canonical_fast",
+      contractPassed: data.length > 0,
+      contractIssues: data.length === 0 ? ["No rows returned"] : [],
+      contractWarnings: [],
+      columnTags: tags,
+      confidence: data.length ? "high" : "medium",
+      confidenceNote: `Used ${hit.source} template.`,
+      retryCount: 0,
+      drillDownSuggestions,
+    });
+    return true;
+  } catch (err) {
+    console.warn("[adaptive] canonical fast-path execution failed:", err.message);
+    return false;
+  }
+}
+
 async function tryRagVerifiedFastPath(res, { question, pool, fromDate, toDate, tableHint, apiKey, model, userId }) {
   if (!ragFastPath.isFastPathEnabled()) return false;
   if (ragFastPath.shouldSkipForDatePicker(fromDate, toDate)) return false;
@@ -184,6 +319,14 @@ async function tryRagVerifiedFastPath(res, { question, pool, fromDate, toDate, t
     return false;
   }
   if (!hit) return false;
+
+  if (
+    isSalespersonTopNQuestion(question) &&
+    !/\bSalesPersonName\b/i.test(String(hit.sql || ""))
+  ) {
+    console.warn("[adaptive] RAG fast-path rejected — salesperson question with non-staff SQL");
+    return false;
+  }
 
   if (detectExportIntent(question)) {
     respondAsyncExport(res, { question, sql: hit.sql, pool, userId });
@@ -953,6 +1096,43 @@ app.get("/dashboard.html", (_req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
+
+const DASHBOARD_PAGES = [
+  "analytics.html",
+  "ai-query.html",
+  "data.html",
+  "explorer.html",
+  "rag.html",
+  "schedule.html",
+  "admin.html",
+  "settings.html",
+];
+for (const name of DASHBOARD_PAGES) {
+  app.get(`/${name}`, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.sendFile(path.join(__dirname, name));
+  });
+}
+
+/** Dashboard split: /assets/* and /panels/* (Babel script src=). Explicit routes + correct MIME. */
+function mountDashboardStaticDir(urlPrefix, dirName) {
+  app.get(`${urlPrefix}/:file`, (req, res, next) => {
+    const file = path.basename(String(req.params.file || ""));
+    if (!file || file !== req.params.file) return next();
+    if (!/^[a-zA-Z0-9._-]+$/.test(file)) return next();
+    const full = path.join(__dirname, dirName, file);
+    if (!fs.existsSync(full)) {
+      return res.status(404).type("text/plain").send(`Not found: ${urlPrefix}/${file}`);
+    }
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    const ext = path.extname(file).toLowerCase();
+    if (ext === ".css") res.type("text/css; charset=utf-8");
+    else if (ext === ".js" || ext === ".jsx") res.type("application/javascript; charset=utf-8");
+    return res.sendFile(full);
+  });
+}
+mountDashboardStaticDir("/assets", "assets");
+mountDashboardStaticDir("/panels", "panels");
 
 /** RAG / connector guide (static HTML next to this file). Not under /api/ — skips API key + RBAC. */
 app.get("/rag-guide.html", (_req, res) => {
@@ -2560,35 +2740,20 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
   const claudeApiKey = isClaude ? (process.env.ANTHROPIC_API_KEY || "") : undefined;
   const forceMode = String(req.body?.forceMode ?? "").trim().toLowerCase(); // "langgraph" | ""
 
-  // ── LangGraph forced mode: fast templates + RAG, then LangGraph ───────────
+  // ── LangGraph (Adaptive Agent): Home KPI align → full graph (no static cache) ──
   if (forceMode === "langgraph") {
     let pool;
     try { pool = await getPool(); } catch (err) {
       return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
     }
     if (
-      await tryDeterministicFastPatterns(res, {
+      await tryHomeAlignedKpiSql(res, {
         question,
+        originalQuestion: userGuidanceMeta.originalQuestion || question,
         pool,
-        fromDate,
-        toDate,
         apiKey,
         model,
         tableHint,
-      })
-    ) {
-      return;
-    }
-    if (
-      await tryRagVerifiedFastPath(res, {
-        question,
-        pool,
-        fromDate,
-        toDate,
-        tableHint,
-        apiKey,
-        model,
-        userId: req.rbac?.email,
       })
     ) {
       return;
@@ -2755,6 +2920,34 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     pool = await getPool();
   } catch (err) {
     return res.status(503).json({ error: "db_unavailable", message: String(err.message) });
+  }
+
+  if (
+    await tryHomeAlignedKpiSql(res, {
+      question,
+      originalQuestion: userGuidanceMeta.originalQuestion || question,
+      pool,
+      apiKey,
+      model,
+      tableHint,
+    })
+  ) {
+    return;
+  }
+
+  if (
+    await tryAdaptiveCanonicalSqlPath(res, {
+      question,
+      pool,
+      fromDate,
+      toDate,
+      apiKey,
+      model,
+      tableHint,
+      userId: req.rbac?.email,
+    })
+  ) {
+    return;
   }
 
   if (
@@ -3541,6 +3734,15 @@ app.post("/api/query/langchain", rbac.requireFeature("ai"), async (req, res) => 
     if (fromDate) userDateRange.from = fromDate;
     if (toDate)   userDateRange.to   = toDate;
 
+    // Multi-turn conversation context from the chat UI (last 3 Q→SQL pairs)
+    const conversationHistory = Array.isArray(req.body?.conversationHistory)
+      ? req.body.conversationHistory.slice(-3).map(h => ({
+          question: String(h.question || "").slice(0, 300),
+          sql:      String(h.sql      || "").slice(0, 2000),
+          summary:  String(h.summary  || "").slice(0, 300),
+        }))
+      : [];
+
     const result = await runLangChainQuery({
       apiKey:       isLgClaude ? undefined : String(lgApiKey).trim(),
       claudeApiKey: isLgClaude ? String(lgApiKey).trim() : undefined,
@@ -3551,6 +3753,7 @@ app.post("/api/query/langchain", rbac.requireFeature("ai"), async (req, res) => 
       dateContext,
       userDateRange,
       tableHint: tableHint || undefined,
+      conversationHistory,
     });
 
     const colTags  = tagColumnsByValues(result.data);
@@ -4301,6 +4504,11 @@ app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
     console.warn("[rag-schema-indexer] background index failed:", e.message)
   );
 
+  // Seed golden Q→SQL examples into RAG store (idempotent — skips if already seeded)
+  seedGoldenExamples().catch(e =>
+    console.warn("[golden-seeder] non-fatal:", e.message)
+  );
+
   // Schedule analytics cache warm-up (30s delay, then every 15 min).
   // Pre-runs MTD/QTD/YTD/180d so the first user never waits for a cold query.
   // Disable: ANALYTICS_WARMUP=0 in .env
@@ -4332,6 +4540,19 @@ app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
       port,
       port
     );
+    for (const rel of [
+      "assets/dashboard.css",
+      "assets/shared-core.jsx",
+      "assets/page-shell.jsx",
+      "panels/home.js",
+    ]) {
+      const fp = path.join(__dirname, rel);
+      if (fs.existsSync(fp)) {
+        console.log(`[dashboard] static OK  /${rel.replace(/\\/g, "/")}`);
+      } else {
+        console.warn(`[dashboard] MISSING ${rel} — run: node scripts/split-dashboard-pages.js`);
+      }
+    }
 
     if (rbac.rbacEnabled()) {
       try {

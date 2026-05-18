@@ -22,7 +22,8 @@ const DEFAULT_SAMPLE_TABLE = "dbo.VW_MB_POWERBI_APP_REPORT";
 
 /**
  * Columns to sample per question keyword pattern.
- * Pattern → { column, label }
+ * Pattern → { column, label, topN? }
+ * Columns verified against VW_MB_POWERBI_APP_REPORT (28 views, 33 cols on APP_REPORT).
  */
 const SAMPLE_TRIGGERS = [
   {
@@ -41,15 +42,42 @@ const SAMPLE_TRIGGERS = [
     label:   "Categories",
   },
   {
-    pattern: /\b(salesperson|sales person|staff|employee|rep|agent|consignment|consignee)\b/i,
+    pattern: /\b(salesperson|sales\s*person|staff|employee|rep|agent|consignment|consignee)\b/i,
     column:  "SupplierName",
     label:   "Salespersons / Consignees",
   },
   {
-    pattern: /\b(article|style|sku|product code|barcode)\b/i,
+    pattern: /\b(supplier\s*alias|brand\s*alias|vendor\s*alias)\b/i,
+    column:  "SupplierAlias",
+    label:   "Supplier / Brand Aliases",
+  },
+  {
+    pattern: /\b(article|articles|style|sku|product\s*code|item\s*code|barcode)\b/i,
     column:  "ArticleNo",
     label:   "Article Codes",
     topN:    50,
+  },
+  {
+    // Color dimension — actual column name in DB is "Color" (not Colour)
+    pattern: /\b(color|colour|colou?rs?)\b/i,
+    column:  "Color",
+    label:   "Colors",
+  },
+  {
+    // Size dimension — actual column name in DB is "Size" (not SizeName)
+    pattern: /\b(sizes?|xs|xl|xxl|xxxl|small|medium|large)\b/i,
+    column:  "Size",
+    label:   "Sizes",
+  },
+  {
+    pattern: /\b(fabric|material|cotton|polyester|linen|silk|wool|denim)\b/i,
+    column:  "Fabric",
+    label:   "Fabric Types",
+  },
+  {
+    pattern: /\b(concept|collection|range)\b/i,
+    column:  "Concept",
+    label:   "Product Concepts",
   },
 ];
 
@@ -184,6 +212,12 @@ function fuzzyMatch(userTerm, dbValues, threshold = 0.4) {
  * @param {Record<string, string[]>} samples   column → values[]
  * @returns {string}
  */
+function sampleValuesList(entry) {
+  if (Array.isArray(entry)) return entry;
+  if (entry && Array.isArray(entry.values)) return entry.values;
+  return [];
+}
+
 function buildValueCorrectionBlock(question, samples) {
   if (!samples || Object.keys(samples).length === 0) return "";
   const lines = [];
@@ -196,7 +230,9 @@ function buildValueCorrectionBlock(question, samples) {
     .split(/\s+/)
     .filter((w) => w.length > 3 && !STOP.has(w.toLowerCase()));
 
-  for (const [column, values] of Object.entries(samples)) {
+  for (const [column, raw] of Object.entries(samples)) {
+    const values = sampleValuesList(raw);
+    if (!values.length) continue;
     for (const word of words) {
       const matched = fuzzyMatch(word, values);
       if (matched && matched.toLowerCase() !== word.toLowerCase()) {
@@ -214,6 +250,7 @@ module.exports = {
   sampleValuesForQuestion,
   sampleColumnValues,
   fuzzyMatch,
+  sampleValuesList,
   buildValueCorrectionBlock,
   SAMPLE_TRIGGERS,
 };

@@ -241,8 +241,13 @@ function buildSalesPurchaseCompareSql(question, schemaMeta) {
 const {
   isVendorPurchaseTopNQuestion,
   buildVendorPurchaseTopNSql: buildVendorPurchaseTopNSqlCanonical,
+  resolveVendorPurchaseTopNSqlFast,
   VENDOR_PUR_TOPN_SQL,
 } = require("./canonical-purchase-sql");
+const {
+  isSalespersonTopNQuestion,
+  buildSalespersonTopNSql,
+} = require("./canonical-salesperson-sql");
 
 function getObjectColumns(schemaMeta, tableName) {
   const target = String(tableName || "").toLowerCase();
@@ -1621,7 +1626,9 @@ async function runDeterministicQuery({ apiKey, model, question, pool, fromDate, 
 
   /* Always-on fast patterns (not gated by DETERMINISTIC_LEGACY_TEMPLATES). */
   if (isVendorPurchaseTopNQuestion(question)) {
-    const sql = buildVendorPurchaseTopNSql({ objects: [] }, question, fromDate, toDate);
+    const sql =
+      resolveVendorPurchaseTopNSqlFast(question, fromDate, toDate) ||
+      buildVendorPurchaseTopNSql({ objects: [] }, question, fromDate, toDate);
     if (sql) {
       const cacheKey = `sql:${sql}`;
       const rows = getCachedRows(cacheKey) || (await pool.request().query(sql)).recordset || [];
@@ -1637,6 +1644,38 @@ async function runDeterministicQuery({ apiKey, model, question, pool, fromDate, 
         chartPolicy: chartPolicyFromResultShape(rows),
         summary: buildDeterministicSummary("top_n", rows),
         confidence: { level: rows.length ? "high" : "medium", note: rows.length ? "" : "No rows in range — widen dates or check PURXNS data." },
+        retriesUsed: 0,
+        interpretation: buildInterpretationForResult({
+          dictionary: dictionaryEarly,
+          question,
+          structuredPlan: structuredPlanEarly,
+          intent: pintent,
+          reliability: prel,
+        }),
+      };
+    }
+  }
+
+  if (isSalespersonTopNQuestion(question)) {
+    const sql = buildSalespersonTopNSql(question, fromDate, toDate);
+    if (sql) {
+      const cacheKey = `sql:${sql}`;
+      const rows = getCachedRows(cacheKey) || (await pool.request().query(sql)).recordset || [];
+      if (!getCachedRows(cacheKey)) setCachedRows(cacheKey, rows);
+      const pintent = { intent: "top_n", confidence: "high", clarification_question: null };
+      const prel = { ok: true, reason: "salesperson_topn_template" };
+      return {
+        handled: true,
+        sql,
+        data: rows,
+        intent: pintent,
+        reliability: prel,
+        chartPolicy: chartPolicyFromResultShape(rows),
+        summary: buildDeterministicSummary("top_n", rows),
+        confidence: {
+          level: rows.length ? "high" : "medium",
+          note: rows.length ? "" : "No salesperson rows in range — check SalesPersonName on SLS_DATA view.",
+        },
         retriesUsed: 0,
         interpretation: buildInterpretationForResult({
           dictionary: dictionaryEarly,

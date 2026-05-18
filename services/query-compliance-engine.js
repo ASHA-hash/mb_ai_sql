@@ -36,10 +36,11 @@ function getMapping() {
 }
 
 /* ── Static illegal column set for fast lookup ─────────────────────────────── */
+// NOTE: NetAmount is a REAL column in VW_MB_POWERBI_APP_REPORT (ordinal 29) — do NOT block it.
+// Colour/SizeName/EAN do NOT exist in the view — block them and map to correct columns.
 const HARD_ILLEGAL_COLUMNS = new Set([
   "SALENETAMOUNT",
   "SALESNETAMOUNT",
-  "NETAMOUNT",
   "NETSALESAMOUNT",
   "QUANTITY",
   "SALESQUANTITY",
@@ -52,12 +53,14 @@ const HARD_ILLEGAL_COLUMNS = new Set([
   "SALEDATE",
   "INVOICEDT",
   "CASHMEMODT",
+  "COLOUR",       // wrong spelling — actual column is Color
+  "SIZENAME",     // wrong column — actual column is Size
+  "EAN",          // does not exist on APP_REPORT
 ]);
 
 const COLUMN_FIX_MAP = {
   SALENETAMOUNT:   "MrpValue",
   SALESNETAMOUNT:  "MrpValue",
-  NETAMOUNT:       "MrpValue",
   NETSALESAMOUNT:  "MrpValue",
   QUANTITY:        "AppQty",
   SALESQUANTITY:   "AppQty",
@@ -70,6 +73,9 @@ const COLUMN_FIX_MAP = {
   SALEDATE:        "XnDt",
   INVOICEDT:       "XnDt",
   CASHMEMODT:      "XnDt",
+  COLOUR:          "Color",
+  SIZENAME:        "Size",
+  EAN:             "ArticleNo",
 };
 
 /* ── Dangerous DML/DDL patterns — absolute block ───────────────────────────── */
@@ -200,6 +206,15 @@ function checkSqlCompliance(sql, opts = {}) {
   );
   const allIllegal = new Set([...HARD_ILLEGAL_COLUMNS, ...dynamicIllegal]);
   const fixMap     = { ...COLUMN_FIX_MAP, ...(mapping.illegal_column_map || {}) };
+
+  // Salesperson view uses SalesQuantity, CashmemoDt, SalesNetAmount — all valid on that view.
+  // Remove them from the illegal set so the compliance check doesn't corrupt correct salesperson SQL.
+  if (/SLS_DATA_WITHOUT_ITEMID/i.test(trimmed)) {
+    allIllegal.delete("SALESQUANTITY");
+    allIllegal.delete("CASHMEMODT");
+    allIllegal.delete("SALESNETAMOUNT");
+    allIllegal.delete("SALESPERSONNAME");
+  }
 
   const tokens = extractColumnTokens(trimmed);
   let autoFixed = trimmed;

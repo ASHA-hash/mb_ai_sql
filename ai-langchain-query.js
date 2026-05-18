@@ -45,6 +45,12 @@ const {
 } = require("./services/agentic-db-tools");
 const { validateSqlAccuracy } = require("./services/sql-validator");
 const { getCanonicalSalesContext, remapLegacyColumnNames } = require("./services/canonical-sales-sql");
+const { getCanonicalPurchaseContext } = require("./services/canonical-purchase-sql");
+const {
+  isSalespersonTopNQuestion,
+  getCanonicalSalespersonContext,
+} = require("./services/canonical-salesperson-sql");
+const { inferAiDomain } = require("./ai-sql");
 const { formatSchemaWithSemantics } = require("./services/schema-rag");
 const {
   buildBusinessDictionaryPrompt,
@@ -54,9 +60,18 @@ const {
   parseIntentJson,
   buildIntentSystemPrompt,
   buildSqlGenerationSystemPrompt,
+  buildIntentSystemPromptForProvider,
+  buildSqlGenerationSystemPromptForProvider,
+  buildClaudeDynamicPrompt,
+  flattenSamplesForPrompt,
   buildIntentUserPrompt,
   formatIntentForSqlPrompt,
 } = require("./services/adaptive-intent");
+const {
+  createLangChainPair,
+  invokeUnifiedGateway,
+  normalizeProvider,
+} = require("./services/ai-gateway-driver");
 const ragStore = require("./services/rag-store");
 const { detectExportIntent } = require("./services/query-performance");
 const {
@@ -64,6 +79,42 @@ const {
   formatSystemObservation,
 } = require("./services/metadata-translation-engine");
 const { runPreFlightGate } = require("./services/pre-flight-gate");
+const { compileIntentToSql } = require("./services/intent-to-sql-compiler");
+const { isIntentStepEnabled, isColumnDiscoveryEnabled } = require("./services/nlq-pipeline-config");
+const { enforceTopLimit } = require("./ai-sql");
+const {
+  isTopStoreYesterdayQuestion,
+  buildTopStoreYesterdaySql,
+  isTopInvoicesTodayQuestion,
+  buildTopInvoicesTodaySql,
+  buildSalesTopNBreakdownSql,
+  isSalesTopNBreakdownQuestion,
+  resolveHomeAlignedSql,
+  rewriteSalesSqlToHomeFact,
+} = require("./services/home-kpi-sql");
+const { buildSalespersonTopNSql } = require("./services/canonical-salesperson-sql");
+const { buildTemporalWhere, detectTemporalFromQuestion } = require("./services/intent-to-sql-compiler");
+
+function sqlValidationContextForQuestion(question) {
+  if (isSalespersonTopNQuestion(question)) {
+    const s = getCanonicalSalespersonContext();
+    return { domain: "sales", amountCol: s.amountCol, staffTable: s.table };
+  }
+  const domain = inferAiDomain(question);
+  if (domain === "purchase") {
+    const p = getCanonicalPurchaseContext();
+    return {
+      domain: "purchase",
+      amountCol: p.amountCol || "NetPurNetAmount",
+      purchaseTable: p.table,
+    };
+  }
+  const salesCtx = getCanonicalSalesContext();
+  return {
+    domain: domain === "generic" ? "sales" : domain,
+    amountCol: salesCtx.amountCol,
+  };
+}
 
 /* ── Layer 1: Semantic Mapping (business term → exact column) ─────────────── */
 let _semanticMapping = null;
@@ -86,6 +137,7 @@ function getSemanticMappingPrompt() {
 const {
   sampleValuesForQuestion,
   buildValueCorrectionBlock,
+  sampleValuesList,
 } = require("./services/value-sampling-tool");
 
 /* ── Layer 3: Query Compliance Guard ─────────────────────────────────────── */
@@ -102,12 +154,14 @@ const last = (a, b) => (b !== undefined ? b : a);
 
 const AgentState = Annotation.Root({
   // Inputs
-  question:            Annotation({ reducer: last }),
-  originalQuestion:    Annotation({ reducer: last }),
-  adaptiveEnrichment:  Annotation({ reducer: last }),
-  dateContext:         Annotation({ reducer: last }),
-  tableHint:           Annotation({ reducer: last }),
-  userDateRange:       Annotation({ reducer: last }),
+  aiProvider:           Annotation({ reducer: last }),
+  question:             Annotation({ reducer: last }),
+  originalQuestion:     Annotation({ reducer: last }),
+  adaptiveEnrichment:   Annotation({ reducer: last }),
+  dateContext:          Annotation({ reducer: last }),
+  tableHint:            Annotation({ reducer: last }),
+  userDateRange:        Annotation({ reducer: last }),
+  conversationHistory:  Annotation({ default: () => [], reducer: last }), // multi-turn context
 
   // Schema discovery
   viewScores:      Annotation({ reducer: last }),
@@ -321,8 +375,10 @@ function makePreFlightGate() {
     const t0 = Date.now();
     console.log("[langchain] node: pre_flight_gate");
 
-    const gate = runPreFlightGate(state.question, {
+    const gate = runPreFlightGate(state.originalQuestion || state.question, {
       tableHint: state.tableHint || undefined,
+      fromDate: state.userDateRange?.from,
+      toDate: state.userDateRange?.to,
     });
 
     const metaCheck = verifySchemaMetadata();
@@ -355,7 +411,16 @@ function makePreFlightGate() {
     }
 
     if (gate.nextStep === "FAST_PATH") {
-      const view = gate.rankedViews?.[0]?.viewName || "dbo.VW_MB_POWERBI_APP_REPORT";
+      const qOrig = gate.originalQuestion || state.question;
+      let view =
+        gate.targetView ||
+        gate.rankedViews?.[0]?.viewName ||
+        getCanonicalSalesContext().table;
+      if (isSalespersonTopNQuestion(qOrig)) {
+        view = getCanonicalSalespersonContext().table;
+      } else if (inferAiDomain(qOrig) === "purchase") {
+        view = getCanonicalPurchaseContext().table;
+      }
       return {
         nextStep: gate.nextStep,
         question: gate.correctedQuestion || state.question,
@@ -373,7 +438,11 @@ function makePreFlightGate() {
       };
     }
 
-    const targetView = gate.targetView;
+    const qCheck = gate.originalQuestion || state.originalQuestion || state.question;
+    let targetView = gate.targetView;
+    if (isSalespersonTopNQuestion(qCheck)) {
+      targetView = getCanonicalSalespersonContext().table;
+    }
     const schemaText =
       formatSchemaWithSemantics([targetView]) || gate.schemaText;
     const businessDictionary = buildBusinessDictionaryPrompt(
@@ -411,15 +480,21 @@ function routeAfterPreFlight(state) {
    ───────────────────────────────────────────────────────────────────────────── */
 function makeResolveIntent(llm) {
   return async function resolveIntent(state) {
-    const off = /^(0|false|no)$/i.test(String(process.env.ADAPTIVE_INTENT_STEP || "1").trim());
-    if (off) {
+    if (!isIntentStepEnabled()) {
       return { queryIntent: null, nodeLog: ["resolve_intent:skipped"] };
     }
 
-    console.log("[langchain] node: resolve_intent");
+    const provider = state.aiProvider || normalizeProvider();
+    console.log("[langchain] node: resolve_intent —", provider);
     try {
       const response = await llm.invoke([
-        new SystemMessage(buildIntentSystemPrompt(state.schemaText)),
+        new SystemMessage(
+          buildIntentSystemPromptForProvider(provider, state.schemaText, {
+            targetView: state.targetView,
+            question: state.question,
+            userQuestion: state.originalQuestion || state.question,
+          })
+        ),
         new HumanMessage(buildIntentUserPrompt(state)),
       ]);
       const intent = parseIntentJson(response.content);
@@ -445,12 +520,12 @@ function makeResolveIntent(llm) {
    ───────────────────────────────────────────────────────────────────────────── */
 function makeDiscoverColumnValues(pool) {
   return async function discoverColumnValuesNode(state) {
-    const off = /^(0|false|no)$/i.test(String(process.env.COGNITIVE_COLUMN_DISCOVERY || "1").trim());
-    if (off) {
+    if (!isColumnDiscoveryEnabled()) {
       return { columnDiscoveryText: "", liveColumnSamples: {}, nodeLog: ["discover_column_values:off"] };
     }
 
     console.log("[langchain] node: discover_column_values (Layer 2 — value sampling)");
+    const groundingQuestion = state.originalQuestion || state.question;
     const view =
       state.targetView ||
       (Array.isArray(state.topViews) && state.topViews[0]) ||
@@ -459,8 +534,8 @@ function makeDiscoverColumnValues(pool) {
     try {
       // Run original agentic sampler + Layer-2 semantic sampler in parallel
       const [agenticResult, semanticResult] = await Promise.allSettled([
-        discoverLiveSamplesForQuestion(pool, state.question, view),
-        sampleValuesForQuestion(pool, state.question, view),
+        discoverLiveSamplesForQuestion(pool, groundingQuestion, view),
+        sampleValuesForQuestion(pool, groundingQuestion, view),
       ]);
 
       // Merge samples from both sources
@@ -470,9 +545,14 @@ function makeDiscoverColumnValues(pool) {
       const semanticText    = semanticResult.status === "fulfilled" ? semanticResult.value?.text    || "" : "";
 
       const mergedSamples = { ...agenticSamples, ...semanticSamples };
+      const flatSamples = {};
+      for (const [col, entry] of Object.entries(mergedSamples)) {
+        const vals = sampleValuesList(entry);
+        if (vals.length) flatSamples[col] = vals;
+      }
 
       // Build value-correction hints (e.g. "chenai" → "CHENNAI MAIN BRANCH")
-      const correctionBlock = buildValueCorrectionBlock(state.question, mergedSamples);
+      const correctionBlock = buildValueCorrectionBlock(groundingQuestion, flatSamples);
 
       // Combine all discovery text — semantic text first (higher priority)
       const combinedText = [semanticText, agenticText, correctionBlock]
@@ -495,11 +575,62 @@ function makeDiscoverColumnValues(pool) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   NODE 3d — compile_sql_from_intent (deterministic T-SQL from JSON plan)
+   ───────────────────────────────────────────────────────────────────────────── */
+function makeCompileSqlFromIntent() {
+  return async function compileSqlFromIntent(state) {
+    const rootQ = state.originalQuestion || state.question;
+    const homeHit = resolveHomeAlignedSql(state.question, rootQ);
+    if (homeHit?.sql) {
+      console.log("[langchain] compile_sql_from_intent: home-aligned", homeHit.label);
+      return {
+        generatedSQL: homeHit.sql,
+        checkedSQL: homeHit.sql,
+        sqlFromIntentCompiler: true,
+        nodeLog: ["compile_sql_from_intent:home_aligned"],
+      };
+    }
+
+    const sql = compileIntentToSql(state.queryIntent, {
+      targetView: state.targetView,
+      originalQuestion: rootQ,
+      question: state.question,
+    });
+    if (sql) {
+      console.log("[langchain] compile_sql_from_intent: success");
+      return {
+        generatedSQL: sql,
+        checkedSQL: sql,
+        sqlFromIntentCompiler: true,
+        nodeLog: ["compile_sql_from_intent"],
+      };
+    }
+    return { nodeLog: ["compile_sql_from_intent:skip"] };
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    NODE 4 — generate_sql
    ───────────────────────────────────────────────────────────────────────────── */
 function makeGenerateSQL(llm) {
   return async function generateSQL(state) {
     console.log("[langchain] node: generate_sql");
+
+    if (state.generatedSQL && state.sqlFromIntentCompiler) {
+      return { nodeLog: ["generate_sql:skipped_intent_compiler"] };
+    }
+
+    const rootQGen = state.originalQuestion || state.question;
+    const homeBeforeLlm = resolveHomeAlignedSql(state.question, rootQGen);
+    if (homeBeforeLlm?.sql) {
+      console.log("[langchain] generate_sql: home-aligned", homeBeforeLlm.label);
+      return {
+        generatedSQL: homeBeforeLlm.sql,
+        checkedSQL: homeBeforeLlm.sql,
+        sqlFromIntentCompiler: true,
+        nodeLog: ["generate_sql:home_aligned"],
+      };
+    }
 
     const observationBlock =
       (state.systemObservations || []).length > 0
@@ -540,10 +671,19 @@ function makeGenerateSQL(llm) {
       ? `\n\n[MANDATORY COLUMN RULES — Layer 1 Semantic Map]\n${getSemanticMappingPrompt()}`
       : "";
 
-    const systemPrompt = buildSqlGenerationSystemPrompt(
+    const provider = state.aiProvider || normalizeProvider();
+    const systemPrompt = buildSqlGenerationSystemPromptForProvider(
+      provider,
       state.queryIntent,
       state.dateContext || "",
-      state.columnDiscoveryText || ""
+      state.columnDiscoveryText || "",
+      {
+        targetView: state.targetView,
+        question: state.question,
+        userQuestion: state.originalQuestion || state.question,
+        realDatabaseValueSamples: flattenSamplesForPrompt(state.liveColumnSamples),
+        viewMetadata: state.schemaText,
+      }
     );
 
     const userPrompt =
@@ -556,7 +696,8 @@ function makeGenerateSQL(llm) {
       sampleSection +
       ragSection +
       dateRangeSection +
-      `\n\n[QUESTION]\n${state.question}` +
+      `\n\n[ORIGINAL QUESTION]\n${state.originalQuestion || state.question}` +
+      `\n\n[NORMALIZED QUESTION]\n${state.question}` +
       observationBlock +
       retryGuidance;
 
@@ -567,6 +708,7 @@ function makeGenerateSQL(llm) {
 
     let sql = extractSQL(response.content);
     sql = remapLegacyColumnNames(sql);
+    sql = enforceTopLimit(sql, 1000);
     console.log("[langchain] generated SQL:", sql.slice(0, 160));
     return { generatedSQL: sql, sqlValidationFailed: false, nodeLog: ["generate_sql"] };
   };
@@ -579,7 +721,10 @@ function makeCheckSQL(llm) {
   return async function checkSQL(state) {
     console.log("[langchain] node: check_sql");
 
-    const rawSql = remapLegacyColumnNames(state.generatedSQL || "");
+    const rawSql = rewriteSalesSqlToHomeFact(
+      remapLegacyColumnNames(state.generatedSQL || ""),
+      state.originalQuestion || state.question
+    );
 
     /* ── Layer 3: Compliance Guard — check for illegal columns first ─────── */
     const compliance = checkSqlCompliance(rawSql);
@@ -594,11 +739,7 @@ function makeCheckSQL(llm) {
         if (recheck.valid) {
           console.log("[langchain] check_sql: compliance auto-repaired successfully");
           // Fall through with repaired SQL — skip retry
-          const salesCtxR = getCanonicalSalesContext();
-          const structR = validateSqlAccuracy(repaired, state.question, {
-            domain: "sales",
-            amountCol: salesCtxR.amountCol,
-          });
+          const structR = validateSqlAccuracy(repaired, state.question, sqlValidationContextForQuestion(state.question));
           if (structR.isValid) {
             return { checkedSQL: repaired, sqlValidationFailed: false, nodeLog: ["check_sql:compliance_auto_repaired"] };
           }
@@ -632,11 +773,11 @@ function makeCheckSQL(llm) {
     }
 
     /* ── Structural validator (existing) ─────────────────────────────────── */
-    const salesCtx = getCanonicalSalesContext();
-    const structural = validateSqlAccuracy(rawSql, state.question, {
-      domain: "sales",
-      amountCol: salesCtx.amountCol,
-    });
+    const structural = validateSqlAccuracy(
+      rawSql,
+      state.question,
+      sqlValidationContextForQuestion(state.question)
+    );
 
     if (!structural.isValid) {
       const attempt = (state.retryCount || 0) + 1;
@@ -701,10 +842,11 @@ Output ONLY the SQL — no explanation, no markdown fences.`;
     ]);
 
     let checkedSQL = remapLegacyColumnNames(extractSQL(response.content) || rawSql);
-    const structural2 = validateSqlAccuracy(checkedSQL, state.question, {
-      domain: "sales",
-      amountCol: salesCtx.amountCol,
-    });
+    const structural2 = validateSqlAccuracy(
+      checkedSQL,
+      state.question,
+      sqlValidationContextForQuestion(state.question)
+    );
     if (!structural2.isValid) {
       console.warn("[langchain] check_sql LLM output failed structural:", structural2.reason);
       checkedSQL = rawSql;
@@ -775,10 +917,14 @@ function makeErrorRecovery(llm) {
       const badCol = invalidColMatch[1];
       const knownFix = {
         SaleNetAmount: "MrpValue", NetSlsNetAmount: "MrpValue", NetAmount: "MrpValue",
-        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty",
-        InvoiceNo: "XnNo", InvoiceDt: "XnDt",
-        BranchId: "BranchAlias", BranchName: "BranchAlias",
+        NetSalesAmount: "MrpValue",
+        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty", SalesQuantity: "AppQty",
+        InvoiceNo: "XnNo", InvoiceDt: "XnDt", CashmemoDt: "XnDt", SaleDate: "XnDt",
+        BranchId: "BranchAlias", BranchName: "BranchAlias", BranchShortName: "BranchAlias",
         CustomerId: "XnNo",  // proxy — CustomerCode not on APP_REPORT
+        Colour: "Color",     // wrong spelling — actual column is Color
+        SizeName: "Size",    // wrong column — actual column is Size
+        EAN: "ArticleNo",    // does not exist on APP_REPORT
       };
       const fix = knownFix[badCol] || knownFix[badCol.replace(/^_/, "")] || null;
       if (fix) {
@@ -793,7 +939,12 @@ function makeErrorRecovery(llm) {
       `${buildSqlGenerationSystemPrompt(
         state.queryIntent,
         state.dateContext || "",
-        state.columnDiscoveryText || ""
+        state.columnDiscoveryText || "",
+        {
+          targetView: state.targetView,
+          question: state.question,
+          userQuestion: state.originalQuestion || state.question,
+        }
       )}\n\n` +
       `SELF-HEALING ATTEMPT ${attempt}/3: The database rejected the previous SQL.\n` +
       `Study the [System Observation] and ALL column directives below.\n` +
@@ -821,15 +972,18 @@ function makeErrorRecovery(llm) {
     // Apply compliance auto-repair AND legacy column remap after LLM fix
     let fixedSQL = extractSQL(response.content) || failedSQL;
     fixedSQL = remapLegacyColumnNames(fixedSQL);
+    fixedSQL = enforceTopLimit(fixedSQL, 1000);
 
     // If the LLM still has the bad column, do a hard string replacement
     if (invalidColMatch) {
       const badCol = invalidColMatch[1];
       const knownFix = {
         SaleNetAmount: "MrpValue", NetSlsNetAmount: "MrpValue", NetAmount: "MrpValue",
-        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty",
-        InvoiceNo: "XnNo", InvoiceDt: "XnDt",
-        BranchId: "BranchAlias", BranchName: "BranchAlias",
+        NetSalesAmount: "MrpValue",
+        Quantity: "AppQty", Qty: "AppQty", Pcs: "AppQty", SalesQuantity: "AppQty",
+        InvoiceNo: "XnNo", InvoiceDt: "XnDt", CashmemoDt: "XnDt", SaleDate: "XnDt",
+        BranchId: "BranchAlias", BranchName: "BranchAlias", BranchShortName: "BranchAlias",
+        Colour: "Color", SizeName: "Size", EAN: "ArticleNo",
       };
       const fix = knownFix[badCol] || null;
       if (fix && fixedSQL.includes(badCol)) {
@@ -906,31 +1060,205 @@ Rules:
    SQL ran OK but returned 0 rows. Try once to widen the date range or relax
    the filter and re-generate (sets zeroRowsRetried so we don't loop forever).
    ───────────────────────────────────────────────────────────────────────────── */
-function makeZeroRowsRecovery(llm) {
+function tryDeterministicZeroRowSql(state) {
+  const q = state.originalQuestion || state.question || "";
+  const sql = String(state.checkedSQL || state.generatedSQL || "");
+
+  if (isTopStoreYesterdayQuestion(q)) {
+    const homeSql = buildTopStoreYesterdaySql(q);
+    if (homeSql) return homeSql;
+  }
+
+  if (
+    isSalespersonTopNQuestion(q) ||
+    (/\bsalespersons?\b/i.test(q) &&
+      (/\bMrpValue\b/i.test(sql) || /\bSupplierName\b/i.test(sql) && /\bAPP_REPORT\b/i.test(sql)))
+  ) {
+    const staffSql = buildSalespersonTopNSql(q);
+    if (staffSql) return staffSql;
+  }
+
+  const homeHit = resolveHomeAlignedSql(q, state.originalQuestion);
+  if (homeHit?.sql) return homeHit.sql;
+
+  if (isTopInvoicesTodayQuestion(q) || (/\btoday\b/i.test(q) && /\binvoices?\b/i.test(q) && /\b(top|highest)\b/i.test(q))) {
+    const invSql = buildTopInvoicesTodaySql(q);
+    if (invSql) return invSql;
+  }
+
+  if (isSalesTopNBreakdownQuestion(q)) {
+    const breakdownSql = buildSalesTopNBreakdownSql(q);
+    if (breakdownSql) return breakdownSql;
+  }
+
+  if (/\btoday\b/i.test(q) && /DATEADD\s*\(\s*day\s*,\s*-7/i.test(sql) && /\binvoices?\b/i.test(q)) {
+    const invSql = buildTopInvoicesTodaySql(q);
+    if (invSql) return invSql;
+  }
+
+  if (/\byesterday\b/i.test(q) && /DATEADD\s*\(\s*day\s*,\s*-7/i.test(sql)) {
+    const sales = getCanonicalSalesContext();
+    const yesterday = buildTemporalWhere(sales.dateCol, "yesterday");
+    if (yesterday && /BranchAlias|branch/i.test(q)) {
+      return (
+        `SELECT TOP 1 [${sales.branchCol}] AS Store, SUM(ISNULL([${sales.amountCol}], 0)) AS TotalMrpValue` +
+        ` FROM ${sales.table} WITH (NOLOCK) WHERE ${yesterday}` +
+        ` GROUP BY [${sales.branchCol}] ORDER BY TotalMrpValue DESC`
+      );
+    }
+  }
+
+  const anchor = detectTemporalFromQuestion(q);
+  if (anchor === "yesterday" && !/\byesterday\b/i.test(sql.toLowerCase())) {
+    const sales = getCanonicalSalesContext();
+    const yesterday = buildTemporalWhere(sales.dateCol, "yesterday");
+    if (yesterday) {
+      return sql.replace(
+        /WHERE[\s\S]+?(?=GROUP\s+BY|ORDER\s+BY|$)/i,
+        `WHERE ${yesterday} `
+      );
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validate that the WHERE clause filter values actually exist in the target view.
+ * Returns { valid: bool, badFilters: string[], hint: string }
+ *
+ * Strategy: extract equality filters like [Col] = 'Value' or LIKE '%Value%'
+ * from the SQL and probe the DB with a COUNT(*) query for each.
+ */
+async function validateFilterValues(sql, pool) {
+  if (!pool) return { valid: true, badFilters: [], hint: "" };
+  const bad = [];
+  const hints = [];
+
+  // Match patterns: [Col] = N'value' | [Col] LIKE N'%value%' | [Col] = 'value'
+  const equalRe = /\[([^\]]+)\]\s*=\s*N?'([^']{2,100})'/gi;
+  const likeRe  = /\[([^\]]+)\]\s+LIKE\s+N?'%([^'%]{2,80})%'/gi;
+
+  // Extract FROM table for probing
+  const fromMatch = sql.match(/FROM\s+(dbo\.\S+)/i);
+  if (!fromMatch) return { valid: true, badFilters: [], hint: "" };
+  const probeTable = fromMatch[1].replace(/WITH\s*\(NOLOCK\)/i, "").trim();
+
+  const checked = new Map();
+
+  async function probe(col, val) {
+    const key = `${col}::${val}`;
+    if (checked.has(key)) return checked.get(key);
+    try {
+      const result = await pool.request().query(
+        `SELECT COUNT(*) AS N FROM ${probeTable} WITH (NOLOCK) WHERE LOWER([${col}]) = LOWER(N'${val.replace(/'/g, "''")}')`
+      );
+      const n = result.recordset?.[0]?.N ?? 0;
+      checked.set(key, n > 0);
+      return n > 0;
+    } catch {
+      checked.set(key, true); // assume valid if probe fails
+      return true;
+    }
+  }
+
+  for (const m of sql.matchAll(equalRe)) {
+    const [, col, val] = m;
+    // Skip date columns and numeric-looking values
+    if (/Date|Dt|XnDt|CashmemoDt/i.test(col)) continue;
+    if (/^\d/.test(val)) continue;
+    const exists = await probe(col, val);
+    if (!exists) {
+      bad.push(`[${col}] = '${val}'`);
+      hints.push(`No rows found where [${col}] = '${val}' — check spelling or try LIKE`);
+    }
+  }
+  for (const m of sql.matchAll(likeRe)) {
+    const [, col, val] = m;
+    if (/Date|Dt/i.test(col)) continue;
+    const exists = await probe(col, val);
+    if (!exists) {
+      bad.push(`[${col}] LIKE '%${val}%'`);
+      hints.push(`No rows match [${col}] LIKE '%${val}%' — value may be misspelled`);
+    }
+  }
+
+  return {
+    valid: bad.length === 0,
+    badFilters: bad,
+    hint: hints.join("; "),
+  };
+}
+
+function makeZeroRowsRecovery(llm, pool) {
   return async function zeroRowsRecovery(state) {
     console.log("[langchain] node: zero_rows_recovery");
-    const systemPrompt = `${buildSqlGenerationSystemPrompt(state.queryIntent, state.dateContext || "")}
 
-A query returned 0 rows — widen date filters or relax string filters using SCHEMA columns only.
-Output ONLY the corrected SQL — no explanation, no markdown, no semicolons.`;
+    const deterministic = tryDeterministicZeroRowSql(state);
+    if (deterministic) {
+      console.log("[langchain] zero_rows_recovery: deterministic fix (yesterday/home table)");
+      return {
+        generatedSQL: deterministic,
+        checkedSQL: deterministic,
+        zeroRowsRetried: true,
+        nodeLog: ["zero_rows_recovery:deterministic"],
+      };
+    }
+
+    // ── Probe: are the filter values actually in the DB? ──────────────────────
+    const currentSql = state.checkedSQL || state.generatedSQL || "";
+    let filterHint = "";
+    try {
+      const filterCheck = await validateFilterValues(currentSql, pool);
+      if (!filterCheck.valid) {
+        console.log("[langchain] zero_rows_recovery: bad filter values detected:", filterCheck.badFilters);
+        filterHint =
+          `\n[ZERO-ROW CAUSE] These filter values do NOT exist in the database:\n` +
+          filterCheck.badFilters.map((f) => `  • ${f}`).join("\n") +
+          `\n${filterCheck.hint}` +
+          `\nDo NOT widen the date range. Instead: remove or correct the bad filters. ` +
+          `Use LOWER() LIKE '%partial%' if the exact value is unknown.`;
+      }
+    } catch (probeErr) {
+      console.warn("[langchain] zero_rows_recovery: filter probe failed:", probeErr.message);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const provider = state.aiProvider || normalizeProvider();
+    const systemPrompt = `${buildSqlGenerationSystemPromptForProvider(
+      provider,
+      state.queryIntent,
+      state.dateContext || "",
+      "",
+      {
+        targetView: state.targetView,
+        question: state.question,
+        userQuestion: state.originalQuestion || state.question,
+      }
+    )}
+
+A query returned 0 rows. Do NOT widen "yesterday" or "today" to 7 days or MTD unless the user asked for a range.
+Try the Home analytics table if APP_REPORT is empty. Output ONLY corrected SQL.`;
 
     const userPrompt =
       `[SCHEMA]\n${state.schemaText}\n\n` +
       (state.sampleText ? `[SAMPLE DATA]\n${state.sampleText}\n\n` : "") +
-      `[ZERO-ROW QUERY — widen date range or relax filters]\n${state.checkedSQL || state.generatedSQL}\n\n` +
-      `Hint: remove or widen date filters; if filtering by name, try removing the filter.`;
+      `[ORIGINAL QUESTION]\n${state.originalQuestion || state.question}\n\n` +
+      `[ZERO-ROW QUERY]\n${currentSql}\n\n` +
+      filterHint +
+      `\nHint: keep explicit time words (yesterday/today) as single-day filters; try ${getCanonicalSalesContext().table} for branch sales.`;
 
     const response = await llm.invoke([
       new SystemMessage(systemPrompt),
       new HumanMessage(userPrompt),
     ]);
-    const fixedSQL = extractSQL(response.content) || state.checkedSQL || state.generatedSQL;
+    const fixedSQL = extractSQL(response.content) || currentSql;
     console.log("[langchain] zero_rows_recovery SQL:", fixedSQL.slice(0, 160));
     return {
-      generatedSQL:    fixedSQL,
-      checkedSQL:      fixedSQL,
+      generatedSQL: fixedSQL,
+      checkedSQL: fixedSQL,
       zeroRowsRetried: true,
-      nodeLog:         ["zero_rows_recovery"],
+      nodeLog: ["zero_rows_recovery"],
     };
   };
 }
@@ -1037,11 +1365,12 @@ function buildGraph(pool, llmSQL, llmAnswer) {
   graph.addNode("retrieve_context",   makeRetrieveContext());
   graph.addNode("resolve_intent",          makeResolveIntent(llmSQL));
   graph.addNode("discover_column_values",  makeDiscoverColumnValues(pool));
+  graph.addNode("compile_sql_from_intent", makeCompileSqlFromIntent());
   graph.addNode("generate_sql",            makeGenerateSQL(llmSQL));
   graph.addNode("check_sql",          makeCheckSQL(llmSQL));
   graph.addNode("execute_sql",        makeExecuteSQL(pool));
   graph.addNode("error_recovery",     makeErrorRecovery(llmSQL));
-  graph.addNode("zero_rows_recovery", makeZeroRowsRecovery(llmSQL));
+  graph.addNode("zero_rows_recovery", makeZeroRowsRecovery(llmSQL, pool));
   graph.addNode("generate_answer",    makeGenerateAnswer(llmAnswer));
   graph.addNode("verify_answer",      makeVerifyAnswer(llmAnswer));
 
@@ -1053,7 +1382,8 @@ function buildGraph(pool, llmSQL, llmAnswer) {
   });
   graph.addEdge("retrieve_context", "resolve_intent");
   graph.addEdge("resolve_intent", "discover_column_values");
-  graph.addEdge("discover_column_values", "generate_sql");
+  graph.addEdge("discover_column_values", "compile_sql_from_intent");
+  graph.addEdge("compile_sql_from_intent", "generate_sql");
   graph.addEdge("generate_sql", "check_sql");
   graph.addConditionalEdges("check_sql", routeAfterCheckSql, {
     error_recovery: "error_recovery",
@@ -1121,65 +1451,25 @@ async function runLangChainQuery({
   dateContext,
   userDateRange,
   tableHint,
+  conversationHistory,
 }) {
-  const useProvider = String(provider || "openai").toLowerCase().trim();
-  const isClaude    = useProvider === "claude" || useProvider === "anthropic";
-
-  let llmSQL, llmAnswer;
-
-  if (isClaude) {
-    /* ── Claude / Anthropic provider ─────────────────────────────────────── */
-    const ChatAnthropic = getChatAnthropic();
-    if (!ChatAnthropic) {
-      throw new Error(
-        "@langchain/anthropic is not installed. Run: npm install @langchain/anthropic"
-      );
-    }
-    const claudeKey   = String(claudeApiKey || process.env.ANTHROPIC_API_KEY || "").trim();
-    const claudeModel = String(model || process.env.ANTHROPIC_MODEL || "claude-opus-4-5").trim();
-    if (!claudeKey) throw new Error("Anthropic API key not configured (ANTHROPIC_API_KEY)");
-
-    console.log("[langchain] provider: Claude —", claudeModel);
-
-    // Claude uses maxTokens differently — temperature is supported
-    llmSQL = new ChatAnthropic({
-      anthropicApiKey: claudeKey,
-      model:           claudeModel,
-      temperature:     0,
-      maxTokens:       2048,
-    });
-    llmAnswer = new ChatAnthropic({
-      anthropicApiKey: claudeKey,
-      model:           claudeModel,
-      temperature:     0.2,
-      maxTokens:       1024,
-    });
-  } else {
-    /* ── OpenAI provider (default) ───────────────────────────────────────── */
-    const modelName = String(model || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
-    console.log("[langchain] provider: OpenAI —", modelName);
-
-    // SQL LLM — temperature=0 for maximum determinism (no hallucinated columns)
-    const { openAiChatOptions } = require("./services/llm-params");
-    llmSQL = new ChatOpenAI({
-      openAIApiKey: apiKey || process.env.OPENAI_API_KEY,
-      ...openAiChatOptions(modelName, { temperature: 0, maxTokens: 2048 }),
-    });
-
-    // Answer LLM — slightly warmer for natural language summaries
-    llmAnswer = new ChatOpenAI({
-      openAIApiKey: apiKey || process.env.OPENAI_API_KEY,
-      ...openAiChatOptions(modelName, { temperature: 0.2, maxTokens: 1024 }),
-    });
-  }
+  const useProvider = normalizeProvider(provider);
+  const { llmSQL, llmAnswer, model: activeModel } = createLangChainPair({
+    provider: useProvider,
+    apiKey,
+    claudeApiKey,
+    model,
+  });
 
   const app = buildGraph(pool, llmSQL, llmAnswer);
 
   const initialState = {
-    question:      String(question || ""),
-    dateContext:   String(dateContext || ""),
-    tableHint:     tableHint || null,
-    userDateRange: userDateRange || {},
+    aiProvider:          useProvider,
+    question:            String(question || ""),
+    dateContext:         String(dateContext || ""),
+    tableHint:           tableHint || null,
+    userDateRange:       userDateRange || {},
+    conversationHistory: Array.isArray(conversationHistory) ? conversationHistory : [],
   };
 
   console.log("[langchain] starting graph for:", question.slice(0, 80));
@@ -1223,7 +1513,54 @@ async function runLangChainQuery({
     preFlightMs: result.preFlightMs ?? null,
     originalQuestion: result.originalQuestion || null,
     adaptiveEnrichment: result.adaptiveEnrichment || null,
+    provider: useProvider,
+    model: activeModel,
   };
 }
 
-module.exports = { runLangChainQuery };
+/**
+ * Lightweight gateway-only SQL path (tests / direct orchestration without full graph).
+ */
+async function runOrchestratedAnalyticsQuery(pool, userQuestion, requestedProvider) {
+  const provider = normalizeProvider(requestedProvider);
+  const layer = require("./metadata/semantic-layer.json");
+  const view = layer.target_view || getCanonicalSalesContext().table;
+  const q = String(userQuestion || "").toLowerCase();
+
+  let activeColumn = null;
+  for (const [keyword, dim] of Object.entries(layer.semantic_mappings?.dimensions || {})) {
+    if (q.includes(String(keyword).toLowerCase())) {
+      activeColumn = dim.canonical_column;
+      break;
+    }
+  }
+
+  let samples = {};
+  if (pool && userQuestion) {
+    try {
+      const sampled = await sampleValuesForQuestion(pool, userQuestion, view);
+      samples = flattenSamplesForPrompt(sampled?.samples || {});
+    } catch (e) {
+      console.warn("[orchestrator] value sampling skipped:", e.message);
+    }
+  }
+
+  const systemPrompt = buildClaudeDynamicPrompt({
+    targetView: view,
+    realDatabaseValueSamples: samples,
+    activeDimension: activeColumn,
+  });
+
+  const raw = await invokeUnifiedGateway(
+    provider,
+    systemPrompt,
+    `Compile this user data request: "${userQuestion}"`,
+    false
+  );
+
+  const sql = remapLegacyColumnNames(extractSQL(raw));
+  console.log(`[orchestrator] ${provider} SQL:\n${sql}`);
+  return sql;
+}
+
+module.exports = { runLangChainQuery, runOrchestratedAnalyticsQuery };

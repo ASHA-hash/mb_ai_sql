@@ -12,7 +12,7 @@ Usage:
   set ANTHROPIC_API_KEY=sk-ant-api03-...
   python scripts/test_claude_api.py
 
-  python scripts/test_claude_api.py --model claude-sonnet-4-20250514
+  python scripts/test_claude_api.py --model claude-sonnet-4-6
   python scripts/test_claude_api.py --prompt "Reply with exactly: OK"
 """
 
@@ -25,7 +25,7 @@ import sys
 import urllib.error
 import urllib.request
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 API_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
 
@@ -52,6 +52,16 @@ def resolve_api_key(cli_key: str | None, env_path: str) -> str:
         return from_os
     from_file = (load_env_file(env_path).get("ANTHROPIC_API_KEY") or "").strip()
     return from_file
+
+
+def resolve_model(cli_model: str | None, env_path: str) -> str:
+    if cli_model and str(cli_model).strip():
+        return str(cli_model).strip()
+    from_os = (os.environ.get("ANTHROPIC_MODEL") or "").strip()
+    if from_os:
+        return from_os
+    from_file = (load_env_file(env_path).get("ANTHROPIC_MODEL") or "").strip()
+    return from_file or DEFAULT_MODEL
 
 
 def mask_key(key: str) -> str:
@@ -100,7 +110,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Test Anthropic Claude API")
     ap.add_argument("--api-key", default=None, help="Override ANTHROPIC_API_KEY")
     ap.add_argument("--env-file", default=os.path.join(root, ".env"), help="Path to .env")
-    ap.add_argument("--model", default=DEFAULT_MODEL, help=f"Model id (default: {DEFAULT_MODEL})")
+    ap.add_argument(
+        "--model",
+        default=None,
+        help=f"Model id (default: ANTHROPIC_MODEL from .env, else {DEFAULT_MODEL})",
+    )
     ap.add_argument(
         "--prompt",
         default="Reply with exactly one word: pong",
@@ -111,6 +125,7 @@ def main() -> int:
     args = ap.parse_args()
 
     api_key = resolve_api_key(args.api_key, args.env_file)
+    model = resolve_model(args.model, args.env_file)
     if not api_key:
         print(
             "Missing API key. Set ANTHROPIC_API_KEY or pass --api-key.\n"
@@ -120,14 +135,14 @@ def main() -> int:
         return 2
 
     print(f"Key: {mask_key(api_key)}")
-    print(f"Model: {args.model}")
+    print(f"Model: {model}")
     print(f"POST {API_URL}")
     print("-" * 40)
 
     try:
         payload = call_claude(
             api_key,
-            model=args.model,
+            model=model,
             prompt=args.prompt,
             max_tokens=args.max_tokens,
             timeout_s=args.timeout,
@@ -148,7 +163,7 @@ def main() -> int:
     usage = payload.get("usage") or {}
     print("OK — Claude API responded")
     print(f"  id:      {payload.get('id', '—')}")
-    print(f"  model:   {payload.get('model', args.model)}")
+    print(f"  model:   {payload.get('model', model)}")
     print(f"  stop:    {payload.get('stop_reason', '—')}")
     print(f"  tokens:  in={usage.get('input_tokens', '?')} out={usage.get('output_tokens', '?')}")
     print(f"  reply:   {text or '(empty)'}")

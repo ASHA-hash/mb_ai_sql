@@ -7,6 +7,7 @@
 const { resolveAnalyticsColumns, DEFAULT_ANALYTICS_TABLE } = require("./analytics-column-map");
 const { getViewColumns } = require("./schema-from-json");
 const { translateJargonToColumn, getForcedDatePredicate, loadSemanticConfig } = require("./metadata-translation-engine");
+const { buildBillsTodaySqlAlignedWithHome } = require("./home-kpi-sql");
 
 function normalizeTable(t) {
   const s = String(t || "").trim();
@@ -16,10 +17,11 @@ function normalizeTable(t) {
 
 function getCanonicalSalesTable() {
   const layer = loadSemanticConfig();
+  // Home dashboard + NLQ use ANALYTICS_BASE_TABLE (SLSXNS). SALES_AI_TABLE is legacy APP_REPORT.
   const raw =
+    process.env.ANALYTICS_BASE_TABLE ||
     process.env.SALES_AI_TABLE ||
     layer.target_view ||
-    process.env.ANALYTICS_BASE_TABLE ||
     process.env.SALES_VIEW ||
     DEFAULT_ANALYTICS_TABLE;
   return normalizeTable(raw);
@@ -92,22 +94,42 @@ function remapLegacyColumnNames(sql) {
   const c = getCanonicalSalesContext();
   const isPowerBi = /POWERBI|VW_MB/i.test(c.table);
 
+  // CRITICAL: Do NOT remap columns when SQL already targets the salesperson view.
+  // SLS_DATA_WITHOUT_ITEMID uses SalesPersonName, SalesQuantity, SalesNetAmount, CashmemoDt
+  // — these are correct on that view; remapping them to APP_REPORT columns causes SQL Error 207.
+  const isSalespersonView = /SLS_DATA_WITHOUT_ITEMID/i.test(s);
+
   s = s.replace(/\bdbo\.VwAISalesData\b/gi, c.table);
   s = s.replace(/\bdbo\.VwAISalesPerson\b/gi, c.table);
   s = s.replace(/\b(?:INNER|LEFT)\s+JOIN\s+dbo\.VwAIBranch\b[^;]*/gi, "");
   s = s.replace(/\bVwAISalesData\b/gi, c.tableShort);
 
-  if (isPowerBi) {
+  if (isPowerBi && !isSalespersonView) {
+    // Only remap legacy column aliases when targeting APP_REPORT-family views.
     s = s.replace(/\bSaleNetAmount\b/gi, translateJargonToColumn("SaleNetAmount") || c.amountCol);
+    s = s.replace(/\bSalesNetAmount\b/gi, c.amountCol);
+    s = s.replace(/\bNetSalesAmount\b/gi, c.amountCol);
     s = s.replace(/\bInvoiceDt\b/gi, c.dateCol);
+    s = s.replace(/\bCashmemoDt\b/gi, c.dateCol);
+    s = s.replace(/\bSaleDate\b/gi, c.dateCol);
     s = s.replace(/\bInvoiceNo\b/gi, c.invoiceCol);
     s = s.replace(/\bInvoiceId\b/gi, c.invoiceCol);
     s = s.replace(/\bCustomerId\b/gi, c.customerCol);
     s = s.replace(/\bQuantity\b/gi, c.qtyCol);
+    s = s.replace(/\bSalesQuantity\b/gi, c.qtyCol);
     s = s.replace(/\bSalesPersonName\b/gi, c.staffDimCol);
     s = s.replace(/\bSalesPersonShortName\b/gi, c.staffDimCol);
     s = s.replace(/\bBranchShortName\b/gi, c.branchCol);
     s = s.replace(/\bBranchName\b/gi, c.branchCol);
+    // Fix wrong spellings of Color and Size that LLM sometimes generates
+    s = s.replace(/\bColou?r\b/g, "Color");   // Colour → Color
+    s = s.replace(/\bSizeName\b/gi, "Size");   // SizeName → Size
+    s = s.replace(/\bEAN\b/g, "ArticleNo");    // EAN does not exist → ArticleNo
+  } else if (isPowerBi) {
+    // Still fix cosmetic issues on any PowerBI view (safe on all views)
+    s = s.replace(/\bColou?r\b/g, "Color");
+    s = s.replace(/\bSizeName\b/gi, "Size");
+    s = s.replace(/\bEAN\b/g, "ArticleNo");
   }
 
   return s.replace(/\s{2,}/g, " ").trim();
@@ -119,6 +141,51 @@ function isSalesDomainQuestion(question) {
   );
 }
 
+/** Footfall / bill-count KPIs — SLSXNS (SUM BillCount) or SLS_BILLCOUNT, not APP_REPORT XnNo. */
+function getBillsKpiTable() {
+  const raw =
+    process.env.BILLS_KPI_VIEW ||
+    process.env.BILLS_TODAY_VIEW ||
+    "dbo.VW_MB_POWERBI_SLSXNS_REPORT";
+  return normalizeTable(raw);
+}
+
+/**
+ * Today's bill / invoice count (scalar KPI).
+ * APP_REPORT often has NULL XnNo on today's lines — use transaction rollup view instead.
+ */
+function buildBillsTodaySql() {
+  const homeSql = buildBillsTodaySqlAlignedWithHome();
+  if (homeSql) return homeSql;
+
+  const table = getBillsKpiTable();
+  const cols = resolveAnalyticsColumns(table);
+  const dateCol = cols.date || "XnDt";
+  const todayWhere = `CAST([${dateCol}] AS date) = CAST(GETDATE() AS date)`;
+  const viewCols = getViewColumns(table);
+  const set = new Set(viewCols);
+
+  if (/SLS_BILLCOUNT/i.test(table) && set.has("BillCount")) {
+    return `SELECT CAST(SUM(ISNULL([BillCount], 0)) AS BIGINT) AS BillCount FROM ${table} WITH (NOLOCK) WHERE ${todayWhere}`;
+  }
+
+  if (set.has("BillCount") && /SLSXNS/i.test(table)) {
+    return `SELECT CAST(SUM(ISNULL([BillCount], 0)) AS BIGINT) AS BillCount FROM ${table} WITH (NOLOCK) WHERE ${todayWhere}`;
+  }
+
+  const c = getCanonicalSalesContext();
+  const inv = c.invoiceCol || "XnNo";
+  if (set.has(inv)) {
+    return `SELECT COUNT(DISTINCT [${inv}]) AS BillCount FROM ${table} WITH (NOLOCK) WHERE ${todayWhere} AND [${inv}] IS NOT NULL`;
+  }
+
+  if (set.has("BillCount")) {
+    return `SELECT CAST(SUM(ISNULL([BillCount], 0)) AS BIGINT) AS BillCount FROM ${table} WITH (NOLOCK) WHERE ${todayWhere}`;
+  }
+
+  return `SELECT COUNT(DISTINCT [${inv}]) AS BillCount FROM ${c.table} WITH (NOLOCK) WHERE CAST([${c.dateCol}] AS date) = CAST(GETDATE() AS date) AND [${inv}] IS NOT NULL`;
+}
+
 module.exports = {
   getCanonicalSalesTable,
   getCanonicalSalesContext,
@@ -128,6 +195,8 @@ module.exports = {
   buildAiSalesFactPromptBlock,
   remapLegacyColumnNames,
   isSalesDomainQuestion,
+  getBillsKpiTable,
+  buildBillsTodaySql,
   translateJargonToColumn,
   getForcedDatePredicate,
 };

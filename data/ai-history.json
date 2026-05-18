@@ -1,14 +1,24 @@
 {
   "karthikeyanasha24@gmail.com": [
+    "how many sales today?",
+    "how many bills today?",
+    "Turnover by store yesterday",
     "Top 10 vendors by purchase amount this month",
-    "Compare this month vs last month gross revenue by branch",
-    "Monthly sales trend for the last 6 months grouped by month",
-    "Store",
-    "Top 10 branches by total gross revenue (MrpValue) this month",
+    "Top 10 salespersons by units this month",
+    "turnover by store yesterday",
+    "Top 10 salespersons by units sold this month",
+    "highest revenue salesperson this month",
+    "Top 10 highest sales invoices today",
+    "Top 10 departments by gross revenue this month",
+    "how many bills today",
+    "Which store had the highest MrpValue yesterday?",
     "Top 10 salespersons by gross revenue this month",
-    "Top 10 branches by gross revenue this month",
-    "Monthly sales trend for the last 6 months by InvoiceDt",
-    "Today's sales transactions with InvoiceNo, InvoiceDt, ItemId, Quantity, SaleNetAmount",
-    "Highest revenue salesperson this month by SaleNetAmount"
+    "MTD purchase returns by vendor",
+    "Last 30 days gross revenue by day",
+    "Top 10 branches by total gross revenue (MrpValue) this month",
+    "Top salespersons by purchase amount",
+    "Top vendors by MrpValue this month",
+    "Today's total gross revenue",
+    "Top 10 branches by gross revenue this month"
   ]
 }

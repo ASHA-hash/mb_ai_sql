@@ -14,7 +14,11 @@ const {
 /** Domain hint for revenue guard + validation (sales | purchase | stock | generic). */
 function inferAiDomain(question) {
   const q = String(question || "").toLowerCase();
-  if (/\b(purchase|vendor|supplier|procurement|grn|payable|pur qty|pur cost)\b/.test(q)) return "purchase";
+  if (
+    /\b(purchase|purchases|vendor|vendors|supplier|suppliers|procurement|grn|payable|pur qty|pur cost)\b/.test(q)
+  ) {
+    return "purchase";
+  }
   if (/\b(stock|inventory|on hand|reorder)\b/.test(q)) return "stock";
   if (/\b(sale|sales|invoice|revenue|turnover|customer|branch performance|mtd|ytd)\b/.test(q)) return "sales";
   return "generic";

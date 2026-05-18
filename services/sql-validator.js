@@ -17,6 +17,16 @@ function normalize(sql) {
   return String(sql || "").replace(/\s+/g, " ").trim();
 }
 
+/** Detect SUM / SUM(ISNULL(...)) on canonical amount columns (bracket-safe). */
+function sqlHasSumOnColumns(sql, columnNames) {
+  const s = String(sql || "");
+  return columnNames.some((name) => {
+    const col = String(name || "").replace(/[\[\]]/g, "").trim();
+    if (!col) return false;
+    return new RegExp(`\\bSUM\\s*\\(\\s*(?:ISNULL\\s*\\(\\s*)?\\[?${col}\\]?`, "i").test(s);
+  });
+}
+
 function createValidationError(message, code, details) {
   const err = new Error(message);
   err.code = code || "sql_validation_failed";
@@ -290,10 +300,8 @@ function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
     "NETPURCOST",
     "PURNETAMOUNT",
   ];
-  const hasRevenueAgg = amountTokens.some((t) => upper.includes(`SUM(${t}`) || upper.includes(`SUM([${t}]`) || upper.includes(`SUM( ${t}`));
-  const hasPurchaseAgg = purchaseAmountTokens.some(
-    (t) => upper.includes(`SUM(${t}`) || upper.includes(`SUM([${t}]`) || upper.includes(`SUM( ${t}`) || upper.includes(`SUM(ISNULL([${t}]`)
-  );
+  const hasRevenueAgg = sqlHasSumOnColumns(sql, amountTokens);
+  const hasPurchaseAgg = sqlHasSumOnColumns(sql, purchaseAmountTokens);
   const hasAnyAgg =
     /\bSUM\s*\(/i.test(sql) ||
     /\bCOUNT\s*\(/i.test(sql) ||
@@ -341,6 +349,40 @@ function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
     return {
       isValid: false,
       reason: "Use dbo.VW_MB_POWERBI_APP_REPORT (allowlisted) instead of dbo.VwAISalesData.",
+    };
+  }
+
+  const asksSalespersonStaff =
+    /\b(salesperson|sales\s*person|sales\s*rep|salesrep|staff|who\s+sold)\b/.test(q) &&
+    !asksPurchase;
+  if (
+    asksSalespersonStaff &&
+    /APP_REPORT/i.test(upper) &&
+    !/\bSalesPersonName\b/i.test(sql) &&
+    /GROUP\s+BY\s+.*\bSupplierName\b/i.test(upper)
+  ) {
+    return {
+      isValid: false,
+      reason:
+        "Salesperson/staff questions must use SalesPersonName on VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID — SupplierName on APP_REPORT is vendor/brand, not staff.",
+    };
+  }
+
+  const analyticsTable = String(process.env.ANALYTICS_BASE_TABLE || "").trim();
+  const wantsStoreBreakdown =
+    /\b(turnover|sales|revenue|gross)\b/.test(q) &&
+    (/\b(by|per|each)\s+(the\s+)?(store|stores|branch|branches|outlet)\b/.test(q) ||
+      /\b(yesterday|today|mtd|this month)\b/.test(q));
+  if (
+    wantsStoreBreakdown &&
+    analyticsTable &&
+    /APP_REPORT/i.test(upper) &&
+    /\bMrpValue\b/i.test(sql) &&
+    !/SLSXNS/i.test(upper)
+  ) {
+    return {
+      isValid: false,
+      reason: `Store/branch turnover must use ${analyticsTable} (NetSlsNetAmount), not APP_REPORT MrpValue.`,
     };
   }
 

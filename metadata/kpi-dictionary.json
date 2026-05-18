@@ -72,10 +72,10 @@
   },
   {
     "term": "Bill Count",
-    "aliases": ["bills", "invoice count", "footfall", "transactions", "number of bills", "number of invoices", "bill volume"],
-    "definition": "Number of distinct sales invoices/bills. Use COUNT(DISTINCT XnNo) on VW_MB_POWERBI_APP_REPORT. XnNo is the invoice/bill number column.",
-    "sql_pattern": "COUNT(DISTINCT [XnNo]) FROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)",
-    "view": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "aliases": ["bills", "invoice count", "footfall", "transactions", "number of bills", "number of invoices", "bill volume", "how many bills today"],
+    "definition": "Today's footfall / bill count: SUM(BillCount) on dbo.VW_MB_POWERBI_SLSXNS_REPORT where CAST(XnDt AS date) = today. For invoice-level detail on APP_REPORT use COUNT(DISTINCT XnNo) only when XnNo is populated.",
+    "sql_pattern": "CAST(SUM(ISNULL([BillCount],0)) AS BIGINT) FROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK) WHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)",
+    "view": "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
     "category": "sales"
   },
   {

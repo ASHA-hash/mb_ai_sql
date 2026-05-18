@@ -134,7 +134,45 @@ function buildVendorPurchaseTopNSql(schemaMeta, question, fromDate, toDate) {
     }
   }
 
-  return VENDOR_PUR_TOPN_SQL.replace(/TOP\s+10/i, `TOP ${topN}`);
+  const useSupplier = !/^(0|false|no)$/i.test(
+    String(process.env.VENDOR_PUR_USE_SUPPLIER_VIEW ?? "1").trim()
+  );
+  const base = useSupplier ? VENDOR_PUR_TOPN_SUPPLIER_VIEW_SQL : VENDOR_PUR_TOPN_SQL;
+  return base.replace(/TOP\s+10/i, `TOP ${topN}`);
+}
+
+/** Faster MTD vendor top-N — SUPPLIER_PUR_REPORT by default (PURXNS can scan millions of rows). */
+function resolveVendorPurchaseTopNSqlFast(question, fromDate, toDate) {
+  const q = String(question || "");
+  const nMatch = q.match(/\btop\s*(\d+)\b/i);
+  const topN = Math.min(Math.max(parseInt(nMatch ? nMatch[1] : 10, 10) || 10, 1), 100);
+  const useSupplier = !/^(0|false|no)$/i.test(
+    String(process.env.VENDOR_PUR_USE_SUPPLIER_VIEW ?? "1").trim()
+  );
+  if (useSupplier) {
+    return VENDOR_PUR_TOPN_SUPPLIER_VIEW_SQL.replace(/TOP\s+10/i, `TOP ${topN}`);
+  }
+  return buildVendorPurchaseTopNSql({ objects: [] }, q, fromDate, toDate);
+}
+
+function getCanonicalPurchaseContext() {
+  const useSupplier = !/^(0|false|no)$/i.test(
+    String(process.env.VENDOR_PUR_USE_SUPPLIER_VIEW ?? "1").trim()
+  );
+  if (useSupplier) {
+    return {
+      table: "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
+      dateCol: "PurDate",
+      amountExpr: "ISNULL([PurchasePrice], 0) * ISNULL([PurQty], 1)",
+      vendorCol: "SupplierName",
+    };
+  }
+  return {
+    table: "dbo.VW_MB_POWERBI_PURXNS_REPORT",
+    dateCol: "XnDt",
+    amountCol: "NetPurNetAmount",
+    vendorCol: "SupplierName",
+  };
 }
 
 module.exports = {
@@ -142,4 +180,6 @@ module.exports = {
   VENDOR_PUR_TOPN_SUPPLIER_VIEW_SQL,
   isVendorPurchaseTopNQuestion,
   buildVendorPurchaseTopNSql,
+  resolveVendorPurchaseTopNSqlFast,
+  getCanonicalPurchaseContext,
 };

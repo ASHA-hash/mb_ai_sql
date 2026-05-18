@@ -43,12 +43,14 @@
     },
     "dimensions": {
       "salesperson": {
-        "canonical_column": "SupplierName",
-        "description": "No employee column exists. Default to SupplierName as proxy for vendor/salesperson performance."
+        "canonical_column": "SalesPersonName",
+        "source_view": "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+        "description": "Retail store staff member. ALWAYS use dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID with SalesPersonName dimension, SalesQuantity for units, SalesNetAmount for revenue, CashmemoDt for date. SupplierName is vendor/clothing brand — NOT a person."
       },
       "staff": {
-        "canonical_column": "SupplierName",
-        "description": "Fallback operational entity dimension. Maps directly to SupplierName."
+        "canonical_column": "SalesPersonName",
+        "source_view": "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+        "description": "Store employee / sales rep. Use dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID with SalesPersonName, SalesQuantity for units, SalesNetAmount for revenue, CashmemoDt for date."
       },
       "store": {
         "canonical_column": "BranchAlias",
@@ -90,7 +92,12 @@
       "yesterday": "CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))"
     }
   },
-  "_info": "Rich business semantic layer for zRetailHQ0 retail ERP. Used by RAG indexer to inject business context into AI prompts.",
+  "_info": "Rich business semantic layer for zRetailHQ0. Runtime merges db_tables_views_columns.json + semantic-domain-rules.json via services/dynamic-semantic-layer.js. Per-view blocks below override global semantic_mappings.",
+  "dynamic_layer": {
+    "enabled": true,
+    "domain_rules_file": "metadata/semantic-domain-rules.json",
+    "catalog_file": "metadata/db_tables_views_columns.json"
+  },
   "dbo.VW_MB_POWERBI_SLSXNS_REPORT": {
     "purpose": "Primary sales transactions view. The single best view for all sales analysis — revenue, quantity, returns, GST. Each row is one article sold/returned on one transaction.",
     "primaryUseCase": "MTD/QTD/YTD sales, branch performance, department/category breakdown, supplier sell-through, net revenue after returns",

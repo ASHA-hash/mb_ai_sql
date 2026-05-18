@@ -24,7 +24,39 @@ function openAiChatOptions(model, { temperature, maxTokens } = {}) {
   return opts;
 }
 
+/**
+ * @langchain/anthropic defaults topP to -1. Newer models reject top_p: -1 and also reject
+ * sending both temperature and top_p — use temperature only, then clear topP on the instance.
+ */
+function anthropicChatOptions(model, { temperature, maxTokens, anthropicApiKey } = {}) {
+  const opts = {
+    model: String(model || "").trim(),
+    maxTokens: maxTokens != null ? maxTokens : 2048,
+  };
+  if (anthropicApiKey) opts.anthropicApiKey = anthropicApiKey;
+  if (temperature != null && Number.isFinite(Number(temperature))) {
+    opts.temperature = temperature;
+  } else {
+    opts.topP = 1;
+  }
+  return opts;
+}
+
+/** Clear LangChain's topP=-1 default when using temperature (API allows only one). */
+function configureAnthropicLlm(llm, { temperature } = {}) {
+  if (!llm) return llm;
+  const useTemp = temperature != null && Number.isFinite(Number(temperature));
+  if (useTemp) {
+    llm.topP = undefined;
+  } else if (llm.topP === -1) {
+    llm.topP = 1;
+  }
+  return llm;
+}
+
 module.exports = {
   openAiOmitsTemperature,
   openAiChatOptions,
+  anthropicChatOptions,
+  configureAnthropicLlm,
 };

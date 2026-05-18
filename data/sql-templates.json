@@ -1,92 +1,92 @@
 [
   {
-    "id": "tpl_001_top_branches",
-    "name": "Top 10 branches by gross revenue this month",
-    "sql": "SELECT TOP 10\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS TotalSales\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [BranchAlias]\nORDER BY TotalSales DESC",
-    "desc": "Top branches ranked by MrpValue (gross revenue) for current month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_ytd_revenue",
+    "name": "YTD gross revenue and bill count",
+    "desc": "Indian FY YTD (Apr–Mar) — single KPI row. APP_REPORT MrpValue + XnNo.",
+    "sql": "SELECT\n  SUM([MrpValue]) AS YTDSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(\n    CASE WHEN MONTH(GETDATE()) >= 4 THEN YEAR(GETDATE()) ELSE YEAR(GETDATE()) - 1 END,\n    4, 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_002_top_salespersons",
-    "name": "Top 10 salespersons by gross revenue this month",
-    "sql": "SELECT TOP 10\n  [SupplierName] AS Salesperson,\n  SUM([MrpValue]) AS TotalSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nORDER BY TotalSales DESC",
-    "desc": "Salesperson ranking by MrpValue for current month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_qtd_revenue",
+    "name": "QTD gross revenue",
+    "desc": "Current Indian FY quarter total sales — APP_REPORT.",
+    "sql": "SELECT\n  SUM([MrpValue]) AS QTDSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= CASE\n    WHEN MONTH(GETDATE()) IN (4,5,6)    THEN DATEFROMPARTS(YEAR(GETDATE()), 4,  1)\n    WHEN MONTH(GETDATE()) IN (7,8,9)    THEN DATEFROMPARTS(YEAR(GETDATE()), 7,  1)\n    WHEN MONTH(GETDATE()) IN (10,11,12) THEN DATEFROMPARTS(YEAR(GETDATE()), 10, 1)\n    ELSE DATEFROMPARTS(YEAR(GETDATE()), 1, 1)\n  END\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_003_top_categories",
-    "name": "Top 10 categories by gross revenue this month",
-    "sql": "SELECT TOP 10\n  [CategoryShortName] AS Category,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [CategoryShortName]\nORDER BY TotalSales DESC",
-    "desc": "Category-level sales ranking for current month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_yesterday_branch",
+    "name": "Yesterday gross revenue by branch",
+    "desc": "All branches ranked for prior calendar day.",
+    "sql": "SELECT\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS TotalSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))\nGROUP BY [BranchAlias]\nORDER BY TotalSales DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_004_today_summary",
-    "name": "Today's total sales summary",
-    "sql": "SELECT\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)",
-    "desc": "Today's gross revenue, quantity and bill count",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_daily_trend_mtd",
+    "name": "Daily gross revenue trend this month",
+    "desc": "One row per day in current month — line chart.",
+    "sql": "SELECT\n  CAST([XnDt] AS date) AS SaleDate,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY CAST([XnDt] AS date)\nORDER BY SaleDate",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_005_monthly_trend",
-    "name": "Monthly sales trend — last 6 months",
-    "sql": "SELECT\n  CONCAT(YEAR(CAST([XnDt] AS date)), '-', RIGHT('0' + CAST(MONTH(CAST([XnDt] AS date)) AS varchar(2)), 2)) AS Month,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(month, -6, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY YEAR(CAST([XnDt] AS date)), MONTH(CAST([XnDt] AS date))\nORDER BY YEAR(CAST([XnDt] AS date)), MONTH(CAST([XnDt] AS date))",
-    "desc": "Month-wise sales trend for the last 6 months",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_articles_revenue_mtd",
+    "name": "Top 10 articles by gross revenue this month",
+    "desc": "Rank by MrpValue (not qty) — APP_REPORT ArticleNo.",
+    "sql": "SELECT TOP 10\n  [ArticleNo] AS Article,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [ArticleNo]\nORDER BY TotalSales DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_006_top_articles",
-    "name": "Top 10 articles by quantity sold this month",
-    "sql": "SELECT TOP 10\n  [ArticleNo] AS Article,\n  MAX([Color]) AS Color,\n  SUM([AppQty]) AS TotalQty,\n  SUM([MrpValue]) AS TotalSales\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [ArticleNo]\nORDER BY TotalQty DESC",
-    "desc": "Best-selling articles by pieces sold this month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_staff_units_mtd",
+    "name": "Top 10 salespersons by units sold this month",
+    "desc": "SalesPersonName on SLS_DATA_WITHOUT_ITEMID — units not revenue.",
+    "sql": "SELECT TOP (10)\n  ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)') AS StaffName,\n  SUM(ISNULL([SalesQuantity], 0)) AS Units,\n  SUM(ISNULL([SalesNetAmount], 0)) AS TotalSales\nFROM dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID WITH (NOLOCK)\nWHERE CAST([CashmemoDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([CashmemoDt] AS date) <= CAST(GETDATE() AS date)\n  AND NULLIF(LTRIM(RTRIM([SalesPersonName])), '') IS NOT NULL\nGROUP BY ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)')\nHAVING SUM(ISNULL([SalesQuantity], 0)) > 0\nORDER BY Units DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_007_top_departments",
-    "name": "Top 10 departments by gross revenue this month",
-    "sql": "SELECT TOP 10\n  [DepartmentShortName] AS Department,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [DepartmentShortName]\nORDER BY TotalSales DESC",
-    "desc": "Department-level gross revenue ranking for current month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_vendor_qty_mtd",
+    "name": "Top 10 vendors by purchase quantity this month",
+    "desc": "PurQty on PUR_REPORT — different from purchase amount ranking.",
+    "sql": "SELECT TOP 10\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([PurQty], 0)) AS TotalQty\nFROM dbo.VW_MB_POWERBI_PUR_REPORT WITH (NOLOCK)\nWHERE CAST([PurchaseDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([PurchaseDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([PurQty], 0)) > 0\nORDER BY TotalQty DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_008_top_vendors_purchase",
-    "name": "Top 10 vendors by purchase amount this month",
-    "sql": "SELECT TOP 10\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([NetPurNetAmount], 0)) AS TotalPurchase\nFROM dbo.VW_MB_POWERBI_PURXNS_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([NetPurNetAmount], 0)) > 0\nORDER BY TotalPurchase DESC",
-    "desc": "Vendor ranking by purchase amount for current month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_all_branches_mtd",
+    "name": "Gross revenue by all branches this month",
+    "desc": "Full branch list (not TOP 10) for export / scan.",
+    "sql": "SELECT\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [BranchAlias]\nORDER BY TotalSales DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_009_branch_compare_mtd_vs_lm",
-    "name": "This month vs last month gross revenue by branch",
-    "sql": "SELECT\n  [BranchAlias] AS Branch,\n  SUM(CASE WHEN CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) THEN [MrpValue] ELSE 0 END) AS ThisMonth,\n  SUM(CASE WHEN CAST([XnDt] AS date) >= DATEADD(MONTH, -1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n            AND CAST([XnDt] AS date) < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) THEN [MrpValue] ELSE 0 END) AS LastMonth\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(MONTH, -1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [BranchAlias]\nORDER BY ThisMonth DESC",
-    "desc": "Side-by-side branch comparison: current month vs prior month",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_last30_daily",
+    "name": "Last 30 days gross revenue by day",
+    "desc": "Rolling 30-day daily trend — APP_REPORT.",
+    "sql": "SELECT\n  CAST([XnDt] AS date) AS SaleDate,\n  SUM([MrpValue]) AS TotalSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(day, -29, CAST(GETDATE() AS date))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY CAST([XnDt] AS date)\nORDER BY SaleDate",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   },
   {
-    "id": "tpl_010_top_articles_alltime",
-    "name": "Top 20 highest selling articles all time by gross revenue",
-    "sql": "SELECT TOP 20\n  [ArticleNo] AS Article,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nGROUP BY [ArticleNo]\nORDER BY TotalSales DESC",
-    "desc": "All-time best sellers by gross revenue — no date filter",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z",
-    "createdBy": "system"
+    "id": "tpl_seed_mtd_purchase_returns",
+    "name": "MTD purchase returns by vendor",
+    "desc": "Return qty PRT_REPORT — procurement analytics.",
+    "sql": "SELECT TOP 15\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([PrtQty], 0)) AS ReturnQty\nFROM dbo.VW_MB_POWERBI_PRT_REPORT WITH (NOLOCK)\nWHERE CAST([PurReturnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([PurReturnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([PrtQty], 0)) > 0\nORDER BY ReturnQty DESC",
+    "createdAt": "2026-05-17T00:00:00.000Z",
+    "updatedAt": "2026-05-17T00:00:00.000Z",
+    "createdBy": "system_seed"
   }
 ]

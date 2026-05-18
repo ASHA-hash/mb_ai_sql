@@ -1,0 +1,191 @@
+          {/* ── KPI stat cards — ALWAYS first, regardless of query type ── */}
+          {result.data && result.data.length > 0 && <StatsBar rows={result.data} />}
+
+          {result.salesDashboard && (() => {
+            const dash = result.salesDashboard;
+            const allRows = Array.isArray(result.data) ? result.data : [];
+            const { valueCol, dateCol, period, branchAiRows: dashBranchAiRows, deptAiRows: dashDeptRows, catAiRows: dashCatRows, trendAiRows: dashTrendAiRows } = dash;
+
+            const drill = sdDrill;
+            const barAxis = sdBarAxis;
+            const drillRows = allRows.filter(r => {
+              return Object.entries(drill).every(([k, v]) => String(r[k] ?? '') === String(v));
+            });
+            const sourceRows = drillRows.length ? drillRows : allRows;
+
+            const pillStyle = (on) => ({
+              fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999, border: 'none',
+              background: on ? 'var(--brand,#2563eb)' : 'var(--bg-muted,#f1f5f9)',
+              color: on ? '#fff' : 'var(--text-muted,#64748b)', cursor: 'pointer'
+            });
+
+            const clickFilter = (col) => (p) => {
+              const label = String(p?.name ?? '').trim();
+              if (!label) return;
+              setSdDrill((dr) => {
+                const next = { ...dr };
+                if (next[col] === label) delete next[col];
+                else next[col] = label;
+                return next;
+              });
+            };
+
+            // Branch chart rows — prefer AI full-range rows, fallback to sampled flat rows
+            const branchRows = (() => {
+              if (dashBranchAiRows?.length) {
+                const labelCol = pickAILabelCol(dashBranchAiRows, 'branch');
+                const valCol   = pickAIValueCol(dashBranchAiRows);
+                return dashBranchAiRows
+                  .map(r => ({ label: String(r[labelCol] ?? ''), _v: parseFloat(r[valCol]) || 0 }))
+                  .filter(r => r.label && !isJunkGroupKey(r.label) && r._v > 0)
+                  .sort((a, b) => b._v - a._v).slice(0, 30)
+                  .map(r => ({ label: r.label, SaleNetAmount: r._v }));
+              }
+              const branchOpt = GROUP_OPTIONS.find(g => g.key === 'branch');
+              const branchCol = valueCol ? resolveGroupCol(sourceRows, branchOpt) : null;
+              return (branchCol && valueCol)
+                ? aggregateBy(sourceRows, branchCol, valueCol).slice(0, 20).map(r => ({ label: r.label, [valueCol]: r.value }))
+                : [];
+            })();
+
+            // Trend rows (prefer AI full-period trend, fallback to sampled flat rows)
+            const dateRows = (() => {
+              if (period === "today") return [];
+              if (dashTrendAiRows?.length) {
+                const keys = Object.keys(dashTrendAiRows[0]);
+                const labelCol = keys.find(k => /date|month|day|saledate|salemonth/i.test(k)) || keys[0];
+                const salesCol = keys.find(k => /totalsales|saleamount|salenetamount|netsales/i.test(k))
+                  || keys.find(k => /sales|amount|net|revenue/i.test(k) && !/count/i.test(k))
+                  || keys[1];
+                const invoiceCountCol = keys.find(k => /invoicecount|invoice.*count/i.test(k));
+                const customerCountCol = keys.find(k => /customercount|customer.*count/i.test(k));
+                if (!labelCol || !salesCol) return [];
+                return dashTrendAiRows
+                  .filter(r => r[labelCol] != null)
+                  .map(r => {
+                    const row = { label: String(r[labelCol]), TotalSales: parseFloat(r[salesCol]) || 0 };
+                    if (invoiceCountCol) row.InvoiceCount = parseFloat(r[invoiceCountCol]) || 0;
+                    if (customerCountCol) row.CustomerCount = parseFloat(r[customerCountCol]) || 0;
+                    return row;
+                  });
+              }
+              if (!valueCol || !dateCol) return [];
+              return (period === "mtd" || period === "custom"
+                ? aggregateByDate(sourceRows, dateCol, valueCol).map(r => ({ label: r.label, [valueCol]: r.value }))
+                : aggregateByMonth(sourceRows, dateCol, valueCol).map(r => ({ label: r.label, [valueCol]: r.value })));
+            })();
+
+            const trendValueCols = dateRows.length > 0
+              ? (dateRows[0]?.TotalSales != null
+                ? [
+                    'TotalSales',
+                    ...(dateRows[0]?.InvoiceCount != null ? ['InvoiceCount'] : []),
+                    ...(dateRows[0]?.CustomerCount != null ? ['CustomerCount'] : []),
+                  ]
+                : [valueCol])
+              : [];
+
+            // Dept AI rows
+            const deptChartRows = (() => {
+              if (!dashDeptRows?.length) return [];
+              const labelCol = pickAILabelCol(dashDeptRows, 'dept');
+              const valCol   = pickAIValueCol(dashDeptRows);
+              return dashDeptRows
+                .map(r => ({ label: String(r[labelCol] ?? ''), _v: parseFloat(r[valCol]) || 0 }))
+                .filter(r => r.label && !isJunkGroupKey(r.label) && r._v > 0)
+                .sort((a, b) => b._v - a._v).slice(0, 20)
+                .map(r => ({ label: r.label, SaleNetAmount: r._v }));
+            })();
+
+            // Cat AI rows
+            const catChartRows = (() => {
+              if (!dashCatRows?.length) return [];
+              const labelCol = pickAILabelCol(dashCatRows, 'cat');
+              const valCol   = pickAIValueCol(dashCatRows);
+              return dashCatRows
+                .map(r => ({ label: String(r[labelCol] ?? ''), _v: parseFloat(r[valCol]) || 0 }))
+                .filter(r => r.label && !isJunkGroupKey(r.label) && r._v > 0)
+                .sort((a, b) => b._v - a._v).slice(0, 20)
+                .map(r => ({ label: r.label, SaleNetAmount: r._v }));
+            })();
+
+            const noFlatData = !valueCol || allRows.length === 0;
+            const hasAny = branchRows.length > 0 || deptChartRows.length > 0 || catChartRows.length > 0 || dateRows.length > 0;
+
+            if (!hasAny && noFlatData) return (
+              <div className="card p-4" style={{ borderLeft:'4px solid #2563eb' }}>
+                <p className="text-sm font-bold mb-1" style={{color:'var(--text-strong)'}}>Sales Dashboard View ({dash.from} → {dash.to})</p>
+                <p className="text-sm py-3 text-center" style={{color:'var(--text-muted)'}}>No sales data for this period ({dash.from} → {dash.to})</p>
+              </div>
+            );
+
+            return (
+              <div className="card p-4 space-y-4" style={{ borderLeft:'4px solid #2563eb' }}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-bold" style={{color:'var(--text-strong)'}}>Sales Dashboard View ({dash.from} → {dash.to})</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button style={pillStyle(barAxis === "auto")} onClick={() => setSdBarAxis("auto")}>Axis: Auto</button>
+                    <button style={pillStyle(barAxis === "vertical")} onClick={() => setSdBarAxis("vertical")}>Cat on X</button>
+                    <button style={pillStyle(barAxis === "horizontal")} onClick={() => setSdBarAxis("horizontal")}>Cat on Y</button>
+                    {Object.keys(drill).length > 0 && (
+                      <button style={pillStyle(true)} onClick={() => setSdDrill({})}>Clear filters ✕</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Trend chart — non-Today periods */}
+                {dateRows.length > 0 && (
+                  <ChartWithToggle
+                    rows={dateRows}
+                    labelCol="label"
+                    valueCols={trendValueCols}
+                    title={trendValueCols.includes('CustomerCount')
+                      ? 'Trend — Sales, Invoice Count & Customer Count'
+                      : trendValueCols.includes('InvoiceCount')
+                        ? 'Trend — Sales & Invoice Count'
+                        : 'Trend'}
+                    icon="📅"
+                  />
+                )}
+
+                {/* Branch chart */}
+                {branchRows.length > 0 && (
+                  <ChartWithToggle
+                    rows={branchRows}
+                    labelCol="label"
+                    valueCols={pickChartValueCols(branchRows, valueCol)}
+                    title="Sales by Branch"
+                    icon="🏬"
+                  />
+                )}
+
+                {/* Dept chart — from AI rows */}
+                {deptChartRows.length > 0 && (
+                  <ChartWithToggle
+                    rows={deptChartRows}
+                    labelCol="label"
+                    valueCols={['SaleNetAmount']}
+                    title="Sales by Department ✨"
+                    icon="🏢"
+                  />
+                )}
+
+                {/* Category chart — from AI rows */}
+                {catChartRows.length > 0 && (
+                  <ChartWithToggle
+                    rows={catChartRows}
+                    labelCol="label"
+                    valueCols={['SaleNetAmount']}
+                    title="Sales by Category ✨"
+                    icon="🏷️"
+                  />
+                )}
+
+                {!hasAny && (
+                  <p className="text-sm py-3 text-center" style={{color:'var(--text-muted)'}}>
+                    No sales data for this period ({dash.from} → {dash.to})
+                  </p>
+                )}
+              </div>
+            );
+          })()}

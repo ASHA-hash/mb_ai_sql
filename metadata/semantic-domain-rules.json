@@ -1,0 +1,217 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "_info": "Domain routing + jargon overrides. Catalog columns come from db_tables_views_columns.json at runtime.",
+  "domains": {
+    "salesperson": {
+      "label": "Staff / sales rep performance",
+      "match": [
+        "salespersons?",
+        "sales\\s*people",
+        "sales\\s*person",
+        "sales\\s*rep",
+        "salesrep",
+        "staff",
+        "employees?"
+      ],
+      "exclude": ["purchase", "procurement", "vendor master"],
+      "viewEnv": "SALESPERSON_TOPN_VIEW",
+      "defaultView": "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+      "metrics": {
+        "revenue": "SalesNetAmount",
+        "sales": "SalesNetAmount",
+        "amount": "SalesNetAmount",
+        "turnover": "SalesNetAmount",
+        "units": "SalesQuantity",
+        "quantity": "SalesQuantity",
+        "pcs": "SalesQuantity"
+      },
+      "dimensions": {
+        "salesperson": "SalesPersonName",
+        "staff": "SalesPersonName",
+        "sales rep": "SalesPersonName"
+      },
+      "dateColumn": "CashmemoDt",
+      "neverUseOnThisDomain": ["SupplierName", "MrpValue", "AppQty", "XnDt"]
+    },
+    "sales": {
+      "label": "Retail sales facts (Home-aligned)",
+      "match": [
+        "revenue",
+        "sales",
+        "turnover",
+        "branch",
+        "branches",
+        "store",
+        "department",
+        "departments",
+        "category",
+        "categories",
+        "invoice",
+        "bills?",
+        "mtd",
+        "ytd"
+      ],
+      "exclude": ["purchase", "procurement", "stock on hand"],
+      "viewEnv": "ANALYTICS_BASE_TABLE",
+      "defaultView": "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
+      "metrics": {
+        "revenue": "NetSlsNetAmount",
+        "sales": "NetSlsNetAmount",
+        "turnover": "NetSlsNetAmount",
+        "quantity": "NetSlsQty",
+        "pcs": "NetSlsQty",
+        "bills": "BillCount"
+      },
+      "dimensions": {
+        "store": "BranchAlias",
+        "branch": "BranchAlias",
+        "department": "DepartmentShortName",
+        "category": "CategoryShortName",
+        "supplier": "SupplierName",
+        "vendor": "SupplierName"
+      },
+      "dateColumn": "XnDt",
+      "neverUseOnThisDomain": ["SalesPersonName", "CashmemoDt"]
+    },
+    "approval": {
+      "label": "Approval / consignment lines",
+      "match": ["approval", "app report", "consignment"],
+      "viewEnv": null,
+      "defaultView": "dbo.VW_MB_POWERBI_APP_REPORT",
+      "metrics": {
+        "revenue": "MrpValue",
+        "quantity": "AppQty"
+      },
+      "dimensions": {
+        "store": "BranchAlias",
+        "supplier": "SupplierName"
+      },
+      "dateColumn": "XnDt"
+    },
+    "purchase": {
+      "label": "Purchase / vendor inward",
+      "match": ["purchase", "procurement", "inward", "grn", "vendor"],
+      "exclude": ["salesperson", "sales rep"],
+      "viewEnv": null,
+      "defaultView": "dbo.VW_MB_POWERBI_PURXNS_REPORT",
+      "metrics": {
+        "amount": "NetPurNetAmount",
+        "quantity": "PurQty"
+      },
+      "dimensions": {
+        "vendor": "SupplierName",
+        "supplier": "SupplierName"
+      },
+      "dateColumn": "PurDate"
+    },
+    "stock": {
+      "label": "Stock on hand / inventory levels",
+      "match": [
+        "stock",
+        "inventory",
+        "on hand",
+        "closing stock",
+        "opening stock",
+        "stock value",
+        "stock report",
+        "zero stock",
+        "out of stock",
+        "oos",
+        "stockout",
+        "low stock",
+        "reorder",
+        "available qty",
+        "available quantity"
+      ],
+      "exclude": ["purchase", "sales", "revenue", "transfer"],
+      "viewEnv": null,
+      "defaultView": "dbo.VW_MB_POWERBI_STOCK_REPORT",
+      "metrics": {
+        "quantity": "ClosingQty",
+        "value": "ClosingValue",
+        "stock": "ClosingQty",
+        "units": "ClosingQty"
+      },
+      "dimensions": {
+        "branch": "BranchAlias",
+        "store": "BranchAlias",
+        "department": "DepartmentShortName",
+        "category": "CategoryShortName",
+        "supplier": "SupplierName",
+        "brand": "SupplierName",
+        "article": "ArticleNo"
+      },
+      "dateColumn": null,
+      "_note": "Stock report is point-in-time — no date column filter. Use WHERE ClosingQty <= 0 for zero-stock."
+    },
+    "customer": {
+      "label": "Customer profile and spending data",
+      "match": [
+        "customer",
+        "customers",
+        "loyalty",
+        "member",
+        "members",
+        "birthday",
+        "birthdays",
+        "repeat",
+        "lapsed",
+        "top spender",
+        "spenders",
+        "crm",
+        "retention",
+        "new customer",
+        "customer count",
+        "footfall"
+      ],
+      "exclude": ["purchase", "vendor"],
+      "viewEnv": null,
+      "defaultView": "dbo.VwAICustomerDetails",
+      "alternateView": "dbo.VwAISalesData",
+      "metrics": {
+        "spend": "TotalPurchaseValue",
+        "visits": "VisitCount",
+        "count": "CustomerId"
+      },
+      "dimensions": {
+        "customer": "CustomerName",
+        "branch": "BranchName",
+        "mobile": "MobileNo"
+      },
+      "dateColumn": "CreatedOn",
+      "_note": "Use CreatedOn or LastUpdate for date filters — NOT CreatedDt/EntryDt. For spend rankings JOIN VwAISalesData."
+    },
+    "transfer": {
+      "label": "Inter-branch stock transfers (STI / STO)",
+      "match": [
+        "transfer",
+        "transfers",
+        "sti",
+        "sto",
+        "stock transfer",
+        "inter.?branch",
+        "send to branch",
+        "received from branch",
+        "dispatch",
+        "movement"
+      ],
+      "exclude": ["purchase", "sales revenue"],
+      "viewEnv": null,
+      "defaultView": "dbo.VW_MB_POWERBI_STO_REPORT",
+      "alternateView": "dbo.VW_MB_POWERBI_STI_REPORT",
+      "metrics": {
+        "quantity": "StoQty",
+        "value": "MrpValue"
+      },
+      "dimensions": {
+        "from": "SourceBranchAlias",
+        "to": "TargetBranchAlias",
+        "branch": "SourceBranchAlias",
+        "article": "ArticleNo",
+        "category": "CategoryShortName"
+      },
+      "dateColumn": "XnDt",
+      "_note": "STO = stock transfer out (sent). STI = stock transfer in (received). Both views share similar schema."
+    }
+  }
+}

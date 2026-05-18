@@ -46,8 +46,8 @@
   },
   {
     "question": "Top 10 salespersons by gross revenue this month",
-    "sql": "SELECT TOP 10\n  [SupplierName] AS Salesperson,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nORDER BY TotalSales DESC",
-    "note": "SupplierName = salesperson/staff name in this installation. MrpValue = gross revenue."
+    "sql": "SELECT TOP (10)\n  ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)') AS StaffName,\n  SUM(ISNULL([SalesNetAmount], 0)) AS TotalSales,\n  SUM(ISNULL([SalesQuantity], 0)) AS Units,\n  COUNT(DISTINCT [CashmemoNo]) AS Bills\nFROM dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID WITH (NOLOCK)\nWHERE CAST([CashmemoDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([CashmemoDt] AS date) <= CAST(GETDATE() AS date)\n  AND NULLIF(LTRIM(RTRIM([SalesPersonName])), '') IS NOT NULL\nGROUP BY ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)')\nHAVING SUM(ISNULL([SalesNetAmount], 0)) > 0\nORDER BY TotalSales DESC",
+    "note": "SalesPersonName on VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID — NOT SupplierName on APP_REPORT (that is vendor/brand)."
   },
   {
     "question": "Top 10 categories by gross revenue this month",
@@ -76,12 +76,12 @@
   },
   {
     "question": "Top 10 vendors by purchase amount this month",
-    "sql": "SELECT TOP 10\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([NetPurNetAmount], 0)) AS TotalPurchase\nFROM dbo.VW_MB_POWERBI_PURXNS_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([NetPurNetAmount], 0)) > 0\nORDER BY TotalPurchase DESC",
-    "note": "Purchase amount: VW_MB_POWERBI_PURXNS_REPORT.NetPurNetAmount (not MrpValue on PUR_REPORT — that view has PurQty only). SupplierName = vendor."
+    "sql": "SELECT TOP 10\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([PurchasePrice], 0) * ISNULL([PurQty], 1)) AS TotalPurchase\nFROM dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT WITH (NOLOCK)\nWHERE CAST([PurDate] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([PurDate] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([PurchasePrice], 0) * ISNULL([PurQty], 1)) > 0\nORDER BY TotalPurchase DESC",
+    "note": "Purchase amount on SUPPLIER_PUR_REPORT (PurchasePrice × PurQty). Faster than full PURXNS scan."
   },
   {
     "question": "Top 10 highest sales invoices today",
-    "sql": "SELECT TOP 10\n  [XnNo] AS InvoiceNo,\n  [BranchAlias] AS Branch,\n  [SupplierName] AS Salesperson,\n  SUM([MrpValue]) AS InvoiceTotal,\n  SUM([AppQty]) AS Qty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)\nGROUP BY [XnNo], [BranchAlias], [SupplierName]\nORDER BY InvoiceTotal DESC",
-    "note": "XnNo = invoice/bill number. BranchAlias = store. SupplierName = salesperson."
+    "sql": "SELECT TOP 10\n  [XnNo] AS InvoiceNo,\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS InvoiceTotal,\n  SUM([AppQty]) AS Qty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)\nGROUP BY [XnNo], [BranchAlias]\nORDER BY InvoiceTotal DESC",
+    "note": "XnNo = invoice/bill. Do not label SupplierName as salesperson on APP_REPORT."
   }
 ]

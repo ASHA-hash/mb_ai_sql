@@ -1,0 +1,52 @@
+[
+  {
+    "q": "Top 10 branches by gross revenue this month",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT TOP 10\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS TotalSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [BranchAlias]\nORDER BY TotalSales DESC"
+  },
+  {
+    "q": "Top 10 salespersons by gross revenue this month",
+    "hint": "dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID",
+    "sql": "SELECT TOP (10)\n  ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)') AS StaffName,\n  SUM(ISNULL([SalesNetAmount], 0)) AS TotalSales,\n  SUM(ISNULL([SalesQuantity], 0)) AS Units,\n  COUNT(DISTINCT [CashmemoNo]) AS Bills\nFROM dbo.VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID WITH (NOLOCK)\nWHERE CAST([CashmemoDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([CashmemoDt] AS date) <= CAST(GETDATE() AS date)\n  AND NULLIF(LTRIM(RTRIM([SalesPersonName])), '') IS NOT NULL\nGROUP BY ISNULL(NULLIF(LTRIM(RTRIM(CAST([SalesPersonName] AS NVARCHAR(200)))), ''), '(Unknown)')\nHAVING SUM(ISNULL([SalesNetAmount], 0)) > 0\nORDER BY TotalSales DESC"
+  },
+  {
+    "q": "Top 10 categories by gross revenue this month",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT TOP 10\n  [CategoryShortName] AS Category,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [CategoryShortName]\nORDER BY TotalSales DESC"
+  },
+  {
+    "q": "Today's total gross revenue and bill count",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT\n  SUM([MrpValue]) AS TodaySales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)"
+  },
+  {
+    "q": "Monthly gross revenue trend for the last 6 months",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT\n  CONCAT(YEAR(CAST([XnDt] AS date)), '-', RIGHT('0' + CAST(MONTH(CAST([XnDt] AS date)) AS varchar(2)), 2)) AS Month,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(MONTH, -6, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY YEAR(CAST([XnDt] AS date)), MONTH(CAST([XnDt] AS date))\nORDER BY YEAR(CAST([XnDt] AS date)), MONTH(CAST([XnDt] AS date))"
+  },
+  {
+    "q": "Top 10 articles by quantity sold this month",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT TOP 10\n  [ArticleNo] AS Article,\n  SUM([AppQty]) AS TotalQty,\n  SUM([MrpValue]) AS TotalSales\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [ArticleNo]\nORDER BY TotalQty DESC"
+  },
+  {
+    "q": "Top 10 departments by gross revenue this month",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT TOP 10\n  [DepartmentShortName] AS Department,\n  SUM([MrpValue]) AS TotalSales,\n  SUM([AppQty]) AS TotalQty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [DepartmentShortName]\nORDER BY TotalSales DESC"
+  },
+  {
+    "q": "Top 10 vendors by purchase amount this month",
+    "hint": "dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT",
+    "sql": "SELECT TOP 10\n  [SupplierName] AS Vendor,\n  SUM(ISNULL([PurchasePrice], 0) * ISNULL([PurQty], 1)) AS TotalPurchase\nFROM dbo.VW_MB_POWERBI_SUPPLIER_PUR_REPORT WITH (NOLOCK)\nWHERE CAST([PurDate] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n  AND CAST([PurDate] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [SupplierName]\nHAVING SUM(ISNULL([PurchasePrice], 0) * ISNULL([PurQty], 1)) > 0\nORDER BY TotalPurchase DESC"
+  },
+  {
+    "q": "Compare this month vs last month gross revenue by branch",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT\n  [BranchAlias] AS Branch,\n  SUM(CASE\n    WHEN CAST([XnDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n     AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\n    THEN [MrpValue] ELSE 0 END) AS ThisMonth,\n  SUM(CASE\n    WHEN CAST([XnDt] AS date) >= DATEADD(MONTH,-1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n     AND CAST([XnDt] AS date) <  DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)\n    THEN [MrpValue] ELSE 0 END) AS LastMonth\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(MONTH,-1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY [BranchAlias]\nORDER BY ThisMonth DESC"
+  },
+  {
+    "q": "Top 10 highest sales invoices today",
+    "hint": "dbo.VW_MB_POWERBI_APP_REPORT",
+    "sql": "SELECT TOP 10\n  [XnNo] AS InvoiceNo,\n  [BranchAlias] AS Branch,\n  SUM([MrpValue]) AS InvoiceTotal,\n  SUM([AppQty]) AS Qty\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) = CAST(GETDATE() AS date)\nGROUP BY [XnNo], [BranchAlias]\nORDER BY InvoiceTotal DESC"
+  }
+]

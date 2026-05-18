@@ -12,6 +12,11 @@ const {
 } = require("./metadata-translation-engine");
 const { evaluateUserClarityGate, INTERACTIVE_CHIPS } = require("./user-guidance");
 const { runAdaptivePreprocess } = require("./adaptive-query-pipeline");
+const { resolveAdaptiveFastPathSql } = require("./adaptive-fast-path");
+const { isFastPathEnabled } = require("./nlq-pipeline-config");
+const { resolveViewForQuestion } = require("./dynamic-semantic-layer");
+const { resolveHomeAlignedSql, getHomeAnalyticsTable } = require("./home-kpi-sql");
+const { isSalespersonTopNQuestion } = require("./canonical-salesperson-sql");
 
 // Lowered from 0.95 → 0.45 so the gate only blocks truly empty/nonsense queries.
 // The LangGraph 7-node pipeline (intent → SQL → self-heal) handles ambiguous questions far better
@@ -217,26 +222,89 @@ function runPreFlightGate(userQuestion, opts = {}) {
     };
   }
 
-  const fastPathBeforeAdapt = checkFastPath(question);
+  const originalQuestion = question;
 
-  const adaptive = runAdaptivePreprocess(question, {
+  const homeHit = resolveHomeAlignedSql(originalQuestion, originalQuestion);
+  if (homeHit?.sql) {
+    let homeView = getHomeAnalyticsTable();
+    if (isSalespersonTopNQuestion(originalQuestion)) {
+      const { getCanonicalSalespersonContext } = require("./canonical-salesperson-sql");
+      homeView = getCanonicalSalespersonContext().table;
+    }
+    const rankedViews = rankViewsByMappingCoverage(question, schemaJson);
+    return {
+      nextStep: "FAST_PATH",
+      fastPathSql: homeHit.sql,
+      fastPathMatch: "home_kpi_aligned",
+      fastPathKey: homeHit.label || "home_kpi_aligned",
+      targetView: homeView,
+      rankedViews: rankedViews.slice(0, 3),
+      preFlightMs: Date.now() - t0,
+      clarityScore: 1,
+      correctedQuestion: question,
+      originalQuestion,
+    };
+  }
+
+  const adaptive = runAdaptivePreprocess(originalQuestion, {
     autoCorrectOpts: opts.autoCorrectOpts,
     schemaJson,
   });
   question = adaptive.question;
 
-  const fastPath = fastPathBeforeAdapt || checkFastPath(question);
-  if (fastPath) {
+  const homeHitAfter = resolveHomeAlignedSql(question, originalQuestion);
+  if (homeHitAfter?.sql) {
+    let homeView = getHomeAnalyticsTable();
+    if (isSalespersonTopNQuestion(originalQuestion)) {
+      const { getCanonicalSalespersonContext } = require("./canonical-salesperson-sql");
+      homeView = getCanonicalSalespersonContext().table;
+    }
+    const rankedViews = rankViewsByMappingCoverage(question, schemaJson);
+    return {
+      nextStep: "FAST_PATH",
+      fastPathSql: homeHitAfter.sql,
+      fastPathMatch: "home_kpi_aligned",
+      fastPathKey: homeHitAfter.label || "home_kpi_aligned",
+      targetView: homeView,
+      rankedViews: rankedViews.slice(0, 3),
+      preFlightMs: Date.now() - t0,
+      clarityScore: 1,
+      correctedQuestion: question,
+      originalQuestion: adaptive.originalQuestion || originalQuestion,
+      adaptiveEnrichment: adaptive.enrichmentBlock,
+      jargonReplacements: adaptive.jargonReplacements,
+      valueCorrections: adaptive.valueCorrections,
+    };
+  }
+
+  const canonicalBefore = isFastPathEnabled()
+    ? resolveAdaptiveFastPathSql(originalQuestion, {
+        fromDate: opts.fromDate,
+        toDate: opts.toDate,
+      })
+    : null;
+
+  const fastPath = isFastPathEnabled()
+    ? canonicalBefore ||
+      (() => {
+        const c = checkFastPath(question);
+        return c
+          ? { sql: c.sql, source: "exact_match_cache", matchType: c.matchType, matchedKey: c.matchedKey }
+          : null;
+      })()
+    : null;
+
+  if (fastPath?.sql) {
     return {
       nextStep: "FAST_PATH",
       fastPathSql: fastPath.sql,
-      fastPathMatch: fastPath.matchType,
-      fastPathKey: fastPath.matchedKey,
+      fastPathMatch: fastPath.matchType || fastPath.source,
+      fastPathKey: fastPath.matchedKey || fastPath.source,
       rankedViews: rankViewsByMappingCoverage(question, schemaJson).slice(0, 3),
       preFlightMs: Date.now() - t0,
       clarityScore: 1,
       correctedQuestion: question,
-      originalQuestion: adaptive.originalQuestion,
+      originalQuestion: adaptive.originalQuestion || originalQuestion,
       adaptiveEnrichment: adaptive.enrichmentBlock,
       jargonReplacements: adaptive.jargonReplacements,
       valueCorrections: adaptive.valueCorrections,
@@ -244,7 +312,11 @@ function runPreFlightGate(userQuestion, opts = {}) {
   }
 
   const rankedViews = rankViewsByMappingCoverage(question, schemaJson);
-  const validation = validateQueryFeasibility(question, rankedViews);
+  const targetView = resolveViewForQuestion(question, { schemaJson });
+  const orderedRanked = rankedViews.some((r) => r.viewName === targetView)
+    ? rankedViews
+    : [{ viewName: targetView, matchCount: 99 }, ...rankedViews];
+  const validation = validateQueryFeasibility(question, orderedRanked);
 
   if (!validation.viable) {
     return {
@@ -252,26 +324,23 @@ function runPreFlightGate(userQuestion, opts = {}) {
       clarificationMessage: validation.suggestedQuestion,
       clarificationReason: validation.reason,
       clarificationOptions: validation.clarificationOptions || [],
-      rankedViews: rankedViews.slice(0, 3),
+      rankedViews: orderedRanked.slice(0, 3),
       clarityScore: validation.clarityScore ?? 0,
       preFlightMs: Date.now() - t0,
     };
   }
-
-  const topView = rankedViews[0];
-  const targetView = topView.viewName;
   const localizedSchema = formatSchemaForPrompt([targetView]);
 
   return {
     nextStep: "CONTINUE",
     targetView,
-    rankedViews: rankedViews.slice(0, 3),
+    rankedViews: orderedRanked.slice(0, 3),
     schemaText: localizedSchema,
     topViews: [targetView],
     clarityScore: validation.clarityScore ?? 1,
     preFlightMs: Date.now() - t0,
     correctedQuestion: question,
-    originalQuestion: adaptive.originalQuestion,
+    originalQuestion: adaptive.originalQuestion || originalQuestion,
     adaptiveEnrichment: adaptive.enrichmentBlock,
     jargonReplacements: adaptive.jargonReplacements,
     valueCorrections: adaptive.valueCorrections,

@@ -11,6 +11,9 @@
     "test:db": "node scripts/test-db-connection.js",
     "probe:datasets": "node scripts/probe-dataset-permissions.js",
     "test:golden": "node scripts/run-golden-queries.js",
+    "verify:ai-chips": "python scripts/verify_ai_suggestions_and_templates.py",
+    "test:adaptive": "node scripts/test-adaptive-dynamic-suite.js",
+    "test:adaptive:fast": "node scripts/test-adaptive-dynamic-suite.js --fast-only",
     "build:dimension-index": "node scripts/build-dimension-index.js",
     "export:registry-schema": "node scripts/export-registry-schema.js --out metadata/schema-registry-columns.json",
     "export:all-data": "node scripts/export-all-data.js",
@@ -27,7 +30,7 @@
     "ioredis": "^5.4.1"
   },
   "dependencies": {
-    "@langchain/anthropic": "^0.3.21",
+    "@langchain/anthropic": "^0.3.34",
     "@langchain/core": "^1.1.43",
     "@langchain/langgraph": "^1.2.9",
     "@langchain/openai": "^1.4.5",

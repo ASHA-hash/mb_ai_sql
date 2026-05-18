@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="google-site-verification" content="kSH7dmadOjytmB2_PAXoYomb-d8YnogWchpgnpEuELE"/>
+<title>Smart ERP · Data</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c3aed'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='20' fill='white'%3E✦%3C/text%3E%3C/svg%3E" type="image/svg+xml"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('erp_theme');
+      var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', saved || (sysDark ? 'dark' : 'light'));
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  })();
+</script>
+<link rel="stylesheet" href="/assets/dashboard.css"/>
+<script>tailwind.config = {theme:{extend:{colors:{brand:'#7c3aed',brandDark:'#6d28d9'}}}}</script>
+</head>
+<body class="text-slate-800" style="background:var(--bg-app,#f0f2f5)">
+<div id="root"></div>
+<script>window.__ERP_PAGE__ = "data";</script>
+<script type="text/babel" src="/assets/shared-core.jsx"></script>
+<script type="text/babel" src="/assets/auth-ui.jsx"></script>
+<script type="text/babel" src="/panels/data.js"></script>
+<script type="text/babel" src="/assets/page-shell.jsx"></script>
+
+</body>
+</html>
