@@ -27,7 +27,6 @@ function isColumnDiscoveryEnabled() {
 }
 
 module.exports = {
-  envFlag,
   isFastPathEnabled,
   isIntentCompilerEnabled,
   isIntentStepEnabled,
