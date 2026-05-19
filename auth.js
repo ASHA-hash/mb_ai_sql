@@ -140,8 +140,13 @@ function checkUserPassword(password, userEntry) {
   if (stored) {
     return { ok: verifyPassword(password, stored), firstRun: false };
   }
-  // No hash set yet → allow the ADMIN_DEFAULT_PASSWORD env var (first-run only)
-  const defaultPwd = String(process.env.ADMIN_DEFAULT_PASSWORD || "Admin@1234");
+  // No hash set yet → ADMIN_DEFAULT_PASSWORD from runtime store / .env (first-run only)
+  let defaultPwd = "Admin@1234";
+  try {
+    defaultPwd = String(require("./services/runtime-config").get("ADMIN_DEFAULT_PASSWORD") || defaultPwd);
+  } catch (_) {
+    defaultPwd = String(process.env.ADMIN_DEFAULT_PASSWORD || defaultPwd);
+  }
   const ok = password === defaultPwd;
   return { ok, firstRun: ok }; // firstRun=true signals "please change password"
 }

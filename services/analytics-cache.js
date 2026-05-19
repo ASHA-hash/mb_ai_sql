@@ -14,11 +14,17 @@
 
 const crypto = require("crypto");
 const redisLayer = require("./analytics-cache-redis");
+const runtimeConfig = require("./runtime-config");
 
-const DEFAULT_TTL_MS = parseInt(process.env.ANALYTICS_CACHE_TTL_MS || "120000", 10);
 const MAX_KEYS = parseInt(process.env.ANALYTICS_CACHE_MAX_KEYS || "400", 10);
-// How many times longer than TTL to keep stale data available (0 = disable SWR)
-const STALE_MULTIPLIER = Math.max(0, parseFloat(process.env.ANALYTICS_STALE_TTL_MULTIPLIER ?? "4"));
+
+// Hot-reloadable: read from runtimeConfig each call (no module-level const)
+function getDefaultTtlMs() {
+  return runtimeConfig.getInt("ANALYTICS_CACHE_TTL_MS", 600000);
+}
+function getStaleMult() {
+  return Math.max(0, parseFloat(runtimeConfig.get("ANALYTICS_STALE_TTL_MULTIPLIER") ?? "4"));
+}
 
 /** Monotonic epoch bumped when source data is considered refreshed */
 let dataEpoch = Date.now();
@@ -81,8 +87,9 @@ const _revalidating = new Set();
  * @param {{ ttlMs?: number }} [opt]
  */
 async function getOrSet(namespace, keyPayload, factory, opt) {
-  const ttlMs = Number.isFinite(opt && opt.ttlMs) ? opt.ttlMs : DEFAULT_TTL_MS;
-  const staleTtlMs = STALE_MULTIPLIER > 0 ? ttlMs * STALE_MULTIPLIER : 0;
+  const ttlMs = Number.isFinite(opt && opt.ttlMs) ? opt.ttlMs : getDefaultTtlMs();
+  const staleMult = getStaleMult();
+  const staleTtlMs = staleMult > 0 ? ttlMs * staleMult : 0;
   const ttlSec = Math.max(1, Math.ceil(ttlMs / 1000));
   const fp = fingerprint({ ns: namespace, ...keyPayload, epoch: dataEpoch });
   const now = Date.now();
@@ -150,7 +157,7 @@ async function _backgroundRefresh(fp, namespace, factory, ttlMs, ttlSec) {
  * Skips TTL check — forces the value in regardless of current state.
  */
 function primeCache(namespace, keyPayload, value, ttlMs) {
-  const ttlSec = Math.max(1, Math.ceil((ttlMs || DEFAULT_TTL_MS) / 1000));
+  const ttlSec = Math.max(1, Math.ceil((ttlMs || getDefaultTtlMs()) / 1000));
   const fp = fingerprint({ ns: namespace, ...keyPayload, epoch: dataEpoch });
   evictIfNeeded();
   store.set(fp, { ts: Date.now(), value });

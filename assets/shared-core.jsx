@@ -379,7 +379,7 @@ async function apiFetch(path, { method = "GET", body, token, signal, timeoutMs =
         }
       }
     }
-    throw Object.assign(new Error(data.message || `HTTP ${res.status}`), { status: res.status, data });
+    throw Object.assign(new Error(data.message || data.error || `HTTP ${res.status}`), { status: res.status, data });
   }
   if (returnHeaders) {
     return {

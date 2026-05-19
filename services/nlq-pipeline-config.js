@@ -4,30 +4,26 @@
  */
 "use strict";
 
-function envFlag(name, defaultOn) {
-  const raw = process.env[name];
-  if (raw == null || String(raw).trim() === "") return defaultOn;
-  return !/^(0|false|no|off)$/i.test(String(raw).trim());
-}
+const runtimeConfig = require("./runtime-config");
 
 /** Static EXACT_MATCH_CACHE + canonical fast paths (off by default). */
 function isFastPathEnabled() {
-  return envFlag("NLQ_FAST_PATH", false);
+  return runtimeConfig.getBool("NLQ_FAST_PATH");
 }
 
 /** Compile structured intent JSON → T-SQL without LLM when possible. */
 function isIntentCompilerEnabled() {
-  return envFlag("NLQ_INTENT_COMPILER", true);
+  return runtimeConfig.getBool("NLQ_INTENT_COMPILER");
 }
 
 /** Mandatory resolve_intent step before SQL generation. */
 function isIntentStepEnabled() {
-  return envFlag("ADAPTIVE_INTENT_STEP", true);
+  return runtimeConfig.getBool("ADAPTIVE_INTENT_STEP");
 }
 
 /** Live DISTINCT / LIKE value grounding before SQL generation. */
 function isColumnDiscoveryEnabled() {
-  return envFlag("COGNITIVE_COLUMN_DISCOVERY", true);
+  return runtimeConfig.getBool("COGNITIVE_COLUMN_DISCOVERY");
 }
 
 module.exports = {

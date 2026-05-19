@@ -1,23 +1,45 @@
 /* ═══════════════════════════════════════════════
-   ADMIN PANEL
+   ADMIN PANEL  (tabbed: Users/Roles | System Settings)
 ═══════════════════════════════════════════════ */
+const ADMIN_TABS = [
+  { key: "users",    label: "👤 Users & Roles" },
+  { key: "settings", label: "⚙️ System Settings" },
+];
+
 function AdminPanel({ auth }) {
-  const [users, setUsers]       = useState([]);
-  const [roles, setRoles]       = useState({});
-  const [loading, setLoading]   = useState(false);
-  const [saving, setSaving]     = useState(false);
-  const [msg, setMsg]           = useState(null);
-  const [showAdd, setShowAdd]   = useState(false);
-  const [pwdModal, setPwdModal] = useState(null);
-  const [newUser, setNewUser]   = useState({ email: "", name: "", role: "viewer", password: "" });
-  const [semanticText, setSemanticText] = useState("");
+  const initialTab = (() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get("tab");
+      return t === "settings" ? "settings" : "users";
+    } catch { return "users"; }
+  })();
+  const [activeTab, setActiveTab]   = useState(initialTab);
+  const [users, setUsers]           = useState([]);
+  const [roles, setRoles]           = useState({});
+  const [storageInfo, setStorageInfo] = useState(null); // { mode, bootstrapped }
+  const [loading, setLoading]       = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [msg, setMsg]               = useState(null);
+  const [showAdd, setShowAdd]       = useState(false);
+  const [pwdModal, setPwdModal]     = useState(null);
+  const [newUser, setNewUser]       = useState({ email: "", name: "", role: "viewer", password: "" });
+  const [semanticText, setSemanticText]   = useState("");
   const [semanticSaving, setSemanticSaving] = useState(false);
 
   async function fetchUsers() {
     setLoading(true);
     try {
       const d = await apiFetch("/api/admin/users", { token: auth.token });
-      setUsers(d.users || []); setRoles(d.roles || {});
+      setUsers(d.users || []);
+      setRoles(d.roles || {});
+      if (d.storageMode || d.storageBackend) {
+        const mode = d.storageMode || (d.storageBackend === "postgresql" ? "pg" : "file");
+        setStorageInfo({
+          mode,
+          bootstrapped: d.bootstrapped,
+          databaseConfigured: !!d.databaseConfigured,
+        });
+      }
     } catch (e) { setMsg({ type: "error", text: e.message }); }
     finally { setLoading(false); }
   }
@@ -102,15 +124,67 @@ function AdminPanel({ auth }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 4, borderBottom: "2px solid var(--border-card,#e2e8f0)", paddingBottom: 0 }}>
+        {ADMIN_TABS.map(t => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            style={{
+              padding: "8px 18px",
+              fontWeight: activeTab === t.key ? 700 : 500,
+              fontSize: 13,
+              border: "none",
+              borderBottom: activeTab === t.key ? "2px solid #6366f1" : "2px solid transparent",
+              marginBottom: -2,
+              background: "transparent",
+              color: activeTab === t.key ? "#6366f1" : "var(--text-muted,#64748b)",
+              cursor: "pointer",
+              borderRadius: "6px 6px 0 0",
+              transition: "color 0.15s",
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      {/* System Settings tab */}
+      {activeTab === "settings" && <SystemSettingsPanel auth={auth} />}
+
+      {/* Users & Roles tab */}
+      {activeTab === "users" && <>
+      <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 8 }}>
         <div>
           <h2 className="text-xl font-bold text-slate-800">🔑 User Management</h2>
           <p className="text-sm text-slate-500 mt-0.5">Manage login credentials and roles.</p>
+          {storageInfo && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6,
+              padding: "2px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+              background: storageInfo.mode === "pg" ? "#d1fae5" : "#fef3c7",
+              color: storageInfo.mode === "pg" ? "#065f46" : "#92400e",
+            }}>
+              {storageInfo.mode === "pg"
+                ? "🐘 PostgreSQL — users & passwords persist across deploys"
+                : "⚠️ File mode — set DATABASE_URL on Render so users are not reset on redeploy"}
+            </span>
+          )}
         </div>
         <button onClick={() => setShowAdd(!showAdd)} className="btn-primary">+ Add user</button>
       </div>
 
       {msg && <Alert type={msg.type} msg={msg.text} onClose={() => setMsg(null)} />}
+
+      {storageInfo && storageInfo.mode !== "pg" && (
+        <div className="card p-4" style={{ borderLeft: "4px solid #f59e0b", background: "#fffbeb" }}>
+          <p className="text-sm font-bold text-amber-900">Users reset on redeploy without PostgreSQL</p>
+          <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+            On Render, link a Postgres database to this web service so <code className="text-[10px]">DATABASE_URL</code> is set.
+            Add users and passwords here once — they are stored in <code className="text-[10px]">erp_rbac_users</code> and survive redeploys.
+            <code className="text-[10px]">users-config.json</code> is only used for the very first bootstrap.
+          </p>
+        </div>
+      )}
 
       {showAdd && (
         <form onSubmit={addUser} className="card p-5 space-y-3 fade-in" style={{borderTop:'3px solid #6366f1'}}>
@@ -220,6 +294,7 @@ function AdminPanel({ auth }) {
         />
       </div>
       {pwdModal && <ResetPwdModal email={pwdModal.email} onConfirm={resetPassword} onClose={() => setPwdModal(null)} />}
+      </>}{/* end users tab */}
     </div>
   );
 }

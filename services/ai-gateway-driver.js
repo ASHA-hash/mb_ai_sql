@@ -11,9 +11,10 @@ const {
   anthropicChatOptions,
   configureAnthropicLlm,
 } = require("./llm-params");
+const runtimeConfig = require("./runtime-config");
 
 function normalizeProvider(provider) {
-  const s = String(provider || process.env.DEFAULT_AI_PROVIDER || "openai")
+  const s = String(provider || runtimeConfig.get("DEFAULT_AI_PROVIDER") || "openai")
     .toLowerCase()
     .trim();
   if (s === "anthropic" || s === "claude") return "claude";
@@ -32,13 +33,13 @@ function resolveModelConfig(provider, explicitModel) {
   if (p === "claude") {
     return {
       provider: "claude",
-      model: String(explicitModel || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6").trim(),
+      model: String(explicitModel || runtimeConfig.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6").trim(),
       apiKey: String(process.env.ANTHROPIC_API_KEY || "").trim(),
     };
   }
   return {
     provider: "openai",
-    model: String(explicitModel || process.env.OPENAI_MODEL || "gpt-4o-mini").trim(),
+    model: String(explicitModel || runtimeConfig.get("OPENAI_MODEL") || "gpt-4o-mini").trim(),
     apiKey: String(process.env.OPENAI_API_KEY || "").trim(),
   };
 }
@@ -151,7 +152,7 @@ async function invokeUnifiedGateway(
   const cfg = resolveModelConfig(provider, model);
   const llm = createLangChainLlm(cfg.provider, {
     role,
-    apiKey: apiKey || (cfg.provider === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY),
+    apiKey: apiKey || (cfg.provider === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY), // API keys always from env (secrets)
     model: cfg.model,
   });
 

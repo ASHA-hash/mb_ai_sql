@@ -1,5 +1,5 @@
-require("dotenv").config({ quiet: true });
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
 const { spawn } = require("child_process");
 const net = require("net");
 const fs = require("fs");
@@ -45,6 +45,7 @@ const {
 } = require("./services/query-performance");
 const ragSchemaIndexer = require("./services/rag-schema-indexer");
 const { seedOnStartup: seedRagKnowledge } = require("./services/semantic-seeder");
+const runtimeConfig = require("./services/runtime-config");
 const { seedGoldenExamples } = require("./services/golden-examples-seeder");
 const { runDeterministicQuery, chartPolicyFromResultShape } = require("./services/deterministic-ai");
 const { resolveAdaptiveFastPathSql } = require("./services/adaptive-fast-path");
@@ -525,14 +526,14 @@ let aiSchemaContextCache = null;
 let aiSchemaContextPromise = null;
 
 async function ensureAiSchemaContext(pool) {
-  if (process.env.AI_SCHEMA_DISABLE === "1" || process.env.AI_SCHEMA_DISABLE === "true") {
+  if (runtimeConfig.getBool("AI_SCHEMA_DISABLE")) {
     return SCHEMA_CATALOG_FALLBACK;
   }
   if (aiSchemaContextCache) {
     return aiSchemaContextCache;
   }
   if (!aiSchemaContextPromise) {
-    const maxTables = parseInt(process.env.AI_SCHEMA_MAX_TABLES || "18", 10);
+    const maxTables = runtimeConfig.getInt("AI_SCHEMA_MAX_TABLES", 14);
     aiSchemaContextPromise = buildSchemaDocFromDb(pool, DATASET_REGISTRY, { maxTables })
       .then((doc) => {
         const trimmed = doc && String(doc).trim();
@@ -1429,8 +1430,8 @@ function getDbConfig() {
   /* Large analytics views (PowerBI rollups, QTD/YTD) often exceed 120s — default 480s unless overridden.
      IMPORTANT: In mssql v9+, requestTimeout MUST be at the top-level of the config object,
      NOT inside options{} — otherwise it is ignored and tedious uses its default of 120 s. */
-  const requestTimeout = parseInt(process.env.DB_REQUEST_TIMEOUT_MS || "480000", 10);
-  const connectTimeout = parseInt(process.env.DB_CONNECT_TIMEOUT_MS || "60000", 10);
+  const requestTimeout = runtimeConfig.getInt("DB_REQUEST_TIMEOUT_MS", 480000);
+  const connectTimeout = runtimeConfig.getInt("DB_CONNECT_TIMEOUT_MS", 60000);
   const encryptEnv = String(process.env.DB_ENCRYPT || "")
     .trim()
     .toLowerCase();
@@ -1444,8 +1445,8 @@ function getDbConfig() {
      - acquireTimeoutMillis: how long tarn waits for a free connection before throwing
        "operation timed out for an unknown reason". Default is 60s — too short when
        analytics warmup holds connections for several minutes. Set to 3 min. */
-  const poolMax = parseInt(process.env.DB_POOL_MAX || "20", 10);
-  const acquireTimeout = parseInt(process.env.DB_POOL_ACQUIRE_TIMEOUT_MS || "180000", 10);
+  const poolMax = runtimeConfig.getInt("DB_POOL_MAX", 20);
+  const acquireTimeout = runtimeConfig.getInt("DB_POOL_ACQUIRE_TIMEOUT_MS", 180000);
 
   return {
     user: envTrim("DB_USER"),
@@ -1540,14 +1541,15 @@ function rowsForJson(recordset) {
 }
 
 function getDatasetHardCap() {
-  const hardCapRaw = parseInt(process.env.DATASET_HARD_CAP || "20000", 10);
+  // Hot-reloadable: reads runtimeConfig (override > .env > default)
+  const hardCapRaw = runtimeConfig.getInt("DATASET_HARD_CAP", 20000);
   return Number.isFinite(hardCapRaw) ? Math.max(hardCapRaw, 500) : 20000;
 }
 
 /** Upper bound for explicit numeric ?limit= (dashboard row dropdown goes up to 5,000). */
 function getDatasetPageMax() {
   const hardCap = getDatasetHardCap();
-  const raw = parseInt(process.env.DATASET_PAGE_MAX || "5000", 10);
+  const raw = runtimeConfig.getInt("DATASET_PAGE_MAX", 5000);
   const n = Number.isFinite(raw) && raw >= 1 ? raw : 5000;
   return Math.min(n, hardCap);
 }
@@ -1821,6 +1823,128 @@ app.post("/api/admin/users/:email/set-password", rbac.requireAdminApi, async (re
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: "failed", message: String(err.message) });
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GET  /api/admin/config        → full settings manifest with current values
+   POST /api/admin/config        → save one or many key/value overrides
+   POST /api/admin/config/reset  → remove an override (fall back to .env/default)
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const ADMIN_CONFIG_BODY_RESERVED = new Set(["action", "force", "key", "value", "settings"]);
+
+/** Accept legacy bulk body: { DATASET_HARD_CAP: "500000", ... } at top level. */
+function collectFlatAdminConfigSettings(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const allowed = new Set(runtimeConfig.SETTINGS_MANIFEST.map((s) => s.key));
+  const pairs = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (ADMIN_CONFIG_BODY_RESERVED.has(k)) continue;
+    if (!allowed.has(k)) continue;
+    pairs[k] = v;
+  }
+  return Object.keys(pairs).length ? pairs : null;
+}
+
+/**
+ * GET /api/admin/config
+ * Returns the full settings manifest with current values and sources.
+ */
+app.get("/api/admin/config", rbac.requireAdminApi, (_req, res) => {
+  try {
+    res.json({
+      ok: true,
+      settings: runtimeConfig.getAll(),
+      storageBackend: runtimeConfig.isDbEnabled() ? "postgresql" : "file",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * POST /api/admin/config
+ * Body: { key: "DATASET_HARD_CAP", value: "50000" }
+ *   or: { settings: { DATASET_HARD_CAP: "50000", ANALYTICS_NOLOCK: "1" } }
+ * Saves to PostgreSQL (erp_runtime_config) or JSON file — takes effect immediately (no restart).
+ */
+app.post("/api/admin/config", rbac.requireAdminApi, (req, res) => {
+  try {
+    const { key, value, settings, action, force } = req.body || {};
+
+    if (action === "import-env") {
+      const keys = runtimeConfig.seedFromProcessEnv({ onlyMissing: !force, persist: true });
+      return res.json({
+        ok: true,
+        imported: keys.length,
+        keys,
+        storageBackend: runtimeConfig.isDbEnabled() ? "postgresql" : "file",
+      });
+    }
+
+    const bulkSettings =
+      settings && typeof settings === "object"
+        ? settings
+        : collectFlatAdminConfigSettings(req.body);
+
+    if (bulkSettings && Object.keys(bulkSettings).length > 0) {
+      const allowed = new Set(runtimeConfig.SETTINGS_MANIFEST.map((s) => s.key));
+      const rejected = Object.keys(bulkSettings).filter((k) => !allowed.has(k));
+      if (rejected.length) {
+        return res.status(400).json({ ok: false, error: `Unknown keys: ${rejected.join(", ")}` });
+      }
+      runtimeConfig.setMany(bulkSettings);
+      console.log("[admin-config] bulk update:", Object.keys(bulkSettings).join(", "));
+      return res.json({ ok: true, updated: Object.keys(bulkSettings).length });
+    }
+
+    if (!key) return res.status(400).json({ ok: false, error: "key is required" });
+    const allowed = runtimeConfig.SETTINGS_MANIFEST.find((s) => s.key === key);
+    if (!allowed) return res.status(400).json({ ok: false, error: `Unknown setting: ${key}` });
+
+    runtimeConfig.set(key, value ?? "");
+    console.log(`[admin-config] set ${key}=${value}`);
+    res.json({ ok: true, key, value: runtimeConfig.get(key), source: "override" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * POST /api/admin/config/reset
+ * Body: { key: "DATASET_HARD_CAP" }
+ * Removes the runtime override — falls back to .env / manifest default.
+ */
+app.post("/api/admin/config/reset", rbac.requireAdminApi, (req, res) => {
+  try {
+    const { key } = req.body || {};
+    if (!key) return res.status(400).json({ ok: false, error: "key is required" });
+    runtimeConfig.reset(key);
+    console.log(`[admin-config] reset ${key} → falls back to env/default`);
+    res.json({ ok: true, key, value: runtimeConfig.get(key), source: runtimeConfig.getAll().find((s) => s.key === key)?.source || "default" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * POST /api/admin/config/import-env
+ * Copies current process.env values for all manifest keys into PostgreSQL/file overrides.
+ * Skips keys that already have an admin override unless body.force=true.
+ */
+app.post("/api/admin/config/import-env", rbac.requireAdminApi, (req, res) => {
+  try {
+    const force = !!(req.body && req.body.force);
+    const keys = runtimeConfig.seedFromProcessEnv({ onlyMissing: !force, persist: true });
+    res.json({
+      ok: true,
+      imported: keys.length,
+      keys,
+      storageBackend: runtimeConfig.isDbEnabled() ? "postgresql" : "file",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -2203,7 +2327,7 @@ app.get("/api/sales", rbac.requireFeature("data"), async (req, res) => {
   }
   const limit = parseLimit(req.query);
   const table = sanitizeTableName(
-    process.env.SALES_VIEW || process.env.SALES_TABLE || "dbo.VwAISalesData"
+    runtimeConfig.get("SALES_VIEW") || "dbo.VwAISalesData"
   );
   if (!table) {
     res.status(500).json({ error: "Invalid SALES_VIEW / SALES_TABLE in .env" });
@@ -2279,10 +2403,7 @@ app.get("/api/home/kpi", rbac.requireFeature("data"), async (req, res) => {
     const pool = await getPool();
     const request = pool.request();
     /* MTD touches far more rows than "today"; 20s often timed out while analytics (120s driver cap) succeeded. */
-    const homeKpiReqMs = parseInt(
-      String(process.env.HOME_KPI_REQUEST_TIMEOUT_MS || process.env.DB_REQUEST_TIMEOUT_MS || "120000"),
-      10
-    );
+    const homeKpiReqMs = runtimeConfig.getInt("HOME_KPI_REQUEST_TIMEOUT_MS", 180000);
     request.timeout =
       Number.isFinite(homeKpiReqMs) && homeKpiReqMs > 0 ? Math.min(300000, Math.max(30000, homeKpiReqMs)) : 120000;
     const result = await request.query(sqlText);
@@ -3791,9 +3912,14 @@ app.post("/api/query/langchain", rbac.requireFeature("ai"), async (req, res) => 
 app.get("/api/admin/users", rbac.requireAdminApi, (req, res) => {
   try {
     const cfg = rbac.loadUsersConfigFresh();
+    const pg = rbac.usesPostgresForUsers();
     res.json({
       roles: cfg.roles || {},
       users: cfg.users || [],
+      storageMode: pg ? "pg" : "file",
+      storageBackend: pg ? "postgresql" : "file",
+      databaseConfigured: !!(process.env.DATABASE_URL || process.env.RBAC_DATABASE_URL),
+      bootstrapped: true,
     });
   } catch (err) {
     res.status(500).json({ error: "admin_read_failed", message: String(err.message) });
@@ -4478,12 +4604,26 @@ app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
 });
 
 (async function startServer() {
-  try {
-    await rbac.initStorage();
-  } catch (err) {
-    console.error("[erp-api] RBAC storage init failed:", err);
-    process.exit(1);
+  // Re-load .env so DATABASE_URL edits apply after a file save (still requires restart).
+  require("dotenv").config({ path: path.join(rootDir, ".env"), override: true, quiet: true });
+  const dbUrl = String(process.env.DATABASE_URL || process.env.RBAC_DATABASE_URL || "").trim();
+  if (dbUrl) {
+    console.log("[erp-api] DATABASE_URL detected — PostgreSQL persistence enabled for RBAC + runtime config.");
+  } else if (fs.existsSync(path.join(rootDir, ".env"))) {
+    console.warn(
+      "[erp-api] .env exists but DATABASE_URL / RBAC_DATABASE_URL is empty — Admin settings use file store only."
+    );
   }
+
+  // Init runtime-config DB persistence first (non-fatal — falls back to file)
+  try {
+    await runtimeConfig.initDb();
+  } catch (err) {
+    console.warn("[erp-api] runtime-config DB init failed (non-fatal):", err.message);
+  }
+
+  // initStorage never throws — falls back to file mode if PG is unreachable
+  await rbac.initStorage();
 
   await maybeSpawnErpMcpHttpProcess();
   try {
@@ -4531,7 +4671,7 @@ app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
     server.ref();
     console.log(`ERP API listening on http://0.0.0.0:${port} (pid ${process.pid})`);
     console.log(
-      "[datasets] DATASET_HARD_CAP=%s  DATASET_PAGE_MAX=%s (restart required after .env changes)",
+      "[datasets] DATASET_HARD_CAP=%s  DATASET_PAGE_MAX=%s (editable in Admin → System Settings; hot-reload)",
       getDatasetHardCap(),
       getDatasetPageMax()
     );

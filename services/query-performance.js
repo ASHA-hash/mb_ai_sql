@@ -4,6 +4,8 @@
  */
 "use strict";
 
+const runtimeConfig = require("./runtime-config");
+
 const LARGE_VIEW_PATTERNS =
   /VW_MB_POWERBI_|VwAISalesData|VwAIStockData/i;
 
@@ -62,8 +64,8 @@ function maxRowsForChat() {
 }
 
 function queryTimeoutMs() {
-  const v = parseInt(String(process.env.DB_QUERY_TIMEOUT_MS || process.env.DB_REQUEST_TIMEOUT_MS || "120000"), 10);
-  return Number.isFinite(v) && v > 0 ? v : 120000;
+  const v = runtimeConfig.getInt("DB_REQUEST_TIMEOUT_MS", 120000);
+  return v > 0 ? v : 120000;
 }
 
 function exportMaxRows() {

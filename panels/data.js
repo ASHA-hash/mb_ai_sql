@@ -173,7 +173,7 @@ function DataPanel({ auth }) {
             </select>
             {limit === "all" && (
               <p className="text-[11px] text-amber-600 mt-1 font-medium">
-                ⚠️ "All rows" loads up to <strong>{Number(hardCap).toLocaleString()}</strong> rows (server cap). Set <code className="text-[10px]">DATASET_HARD_CAP</code> in <code className="text-[10px]">.env</code>, then <strong>restart</strong> <code className="text-[10px]">npm start</code> and refresh this page — values are read only at server startup.
+                ⚠️ "All rows" loads up to <strong>{Number(hardCap).toLocaleString()}</strong> rows (server cap). To raise or lower this limit, go to <strong>Admin → System Settings → Dataset hard cap</strong> — takes effect immediately, no restart needed.
               </p>
             )}
             {parseInt(limit) >= 2000 && limit !== "all" && (
@@ -297,7 +297,7 @@ function DataPanel({ auth }) {
               color:'#92400e',
             }}>
               ⚠️ Showing <strong>{Number(loadMeta.rowCount || result.length).toLocaleString()}</strong> rows — server limit reached
-              ({Number(loadMeta.hardCap || hardCap).toLocaleString()} max). The database view may have more rows; narrow the date range or raise <code className="text-[10px]">DATASET_HARD_CAP</code>.
+              ({Number(loadMeta.hardCap || hardCap).toLocaleString()} max). The database view may have more rows — narrow the date range, or raise the cap in <strong>Admin → System Settings → Dataset hard cap</strong>.
             </div>
           )}
           {!includeReturns && salesTxnMode && displayRows.length === 0 && (

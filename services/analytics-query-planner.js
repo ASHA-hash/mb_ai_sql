@@ -7,6 +7,7 @@
 const sql = require("mssql");
 const { resolveDatasetTable, sanitizeTableName } = require("./analytics-reconciliation");
 const { DEFAULT_ANALYTICS_TABLE } = require("./analytics-column-map");
+const runtimeConfig = require("./runtime-config");
 
 /**
  * Human-readable spec for ops / docs. Keys mirror env vars and branch points in planAnalyticsDashboard.
@@ -92,7 +93,7 @@ async function estimateObjectRowCount(pool, qualifiedTable) {
  */
 /** Analytics table — not the same as GET /api/dataset (which may still use SALES_VIEW). */
 function resolveAnalyticsFactTable(datasetKey) {
-  const override = sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "");
+  const override = sanitizeTableName(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "");
   if (override) return override;
   const dk = String(datasetKey || "sales").toLowerCase().trim();
   if (dk === "sales") {
@@ -217,9 +218,9 @@ async function planAnalyticsDashboard(pool, ctx) {
     }
   } else {
     effectiveTable = canonicalRaw;
-    if (sanitizeTableName(process.env.ANALYTICS_BASE_TABLE || "")) {
+    if (sanitizeTableName(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "")) {
       tablePath = "base_table_override";
-      trace.push({ rule: "ANALYTICS_BASE_TABLE", table: process.env.ANALYTICS_BASE_TABLE });
+      trace.push({ rule: "ANALYTICS_BASE_TABLE", table: runtimeConfig.get("ANALYTICS_BASE_TABLE") });
     } else {
       trace.push({ rule: "dataset_registry", table: canonicalRaw });
     }

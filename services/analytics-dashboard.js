@@ -38,6 +38,7 @@ const {
 const { planAnalyticsDashboard, resolveEffectiveTable } = require("./analytics-query-planner");
 const { buildSalesForecast } = require("./analytics-forecast");
 const { generateAnalyticsInsights } = require("./analytics-insights");
+const runtimeConfig = require("./runtime-config");
 
 function sanitizeTableName(raw) {
   const s = String(raw || "").trim();
@@ -51,7 +52,7 @@ function sanitizeTableName(raw) {
  * Set ANALYTICS_NOLOCK=1 in .env if queries are timing out due to lock waits.
  */
 function nolock() {
-  return String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
+  return runtimeConfig.getBool("ANALYTICS_NOLOCK") ? " WITH (NOLOCK)" : "";
 }
 
 /**
@@ -64,12 +65,11 @@ function nolock() {
  * date-range analytics queries.
  *
  * Only applied when spanDays > ANALYTICS_RECOMPILE_THRESHOLD (default 30).
- * Disable entirely: ANALYTICS_RECOMPILE=0
+ * Disable entirely: admin settings → ANALYTICS_RECOMPILE=0
  */
 function queryHint(spanDays) {
-  const disabled = String(process.env.ANALYTICS_RECOMPILE || "1").trim() === "0";
-  if (disabled) return "";
-  const threshold = parseInt(process.env.ANALYTICS_RECOMPILE_THRESHOLD || "30", 10);
+  if (!runtimeConfig.getBool("ANALYTICS_RECOMPILE")) return "";
+  const threshold = runtimeConfig.getInt("ANALYTICS_RECOMPILE_THRESHOLD", 30);
   return spanDays > threshold ? " OPTION(RECOMPILE)" : "";
 }
 
@@ -683,8 +683,8 @@ async function loadDashboardPayload(pool, params, tier = "full") {
     table,
     rollupHint: rollupGrain
       ? `LINE_ROLLUP table=${rollupGrain.table} (txn KPI = Σ LineCount)`
-      : process.env.ANALYTICS_BASE_TABLE
-        ? `Using ANALYTICS_BASE_TABLE=${process.env.ANALYTICS_BASE_TABLE}`
+      : runtimeConfig.get("ANALYTICS_BASE_TABLE")
+        ? `Using ANALYTICS_BASE_TABLE=${runtimeConfig.get("ANALYTICS_BASE_TABLE")}`
         : null,
     dimensions: {
       amountColumn: dims.amount,
@@ -881,7 +881,7 @@ async function runAnalyticsDashboard(pool, body) {
  * Disable: ANALYTICS_WARMUP=0
  */
 async function warmAnalyticsCache(pool) {
-  if (String(process.env.ANALYTICS_WARMUP || "1").trim() === "0") return;
+  if (!runtimeConfig.getBool("ANALYTICS_WARMUP")) return;
 
   // Warm the most-used periods on startup so first user click is instant.
   // 180d is included because users commonly click it — it runs after the fast
@@ -894,7 +894,7 @@ async function warmAnalyticsCache(pool) {
 
   // Pause between periods (ms) — gives pool connections time to be released
   // before the next heavy query fires. Configurable via env.
-  const pauseMs = Math.max(0, parseInt(process.env.ANALYTICS_WARMUP_PAUSE_MS || "3000", 10));
+  const pauseMs = Math.max(0, runtimeConfig.getInt("ANALYTICS_WARMUP_PAUSE_MS", 3000));
 
   for (const period of periods) {
     try {
@@ -931,10 +931,10 @@ async function warmAnalyticsCache(pool) {
  * Call once from server startup after DB pool is ready.
  */
 function scheduleAnalyticsWarmup(pool) {
-  if (String(process.env.ANALYTICS_WARMUP || "1").trim() === "0") return;
+  if (!runtimeConfig.getBool("ANALYTICS_WARMUP")) return;
   const intervalMs = Math.max(
     60000,
-    parseInt(process.env.ANALYTICS_WARMUP_INTERVAL_MS || String(15 * 60 * 1000), 10)
+    runtimeConfig.getInt("ANALYTICS_WARMUP_INTERVAL_MS", 15 * 60 * 1000)
   );
 
   // First run: delay 30s to let DB pool fully settle after startup

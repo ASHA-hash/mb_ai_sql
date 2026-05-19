@@ -35,8 +35,23 @@ function SettingsPanel({ auth }) {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-slate-800">⚙ Settings</h2>
-        <p className="text-sm text-slate-500 mt-0.5">Configure API connection and view session info.</p>
+        <p className="text-sm text-slate-500 mt-0.5">Google Drive OAuth and API URL for this browser — not server row limits.</p>
       </div>
+
+      {isAdmin && (
+        <div className="card p-4" style={{ borderLeft: "4px solid #6366f1", background: "rgba(99,102,241,0.06)" }}>
+          <p className="text-sm font-bold text-indigo-900">Data row limit, AI pipeline, analytics tables</p>
+          <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
+            Use <strong>Admin → System Settings</strong>. Saves to PostgreSQL when <code className="text-[10px]">DATABASE_URL</code> is set.
+            Priority: <strong>admin save in DB</strong> → <code className="text-[10px]">.env</code> → default.
+            <code className="text-[10px]">users-config.json</code> is only for login users/roles, not these limits.
+          </p>
+          <a href="/admin.html?tab=settings" className="btn-primary inline-block mt-3 text-sm no-underline">
+            Open Admin → System Settings
+          </a>
+        </div>
+      )}
+
       <div className="card p-5 space-y-3">
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1.5">API base URL</label>

@@ -3,6 +3,7 @@
  * All execution paths must pass assertSafeSelectSql before hitting the database.
  */
 const OpenAI = require("openai");
+const runtimeConfig = require("./services/runtime-config");
 const { validateSql } = require("./services/sql-validator");
 const { validatePerformanceShape } = require("./services/query-performance");
 const { DATASET_REGISTRY } = require("./datasets-registry");
@@ -530,8 +531,7 @@ function fixCommonTsqlMistakes(sql) {
 }
 
 function adaptiveSummaryEnabled() {
-  const v = String(process.env.AI_ADAPTIVE_SUMMARY ?? "1").trim().toLowerCase();
-  return v !== "0" && v !== "false" && v !== "no" && v !== "off";
+  return runtimeConfig.getBool("AI_ADAPTIVE_SUMMARY");
 }
 
 /**

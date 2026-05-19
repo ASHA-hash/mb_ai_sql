@@ -17,6 +17,7 @@
 "use strict";
 
 const { getCanonicalSalesContext } = require("./canonical-sales-sql");
+const runtimeConfig = require("./runtime-config");
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 function parseTopN(question, def = 10) {
@@ -33,7 +34,7 @@ function ytdWhere(dateCol) {
 }
 
 function nl(table) {
-  return String(process.env.ANALYTICS_NOLOCK || "1").trim() === "1"
+  return runtimeConfig.getBool("ANALYTICS_NOLOCK")
     ? ` ${table} WITH (NOLOCK)`
     : ` ${table}`;
 }

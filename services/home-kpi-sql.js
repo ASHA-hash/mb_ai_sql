@@ -9,13 +9,14 @@ const {
   isSalespersonTopNQuestion,
   buildSalespersonTopNSql,
 } = require("./canonical-salesperson-sql");
+const runtimeConfig = require("./runtime-config");
 
 function getHomeAnalyticsTable() {
-  return String(process.env.ANALYTICS_BASE_TABLE || DEFAULT_ANALYTICS_TABLE).trim();
+  return String(runtimeConfig.get("ANALYTICS_BASE_TABLE") || DEFAULT_ANALYTICS_TABLE).trim();
 }
 
 function nolockClause() {
-  return String(process.env.ANALYTICS_NOLOCK || "").trim() === "1" ? " WITH (NOLOCK)" : "";
+  return runtimeConfig.getBool("ANALYTICS_NOLOCK") ? " WITH (NOLOCK)" : "";
 }
 
 /** Same bill_count expression as Home KPI cards. */
@@ -225,7 +226,7 @@ function buildSalesTopNBreakdownSql(question) {
   const amtCol = pickColumnFromView(
     table,
     [
-      process.env.SALES_ANALYTICS_AMOUNT_COLUMN,
+      runtimeConfig.get("SALES_ANALYTICS_AMOUNT_COLUMN"),
       "NetSlsNetAmount",
       "MrpValue",
       "NetAmount",
@@ -345,7 +346,7 @@ function rewriteSalesSqlToHomeFact(sql, question) {
   if (!/APP_REPORT/i.test(raw)) return sql;
 
   const home = normalizeDboTable(
-    process.env.ANALYTICS_BASE_TABLE || getHomeAnalyticsTable()
+    runtimeConfig.get("ANALYTICS_BASE_TABLE") || getHomeAnalyticsTable()
   );
   if (!home || !/SLSXNS/i.test(home)) return sql;
 

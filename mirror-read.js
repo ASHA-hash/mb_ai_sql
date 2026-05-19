@@ -4,6 +4,7 @@
  */
 
 const { Client } = require("pg");
+const runtimeConfig = require("./services/runtime-config");
 const {
   getDatasetEntry,
   getFilterColumns,
@@ -239,8 +240,7 @@ function filterMirrorRows(rows, datasetKey, limit, query) {
     });
   }
 
-  const hardCapRaw = parseInt(process.env.DATASET_HARD_CAP || "20000", 10);
-  const hardCap = Number.isFinite(hardCapRaw) ? Math.max(hardCapRaw, 500) : 20000;
+  const hardCap = Math.max(runtimeConfig.getInt("DATASET_HARD_CAP", 20000), 500);
   const cap = Math.min(Math.max(parseInt(String(limit), 10) || 10, 1), hardCap);
   out = out.slice(0, cap);
   return { rows: out };

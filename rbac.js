@@ -46,25 +46,40 @@ function loadUsersConfigFromFile() {
 
 /**
  * Call once before server.listen when DATABASE_URL / RBAC_DATABASE_URL may be set.
+ *
+ * Storage selection:
+ *   - DATABASE_URL / RBAC_DATABASE_URL set AND reachable  →  PostgreSQL (DB-first)
+ *   - DB unreachable or not configured                    →  users-config.json (local/fallback)
+ *
+ * On PostgreSQL mode, users-config.json is used ONLY for the very first deploy
+ * (when erp_rbac_users is empty). After that the DB is the single source of truth.
+ * Deleted users, changed passwords, etc. all survive redeployments.
+ *
+ * If PostgreSQL goes down after a successful first boot the server continues to
+ * serve the in-memory cachedConfig until restart.
  */
 async function initStorage() {
   if (rbacEnabled() && rbacPg.isConfigured()) {
-    storageMode = "pg";
-    cachedConfig = await rbacPg.initAndLoad(CONFIG_PATH);
-    cachedMtimeMs = null;
-    console.log("[rbac] storage: PostgreSQL (RBAC_DATABASE_URL or DATABASE_URL)");
-    // Always sync role definitions (features + datasets) from users-config.json on startup.
-    // Uses ON CONFLICT DO UPDATE so it is safe to run every deploy — this ensures
-    // production Postgres roles stay in sync with the file (fixes "4 views" issue where
-    // old bootstrapped roles had a restricted dataset list instead of "*").
     try {
-      await rbacPg.syncRolesFromFile(CONFIG_PATH);
-      // CRITICAL: refresh cachedConfig after sync so login tokens embed the updated
-      // datasets/features from users-config.json (not the stale pre-sync snapshot).
-      cachedConfig = await rbacPg.fetchFullConfig();
-      console.log("[rbac] roles synced from users-config.json → PostgreSQL");
-    } catch (syncErr) {
-      console.warn("[rbac] role sync failed (non-fatal):", syncErr.message);
+      storageMode = "pg";
+      cachedConfig = await rbacPg.initAndLoad(CONFIG_PATH);
+      cachedMtimeMs = null;
+      console.log("[rbac] storage: PostgreSQL — DB is source of truth for users.");
+    } catch (pgErr) {
+      // PostgreSQL is unavailable — fall back to file so the server can still start
+      console.error("[rbac] PostgreSQL init failed, falling back to users-config.json:", pgErr.message);
+      storageMode = "file";
+      cachedConfig = null;
+      cachedMtimeMs = null;
+      try {
+        const st = fs.statSync(CONFIG_PATH);
+        cachedConfig = loadUsersConfigFromFile();
+        cachedMtimeMs = st.mtimeMs;
+        console.warn("[rbac] DEGRADED MODE: running from users-config.json (no DB writes until restart).");
+      } catch (fileErr) {
+        console.error("[rbac] users-config.json also unreadable:", fileErr.message);
+        cachedConfig = { roles: {}, users: [] };
+      }
     }
   } else {
     storageMode = "file";

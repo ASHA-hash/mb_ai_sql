@@ -16,6 +16,7 @@ const {
   boostRankedViews,
   translateJargonInContext,
 } = require("./dynamic-semantic-layer");
+const runtimeConfig = require("./runtime-config");
 
 const SEMANTIC_LAYER_PATH = path.join(__dirname, "..", "metadata", "semantic-layer.json");
 
@@ -488,7 +489,7 @@ function rankViewsByMappingCoverage(userQuestion, schemaJson) {
     }
   }
 
-  const analytics = String(process.env.ANALYTICS_BASE_TABLE || "").trim();
+  const analytics = String(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "").trim();
   if (analytics && !/\b(salesperson|sales\s*person|purchase|approval)\b/.test(q)) {
     const full = analytics.startsWith("dbo.") ? analytics : `dbo.${analytics}`;
     const hit = ranked.find((r) => r.viewName === full);

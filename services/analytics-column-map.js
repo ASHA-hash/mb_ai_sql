@@ -7,6 +7,7 @@
 
 const { sanitizeColumnName } = require("../filter-query");
 const { getViewColumns } = require("./schema-from-json");
+const runtimeConfig = require("./runtime-config");
 
 /** Preferred physical column per role (first match on view wins). */
 const ROLE_COLUMN_CANDIDATES = {
@@ -50,7 +51,7 @@ function pickFromView(viewCols, candidates) {
 function envColumn(role) {
   const key = ENV_ROLE_KEYS[role];
   if (!key) return null;
-  return sanitizeColumnName(process.env[key] || "");
+  return sanitizeColumnName(runtimeConfig.get(key) || "");
 }
 
 /**
@@ -73,14 +74,14 @@ function resolveAnalyticsColumns(effectiveTable, datasetKey) {
   }
 
   /* Last resort only when metadata snapshot missing (dev / tests). */
-  if (!resolved.amount) resolved.amount = sanitizeColumnName(process.env.SALES_ANALYTICS_AMOUNT_COLUMN || "MrpValue");
-  if (!resolved.qty) resolved.qty = sanitizeColumnName(process.env.SALES_ANALYTICS_QTY_COLUMN || "AppQty");
-  if (!resolved.invoice) resolved.invoice = sanitizeColumnName(process.env.SALES_ANALYTICS_INVOICE_COLUMN || "XnNo");
-  if (!resolved.customer) resolved.customer = sanitizeColumnName(process.env.SALES_ANALYTICS_CUSTOMER_COLUMN || "XnId");
-  if (!resolved.branch) resolved.branch = sanitizeColumnName(process.env.SALES_ANALYTICS_BRANCH_DIM || "BranchAlias");
-  if (!resolved.dept) resolved.dept = sanitizeColumnName(process.env.SALES_ANALYTICS_DEPARTMENT_DIM || "DepartmentShortName");
-  if (!resolved.cat) resolved.cat = sanitizeColumnName(process.env.SALES_ANALYTICS_CATEGORY_DIM || "CategoryShortName");
-  if (!resolved.date) resolved.date = sanitizeColumnName(process.env.SALES_FILTER_DATE_COLUMN || "XnDt");
+  if (!resolved.amount) resolved.amount = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_AMOUNT_COLUMN") || "MrpValue");
+  if (!resolved.qty) resolved.qty = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_QTY_COLUMN") || "AppQty");
+  if (!resolved.invoice) resolved.invoice = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_INVOICE_COLUMN") || "XnNo");
+  if (!resolved.customer) resolved.customer = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_CUSTOMER_COLUMN") || "XnId");
+  if (!resolved.branch) resolved.branch = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_BRANCH_DIM") || "BranchAlias");
+  if (!resolved.dept) resolved.dept = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_DEPARTMENT_DIM") || "DepartmentShortName");
+  if (!resolved.cat) resolved.cat = sanitizeColumnName(runtimeConfig.get("SALES_ANALYTICS_CATEGORY_DIM") || "CategoryShortName");
+  if (!resolved.date) resolved.date = sanitizeColumnName(runtimeConfig.get("SALES_FILTER_DATE_COLUMN") || "XnDt");
 
   return {
     amount: resolved.amount || "MrpValue",

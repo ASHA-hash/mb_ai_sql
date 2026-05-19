@@ -47,6 +47,12 @@ function datasetsFromRow(val) {
 /**
  * @param {string} configPath users-config.json path for one-time bootstrap
  * @returns {Promise<{ roles: object, users: object[] }>}
+ *
+ * Bootstrap policy (DB-first after first deploy):
+ *   - ROLES: always synced from users-config.json (roles are config, not user data).
+ *   - USERS: seeded from file ONLY when erp_rbac_users is empty (very first deploy).
+ *            After that the DB is the single source of truth — deleting a user via
+ *            the admin panel stays deleted across redeployments.
  */
 async function initAndLoad(configPath) {
   const conn = connectionString();
@@ -56,6 +62,7 @@ async function initAndLoad(configPath) {
   pool = new Pool({ connectionString: conn, ssl: sslOption(conn) });
   const client = await pool.connect();
   try {
+    // Create tables + a bootstrap-flag table
     await client.query(`
       CREATE TABLE IF NOT EXISTS erp_rbac_roles (
         role_key TEXT PRIMARY KEY,
@@ -68,14 +75,20 @@ async function initAndLoad(configPath) {
         name TEXT NOT NULL DEFAULT '',
         password_hash TEXT NOT NULL DEFAULT ''
       );
+      CREATE TABLE IF NOT EXISTS erp_rbac_meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
 
-    const { rows: roleCount } = await client.query(
-      "SELECT COUNT(*)::int AS c FROM erp_rbac_roles"
+    // Check if users have already been bootstrapped from the file
+    const { rows: metaRows } = await client.query(
+      "SELECT value FROM erp_rbac_meta WHERE key = 'users_bootstrapped'"
     );
-    const empty = roleCount[0] && roleCount[0].c === 0;
+    const alreadyBootstrapped = metaRows.length > 0;
 
-    if (empty && fs.existsSync(configPath)) {
+    if (!alreadyBootstrapped && fs.existsSync(configPath)) {
+      // FIRST DEPLOY ONLY: seed roles + users from users-config.json
       const raw = fs.readFileSync(configPath, "utf8");
       const cfg = JSON.parse(raw);
       const roles = cfg.roles || {};
@@ -91,11 +104,12 @@ async function initAndLoad(configPath) {
       }
       for (const u of cfg.users || []) {
         const email = String(u.email || "").trim();
-        const role = String(u.role || "").trim();
+        const role  = String(u.role  || "").trim();
         if (!email || !role) continue;
         await client.query(
           `INSERT INTO erp_rbac_users (email, role_key, name, password_hash)
-           VALUES ($1, $2, $3, $4)`,
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (email) DO NOTHING`,
           [
             email,
             role,
@@ -104,14 +118,28 @@ async function initAndLoad(configPath) {
           ]
         );
       }
-      console.log("[rbac-pg] Bootstrapped roles/users from users-config.json (first run)");
+      // Mark as bootstrapped — never re-seed users from file again
+      await client.query(
+        `INSERT INTO erp_rbac_meta (key, value) VALUES ('users_bootstrapped', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [new Date().toISOString()]
+      );
+      console.log("[rbac-pg] First-run bootstrap: roles + users seeded from users-config.json.");
+    } else if (alreadyBootstrapped) {
+      console.log("[rbac-pg] DB already bootstrapped — users-config.json ignored for users.");
     }
   } finally {
     client.release();
   }
 
+  // Always sync role definitions (features/datasets) from config file on every deploy.
+  // Roles are application config (not user data), so this is safe and keeps them in sync.
   await syncRolesFromFile(configPath);
-  await syncMissingUsersFromFile(configPath);
+
+  // NOTE: syncMissingUsersFromFile is intentionally NOT called here.
+  // After the first bootstrap the DB is the single source of truth for users.
+  // Users deleted via the admin panel stay deleted across redeployments.
+
   return fetchFullConfig();
 }
 

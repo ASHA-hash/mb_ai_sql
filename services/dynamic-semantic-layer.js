@@ -8,6 +8,7 @@ const path = require("path");
 const fs = require("fs");
 const { loadSchema, getViewColumns } = require("./schema-from-json");
 const { resolveAnalyticsColumns } = require("./analytics-column-map");
+const runtimeConfig = require("./runtime-config");
 
 const DOMAIN_RULES_PATH = path.join(__dirname, "..", "metadata", "semantic-domain-rules.json");
 const SEMANTIC_LAYER_PATH = path.join(__dirname, "..", "metadata", "semantic-layer.json");
@@ -108,7 +109,7 @@ function resolveViewForQuestion(question, opts = {}) {
     if (views[dv]) return dv;
   }
 
-  const analytics = normalizeDbo(process.env.ANALYTICS_BASE_TABLE || "");
+  const analytics = normalizeDbo(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "");
   if (analytics && views[analytics] && domain !== "salesperson" && domain !== "purchase") {
     return analytics;
   }

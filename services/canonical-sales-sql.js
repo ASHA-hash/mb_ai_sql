@@ -8,6 +8,7 @@ const { resolveAnalyticsColumns, DEFAULT_ANALYTICS_TABLE } = require("./analytic
 const { getViewColumns } = require("./schema-from-json");
 const { translateJargonToColumn, getForcedDatePredicate, loadSemanticConfig } = require("./metadata-translation-engine");
 const { buildBillsTodaySqlAlignedWithHome } = require("./home-kpi-sql");
+const runtimeConfig = require("./runtime-config");
 
 function normalizeTable(t) {
   const s = String(t || "").trim();
@@ -19,10 +20,10 @@ function getCanonicalSalesTable() {
   const layer = loadSemanticConfig();
   // Home dashboard + NLQ use ANALYTICS_BASE_TABLE (SLSXNS). SALES_AI_TABLE is legacy APP_REPORT.
   const raw =
-    process.env.ANALYTICS_BASE_TABLE ||
-    process.env.SALES_AI_TABLE ||
+    runtimeConfig.get("ANALYTICS_BASE_TABLE") ||
+    runtimeConfig.get("SALES_AI_TABLE") ||
     layer.target_view ||
-    process.env.SALES_VIEW ||
+    runtimeConfig.get("SALES_VIEW") ||
     DEFAULT_ANALYTICS_TABLE;
   return normalizeTable(raw);
 }

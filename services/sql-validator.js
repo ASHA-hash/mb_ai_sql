@@ -1,5 +1,6 @@
 "use strict";
 
+const runtimeConfig = require("./runtime-config");
 const BLOCKED = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|MERGE|EXEC(UTE)?|CREATE)\b/i;
 const JOIN_PATTERN = /\bjoin\b/gi;
 const JOIN_ON_PATTERN = /\bjoin\b[\s\S]*?\bon\b/gi;
@@ -368,7 +369,7 @@ function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
     };
   }
 
-  const analyticsTable = String(process.env.ANALYTICS_BASE_TABLE || "").trim();
+  const analyticsTable = String(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "").trim();
   const wantsStoreBreakdown =
     /\b(turnover|sales|revenue|gross)\b/.test(q) &&
     (/\b(by|per|each)\s+(the\s+)?(store|stores|branch|branches|outlet)\b/.test(q) ||
