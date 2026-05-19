@@ -74,8 +74,8 @@
   {
     "id": "tpl_seed_last30_daily",
     "name": "Last 30 days gross revenue by day",
-    "desc": "Rolling 30-day daily trend — APP_REPORT.",
-    "sql": "SELECT\n  CAST([XnDt] AS date) AS SaleDate,\n  SUM([MrpValue]) AS TotalSales,\n  COUNT(DISTINCT [XnNo]) AS BillCount\nFROM dbo.VW_MB_POWERBI_APP_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(day, -29, CAST(GETDATE() AS date))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY CAST([XnDt] AS date)\nORDER BY SaleDate",
+    "desc": "Rolling 30-day daily trend — SLSXNS rollup (same as Home).",
+    "sql": "SELECT\n  CAST([XnDt] AS date) AS SaleDate,\n  SUM([NetSlsNetAmount]) AS TotalSales,\n  SUM([NetSlsQty]) AS TotalQty,\n  SUM([BillCount]) AS BillCount\nFROM dbo.VW_MB_POWERBI_SLSXNS_REPORT WITH (NOLOCK)\nWHERE CAST([XnDt] AS date) >= DATEADD(day, -29, CAST(GETDATE() AS date))\n  AND CAST([XnDt] AS date) <= CAST(GETDATE() AS date)\nGROUP BY CAST([XnDt] AS date)\nORDER BY SaleDate",
     "createdAt": "2026-05-17T00:00:00.000Z",
     "updatedAt": "2026-05-17T00:00:00.000Z",
     "createdBy": "system_seed"

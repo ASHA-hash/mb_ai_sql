@@ -105,6 +105,18 @@ function remapLegacyColumnNames(sql) {
   s = s.replace(/\b(?:INNER|LEFT)\s+JOIN\s+dbo\.VwAIBranch\b[^;]*/gi, "");
   s = s.replace(/\bVwAISalesData\b/gi, c.tableShort);
 
+  // APP_REPORT is not deployed on all tenants — route legacy/RAG SQL to ANALYTICS_BASE_TABLE.
+  if (!/APP_REPORT/i.test(c.table) && !isSalespersonView) {
+    s = s.replace(/\bdbo\.VW_MB_POWERBI_APP_REPORT\b/gi, c.table);
+    s = s.replace(/\bVW_MB_POWERBI_APP_REPORT\b/gi, c.tableShort);
+    if (/SLSXNS/i.test(c.table)) {
+      s = s.replace(/\b\[MrpValue\]/gi, `[${c.amountCol}]`);
+      s = s.replace(/\bMrpValue\b/gi, c.amountCol);
+      s = s.replace(/\b\[AppQty\]/gi, `[${c.qtyCol}]`);
+      s = s.replace(/\bAppQty\b/gi, c.qtyCol);
+    }
+  }
+
   if (isPowerBi && !isSalespersonView) {
     // Only remap legacy column aliases when targeting APP_REPORT-family views.
     s = s.replace(/\bSaleNetAmount\b/gi, translateJargonToColumn("SaleNetAmount") || c.amountCol);
@@ -139,6 +151,48 @@ function remapLegacyColumnNames(sql) {
 function isSalesDomainQuestion(question) {
   return /\b(sale|sales|invoice|revenue|turnover|mtd|ytd|qtd|salesperson|sales\s*rep|staff|branch\s*performance)\b/i.test(
     String(question || "")
+  );
+}
+
+/** "Last 30 days gross revenue by day", "daily sales trend", etc. */
+function isDailyRevenueTrendQuestion(question) {
+  const q = String(question || "").toLowerCase();
+  if (!/\b(revenue|sales|turnover|gross)\b/.test(q)) return false;
+  return (
+    /\b(by\s+day|daily|per\s+day|each\s+day|day\s*wise|day-wise)\b/.test(q) ||
+    /\blast\s+(\d+)\s*days?\b/.test(q) ||
+    /\b(\d+)\s*days?\b/.test(q) && /\b(trend|over time)\b/.test(q)
+  );
+}
+
+function parseTrendDaySpan(question, fallback = 30) {
+  const m = String(question || "").match(/\blast\s+(\d+)\s*days?\b/i);
+  if (m) return Math.min(Math.max(parseInt(m[1], 10) || fallback, 1), 366);
+  const m2 = String(question || "").match(/\b(\d+)\s*days?\b/i);
+  if (m2 && /\b(trend|revenue|sales)\b/i.test(question)) {
+    return Math.min(Math.max(parseInt(m2[1], 10) || fallback, 1), 366);
+  }
+  return fallback;
+}
+
+function buildDailyRevenueTrendSql(question) {
+  const c = getCanonicalSalesContext();
+  const days = parseTrendDaySpan(question, 30);
+  const viewCols = getViewColumns(c.table);
+  const set = new Set(viewCols);
+  const billExpr = set.has("BillCount")
+    ? `CAST(SUM(ISNULL([BillCount], 0)) AS BIGINT)`
+    : `COUNT(DISTINCT [${c.invoiceCol}])`;
+  return (
+    `SELECT CAST([${c.dateCol}] AS date) AS SaleDate, ` +
+    `SUM(ISNULL([${c.amountCol}], 0)) AS TotalSales, ` +
+    `SUM(ISNULL([${c.qtyCol}], 0)) AS TotalQty, ` +
+    `${billExpr} AS BillCount ` +
+    `FROM ${c.table} WITH (NOLOCK) ` +
+    `WHERE CAST([${c.dateCol}] AS date) >= DATEADD(day, -${days - 1}, CAST(GETDATE() AS date)) ` +
+    `AND CAST([${c.dateCol}] AS date) <= CAST(GETDATE() AS date) ` +
+    `GROUP BY CAST([${c.dateCol}] AS date) ` +
+    `ORDER BY SaleDate`
   );
 }
 
@@ -196,6 +250,8 @@ module.exports = {
   buildAiSalesFactPromptBlock,
   remapLegacyColumnNames,
   isSalesDomainQuestion,
+  isDailyRevenueTrendQuestion,
+  buildDailyRevenueTrendSql,
   getBillsKpiTable,
   buildBillsTodaySql,
   translateJargonToColumn,

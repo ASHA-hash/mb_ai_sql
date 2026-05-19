@@ -12,8 +12,9 @@ async function repairSql({ apiKey, model, question, context, failedSql, errorMes
     "Rules:",
     "- Return one SELECT SQL only.",
     "- Use only allowed views and listed columns.",
-    "- Sales revenue: dbo.VW_MB_POWERBI_APP_REPORT → SUM(MrpValue); SLSXNS/SLS_REPORT → SUM(NetAmount) or NetSlsNetAmount.",
-    "- Never use dbo.VwAISalesData. Date column on APP_REPORT is XnDt. Salesperson → SupplierName.",
+    "- Sales revenue: prefer dbo.VW_MB_POWERBI_SLSXNS_REPORT → SUM(NetSlsNetAmount); date column XnDt; bills → SUM(BillCount).",
+    "- Do NOT use dbo.VW_MB_POWERBI_APP_REPORT unless it exists — this tenant uses SLSXNS rollup.",
+    "- Never use dbo.VwAISalesData. Salesperson → VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID + SalesPersonName.",
     "- Keep SQL Server syntax.",
   ].join("\n");
 

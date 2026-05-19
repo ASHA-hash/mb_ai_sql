@@ -370,6 +370,23 @@ function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
   }
 
   const analyticsTable = String(runtimeConfig.get("ANALYTICS_BASE_TABLE") || "").trim();
+  const canonicalSales = String(
+    runtimeConfig.get("ANALYTICS_BASE_TABLE") ||
+      runtimeConfig.get("SALES_AI_TABLE") ||
+      ""
+  ).trim();
+  const blocksAppReport =
+    canonicalSales &&
+    /SLSXNS/i.test(canonicalSales) &&
+    /APP_REPORT/i.test(upper) &&
+    /\b(revenue|sales|turnover|gross|trend|daily|by\s+day)\b/.test(q);
+  if (blocksAppReport) {
+    return {
+      isValid: false,
+      reason: `Use ${canonicalSales} (NetSlsNetAmount) — dbo.VW_MB_POWERBI_APP_REPORT is not available on this database.`,
+    };
+  }
+
   const wantsStoreBreakdown =
     /\b(turnover|sales|revenue|gross)\b/.test(q) &&
     (/\b(by|per|each)\s+(the\s+)?(store|stores|branch|branches|outlet)\b/.test(q) ||

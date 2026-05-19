@@ -30,7 +30,7 @@ function loadSemanticConfig() {
     console.warn("[metadata-translation] semantic-layer.json:", e.message);
     _semanticConfig = {
       database: "zRetailHQ0",
-      target_view: "dbo.VW_MB_POWERBI_APP_REPORT",
+      target_view: "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
       semantic_mappings: { metrics: {}, dimensions: {} },
       forced_date_logic: { target_field: "XnDt", intervals: {} },
     };

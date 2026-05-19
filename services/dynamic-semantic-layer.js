@@ -23,7 +23,7 @@ function loadSemanticConfigLocal() {
     _semanticConfig = JSON.parse(fs.readFileSync(SEMANTIC_LAYER_PATH, "utf8"));
   } catch {
     _semanticConfig = {
-      target_view: "dbo.VW_MB_POWERBI_APP_REPORT",
+      target_view: "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
       semantic_mappings: { metrics: {}, dimensions: {} },
     };
   }
@@ -115,7 +115,11 @@ function resolveViewForQuestion(question, opts = {}) {
   }
 
   const cfg = loadSemanticConfigLocal();
-  const fallback = normalizeDbo(cfg.target_view || "dbo.VW_MB_POWERBI_APP_REPORT");
+  const fallback = normalizeDbo(
+    runtimeConfig.get("ANALYTICS_BASE_TABLE") ||
+      cfg.target_view ||
+      "dbo.VW_MB_POWERBI_SLSXNS_REPORT"
+  );
   return views[fallback] ? fallback : Object.keys(views)[0] || fallback;
 }
 

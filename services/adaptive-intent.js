@@ -18,7 +18,7 @@ function loadSemanticLayer() {
   try {
     _semanticLayer = require("../metadata/semantic-layer.json");
   } catch {
-    _semanticLayer = { semantic_mappings: { metrics: {}, dimensions: {} }, target_view: "dbo.VW_MB_POWERBI_APP_REPORT" };
+    _semanticLayer = { semantic_mappings: { metrics: {}, dimensions: {} }, target_view: "dbo.VW_MB_POWERBI_SLSXNS_REPORT" };
   }
   return _semanticLayer;
 }
@@ -212,6 +212,8 @@ function buildSqlGenerationSystemPrompt(
       : "";
 
   const isSlsData = /SLS_DATA_WITHOUT_ITEMID/i.test(targetView);
+  const isSlsxns = /SLSXNS/i.test(targetView);
+  const salesCtx = getCanonicalSalesContext();
 
   const columnBlock = isSlsData ? `
 MANDATORY COLUMN CORRECTNESS for SALESPERSON VIEW (${targetView}):
@@ -230,25 +232,29 @@ MANDATORY COLUMN CORRECTNESS for SALESPERSON VIEW (${targetView}):
 - Use ONLY ${targetView} WITH (NOLOCK).
 - Do NOT use APP_REPORT, SupplierName, MrpValue, AppQty, or XnDt here — they do not exist on this view.
 - MTD: CAST([CashmemoDt] AS date) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND CAST([CashmemoDt] AS date) <= CAST(GETDATE() AS date).
+` : isSlsxns ? `
+MANDATORY COLUMN CORRECTNESS for ${targetView} (home/analytics rollup):
+• Revenue/Sales/Turnover   → [${salesCtx.amountCol}]   NEVER MrpValue, SaleNetAmount
+• Qty/Units                → [${salesCtx.qtyCol}]       NEVER AppQty
+• Date column              → [${salesCtx.dateCol}]
+• Branch/Store             → [${salesCtx.branchCol}]
+• Department / Category    → [${salesCtx.deptCol}], [${salesCtx.catCol}]
+• Bill count               → SUM(ISNULL([BillCount],0))
+
+[CANONICAL SALES FACT — MANDATORY]
+- Use ONLY ${targetView} WITH (NOLOCK). Do NOT use dbo.VW_MB_POWERBI_APP_REPORT (not deployed).
+${buildAiSalesFactPromptBlock()}
 ` : `
 MANDATORY COLUMN CORRECTNESS (SQL Error 207 prevention):
-• Revenue/Sales/Turnover   → [MrpValue]           NEVER SaleNetAmount, SalesNetAmount
-• Qty/Pieces/Units         → [AppQty]             NEVER Quantity, SalesQuantity
-• Cost of goods            → [CostValue]
-• Net after discounts      → [NetAmount]           (real column — valid to use)
-• Invoice/Bill number      → [XnNo]               NEVER InvoiceNo, InvoiceId
-• Date column              → [XnDt]               NEVER SaleDate, InvoiceDt, CashmemoDt
-• Branch/Store             → [BranchAlias]        NEVER BranchName, BranchShortName
-• Vendor/Supplier/Brand    → [SupplierName]       on APP_REPORT (NOT a salesperson — SupplierName is clothing brand)
-• Salesperson/Staff/Rep    → [SalesPersonName]    on VW_MB_POWERBI_SLS_DATA_WITHOUT_ITEMID only
-• Color dimension          → [Color]              NEVER Colour, NEVER SizeName
-• Size dimension           → [Size]               NEVER SizeName
-• Article/SKU              → [ArticleNo]
-• Bill count               → SUM(ISNULL([BillCount],0))  or  COUNT(DISTINCT [XnNo])
+• Revenue/Sales/Turnover   → [${salesCtx.amountCol}]
+• Qty/Pieces/Units         → [${salesCtx.qtyCol}]
+• Date column              → [${salesCtx.dateCol}]
+• Branch/Store             → [${salesCtx.branchCol}]
+• Bill count               → SUM(ISNULL([BillCount],0))  or  COUNT(DISTINCT [${salesCtx.invoiceCol}])
 
 ${buildAiSalesFactPromptBlock()}`;
 
-  const dateCol = isSlsData ? "CashmemoDt" : "XnDt";
+  const dateCol = isSlsData ? "CashmemoDt" : salesCtx.dateCol;
 
   return `${dynamicBlock}You are a deterministic T-SQL compiler for Microsoft SQL Server. You have access to real-time column samples.
 

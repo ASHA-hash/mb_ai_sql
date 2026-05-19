@@ -14,6 +14,8 @@ const {
   isSalesDomainQuestion,
   getCanonicalSalesContext,
   buildBillsTodaySql,
+  isDailyRevenueTrendQuestion,
+  buildDailyRevenueTrendSql,
 } = require("./canonical-sales-sql");
 const {
   isSalespersonTopNQuestion,
@@ -62,6 +64,14 @@ function resolveAdaptiveFastPathSql(question, opts = {}) {
     if (sql) {
       return { sql, source: "bills_today_kpi", matchType: "canonical" };
     }
+  }
+
+  if (isDailyRevenueTrendQuestion(q)) {
+    return {
+      sql: buildDailyRevenueTrendSql(q),
+      source: "daily_revenue_trend",
+      matchType: "canonical",
+    };
   }
 
   if (isTopInvoicesTodayQuestion(q)) {
