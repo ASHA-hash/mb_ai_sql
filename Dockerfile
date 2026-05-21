@@ -1,5 +1,5 @@
 # Smart ERP — single container: React build + FastAPI + SQL Server ODBC
-FROM node:20-bookworm-slim AS frontend-build
+FROM node:20-slim-bookworm AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
@@ -7,7 +7,7 @@ COPY frontend ./frontend
 COPY assets ./assets
 RUN cd frontend && npm run build
 
-FROM python:3.12-bookworm-slim
+FROM python:3.12-slim-bookworm
 WORKDIR /app
 
 # Microsoft ODBC Driver 18 for SQL Server (required by pyodbc)
@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend ./backend
 COPY metadata ./metadata
+COPY datasets-registry.js ./datasets-registry.js
 COPY users-config.json ./users-config.json
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
