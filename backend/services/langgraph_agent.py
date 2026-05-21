@@ -546,11 +546,16 @@ async def generate_sql(state: AgentState) -> AgentState:
 """
     else:
         rollup = _get_sales_table()
+        amt_hint = "NetAmount"
+        date_hint = "XnMemoDate"
+        if "SLSXNS" in rollup.upper():
+            amt_hint = "NetSlsNetAmount"
+            date_hint = "XnDt"
         domain_rules = f"""
-- Period sales KPIs (today / MTD / how many sales / total sales): prefer {rollup} with NetSlsNetAmount and XnDt (same as Analytics).
-- Bill count today on {rollup}: use COUNT(*) (or SUM(BillCount) on SLSXNS_REPORT). Do NOT use COUNT(DISTINCT XnNo) alone for "sales today".
-- dbo.VW_MB_POWERBI_APP_REPORT is line-level (MrpValue, AppQty) — use for staff/product breakdowns, not period totals when rollup exists.
-- On APP_REPORT only: MrpValue for revenue, AppQty for qty, XnNo for invoice id, XnDt for date.
+- Period sales KPIs (today / yesterday / MTD / total sales): use {rollup} with [{amt_hint}] and [{date_hint}] — same as Analytics dashboard.
+- Yesterday filter: CAST([{date_hint}] AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE). Today: CAST([{date_hint}] AS DATE) = CAST(GETDATE() AS DATE).
+- Bill count on {rollup}: COUNT(*) (or SUM(BillCount) on SLSXNS only). Do NOT use MrpValue on SLS_REPORT — column does not exist (SQL error 207).
+- dbo.VW_MB_POWERBI_APP_REPORT is line-level only (MrpValue, AppQty) — not for yesterday/today total sales when {rollup} exists.
 """
 
     system_prompt = f"""You are an expert Microsoft SQL Server (T-SQL) query writer for a retail ERP system.
@@ -588,6 +593,8 @@ Today's date: {datetime.utcnow().strftime('%Y-%m-%d')} (UTC)
         response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
         sql = _extract_sql(response.content)
         sql = _remap_legacy_columns(sql)
+        from .query_fast_path import remap_generated_sales_sql
+        sql = remap_generated_sales_sql(sql)
         sql = _enforce_top_limit(sql)
         print(f"[langgraph] generated SQL: {sql[:160]}")
         return {
@@ -765,9 +772,15 @@ async def error_recovery(state: AgentState) -> AgentState:
     m = re.search(r"Invalid column name\s+'?(\w+)'?", err_msg, re.IGNORECASE)
     if m:
         bad_col = m.group(1)
-        fix = _ILLEGAL_COLUMNS.get(bad_col)
-        if fix:
-            obs += f"\nCRITICAL: Replace '{bad_col}' with '{fix}' — it does not exist."
+        if bad_col.lower() == "mrpvalue" and "SLS_REPORT" in _get_sales_table().upper():
+            obs += (
+                "\nCRITICAL: MrpValue is NOT on VW_MB_POWERBI_SLS_REPORT. "
+                "Use NetAmount for revenue and XnMemoDate for date (same as Analytics)."
+            )
+        else:
+            fix = _ILLEGAL_COLUMNS.get(bad_col)
+            if fix and bad_col.lower() != "mrpvalue":
+                obs += f"\nCRITICAL: Replace '{bad_col}' with '{fix}' — it does not exist."
 
     return {
         **state,

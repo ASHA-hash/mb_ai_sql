@@ -14,6 +14,7 @@ import type { QueryResponse, Template, Suggestion } from "../lib/api";
 import {
   Bot, Database, ChevronDown, ChevronUp, Star, Send,
   BarChart2, LineChart as LineIcon, PieChart as PieIcon, Table2, Trash2,
+  Settings2, Calendar, X,
 } from "lucide-react";
 import "./ai-query.css";
 
@@ -513,19 +514,62 @@ function AssistantTurn({ msg }: { msg: Message }) {
   );
 }
 
+function fmtIsoDateShort(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+}
+
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isoMonthStart(): string {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0, 10);
+}
+
 export default function AIQuery() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [tableHint, setTableHint] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
+  const [provider, setProvider] = useState<"openai" | "anthropic">(() => {
+    try {
+      const s = localStorage.getItem("erp_ai_provider");
+      return s === "anthropic" || s === "claude" ? "anthropic" : "openai";
+    } catch {
+      return "openai";
+    }
+  });
   const [queryFrom, setQueryFrom] = useState("");
   const [queryTo, setQueryTo] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasDateRange = Boolean(queryFrom || queryTo);
+  const dateSummary = hasDateRange
+    ? `${queryFrom ? fmtIsoDateShort(queryFrom) : "…"} – ${queryTo ? fmtIsoDateShort(queryTo) : "…"}`
+    : "";
+
+  const setProviderPersist = (p: "openai" | "anthropic") => {
+    setProvider(p);
+    try {
+      localStorage.setItem("erp_ai_provider", p === "anthropic" ? "claude" : "openai");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const clearDates = () => {
+    setQueryFrom("");
+    setQueryTo("");
+  };
 
   useEffect(() => {
     try {
@@ -706,7 +750,7 @@ export default function AIQuery() {
         )}
 
         {showTemplates && templates.length > 0 && (
-          <div className="card p-2 mb-2 max-h-36 overflow-y-auto">
+          <div className="ai-templates-popover card p-2 mb-2 max-h-36 overflow-y-auto">
             {templates.map((t) => (
               <button
                 key={t.id}
@@ -724,61 +768,151 @@ export default function AIQuery() {
           </div>
         )}
 
-        <div className="ai-composer-toolbar">
-          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>AI</span>
-          {(["openai", "anthropic"] as const).map((p) => (
+        <div className="ai-composer-card">
+          <div className="ai-composer-input-row">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="Ask anything about your ERP data…"
+              className="ai-composer-textarea"
+              aria-label="Question"
+            />
             <button
-              key={p}
               type="button"
-              onClick={() => setProvider(p)}
-              className={provider === p ? "btn-primary text-xs py-1 px-2.5" : "btn-ghost text-xs py-1 px-2.5"}
+              className="ai-composer-send"
+              onClick={() => sendMessage(input)}
+              disabled={loading || !input.trim()}
+              title="Send"
+              aria-label="Send message"
             >
-              {p === "openai" ? "GPT" : "Claude"}
+              <Send size={20} />
             </button>
-          ))}
-          <input
-            type="date"
-            value={queryFrom}
-            onChange={(e) => setQueryFrom(e.target.value)}
-            className="input-base text-xs"
-            title="From date"
-          />
-          <input
-            type="date"
-            value={queryTo}
-            onChange={(e) => setQueryTo(e.target.value)}
-            className="input-base text-xs"
-            title="To date"
-          />
-          <button
-            type="button"
-            className="btn-ghost text-xs py-1 px-2.5"
-            onClick={() => setShowTemplates(!showTemplates)}
-          >
-            <Star size={12} /> Templates
-          </button>
-      </div>
+          </div>
 
-        <div className="ai-composer-input-row">
-        <textarea
-          ref={inputRef}
-          value={input}
-            onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder="Ask anything about your ERP data… (Enter to send, Shift+Enter for new line)"
-            className="ai-composer-textarea"
-        />
-        <button
-            type="button"
-            className="ai-composer-send"
-          onClick={() => sendMessage(input)}
-          disabled={loading || !input.trim()}
-            title="Send"
-            aria-label="Send message"
-          >
-            <Send size={20} />
-        </button>
+          <div className="ai-composer-footer">
+            <div className="ai-provider-segment" role="group" aria-label="AI model">
+              <button
+                type="button"
+                className={`ai-provider-segment-btn ${provider === "openai" ? "is-active" : ""}`}
+                onClick={() => setProviderPersist("openai")}
+                title="OpenAI GPT"
+              >
+                <span className="ai-provider-dot gpt" /> GPT
+              </button>
+              <button
+                type="button"
+                className={`ai-provider-segment-btn ${provider === "anthropic" ? "is-active" : ""}`}
+                onClick={() => setProviderPersist("anthropic")}
+                title="Anthropic Claude"
+              >
+                <span className="ai-provider-dot claude" /> Claude
+              </button>
+            </div>
+
+            <div className="ai-composer-footer-actions">
+              {hasDateRange && !showOptions && (
+                <span className="ai-active-chip" title="Date filter for this question">
+                  <Calendar size={12} />
+                  {dateSummary}
+                  <button
+                    type="button"
+                    className="ai-active-chip-clear"
+                    onClick={clearDates}
+                    aria-label="Clear dates"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
+              <button
+                type="button"
+                className={`ai-options-trigger ${showOptions ? "is-open" : ""}`}
+                onClick={() => setShowOptions((o) => !o)}
+                aria-expanded={showOptions}
+                aria-controls="ai-options-panel"
+              >
+                <Settings2 size={14} />
+                <span>Options</span>
+                {hasDateRange && showOptions && <span className="ai-options-dot" />}
+                <ChevronDown size={14} className="ai-options-chevron" />
+              </button>
+
+              <button
+                type="button"
+                className={`ai-templates-trigger ${showTemplates ? "is-active" : ""}`}
+                onClick={() => {
+                  setShowTemplates(!showTemplates);
+                  if (!showTemplates) setShowOptions(false);
+                }}
+              >
+                <Star size={14} />
+                <span>Templates</span>
+              </button>
+            </div>
+          </div>
+
+          {showOptions && (
+            <div id="ai-options-panel" className="ai-options-panel">
+              <div className="ai-options-panel-head">
+                <span className="ai-options-panel-title">
+                  <Calendar size={14} />
+                  Date range <span className="ai-options-optional">(optional)</span>
+                </span>
+                <button type="button" className="ai-options-close" onClick={() => setShowOptions(false)}>
+                  <X size={14} />
+                </button>
+              </div>
+              <p className="ai-options-hint m-0">
+                Narrow SQL to a period. Leave empty to let the AI pick dates from your question.
+              </p>
+              <div className="ai-date-row">
+                <label className="ai-date-field">
+                  <span className="ai-date-label">From</span>
+                  <input
+                    type="date"
+                    value={queryFrom}
+                    onChange={(e) => setQueryFrom(e.target.value)}
+                    className="ai-date-input"
+                  />
+                </label>
+                <label className="ai-date-field">
+                  <span className="ai-date-label">To</span>
+                  <input
+                    type="date"
+                    value={queryTo}
+                    onChange={(e) => setQueryTo(e.target.value)}
+                    className="ai-date-input"
+                  />
+                </label>
+              </div>
+              <div className="ai-date-presets">
+                {[
+                  { label: "MTD", fn: () => { setQueryFrom(isoMonthStart()); setQueryTo(isoToday()); } },
+                  { label: "Today", fn: () => { const t = isoToday(); setQueryFrom(t); setQueryTo(t); } },
+                  { label: "Last 30d", fn: () => {
+                    const to = new Date();
+                    const from = new Date(to);
+                    from.setDate(from.getDate() - 30);
+                    setQueryFrom(from.toISOString().slice(0, 10));
+                    setQueryTo(to.toISOString().slice(0, 10));
+                  } },
+                ].map(({ label, fn }) => (
+                  <button key={label} type="button" className="ai-date-preset" onClick={fn}>
+                    {label}
+                  </button>
+                ))}
+                {hasDateRange && (
+                  <button type="button" className="ai-date-preset ai-date-preset-clear" onClick={clearDates}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

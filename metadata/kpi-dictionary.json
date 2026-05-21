@@ -42,7 +42,7 @@
   {
     "term": "Yesterday Sales",
     "aliases": ["yesterday", "yesterday's sales", "sales yesterday", "prior day sales"],
-    "definition": "Total gross revenue for yesterday. SUM(MrpValue) on VW_MB_POWERBI_APP_REPORT where CAST(XnDt AS date) = DATEADD(day, -1, CAST(GETDATE() AS date)).",
+    "definition": "Total net sales for yesterday. SUM(NetAmount) on VW_MB_POWERBI_SLS_REPORT where CAST(XnMemoDate AS date) = DATEADD(day, -1, CAST(GETDATE() AS date)) — same as Analytics.",
     "sql_pattern": "SUM([MrpValue]) FROM dbo.VW_MB_POWERBI_APP_REPORT WHERE CAST([XnDt] AS date) = DATEADD(day, -1, CAST(GETDATE() AS date))",
     "view": "dbo.VW_MB_POWERBI_APP_REPORT",
     "revenue_column": "MrpValue",

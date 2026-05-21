@@ -69,6 +69,18 @@ _HOW_MANY_SALES_TODAY = re.compile(
     r"\bhow\s+many\s+(sales?|bills?|transactions?)\s+today\b",
     re.I,
 )
+_SALES_YESTERDAY = re.compile(
+    r"\b(yesterday|yesterdays|prior\s+day|previous\s+day)\b.*\b(sales?|revenue|turnover|total)\b|"
+    r"\b(sales?|revenue|turnover|total)\b.*\b(yesterday|yesterdays)\b|"
+    r"\byesterday\s+total\s+sales\b|"
+    r"\btotal\s+sales?\s+yesterday\b",
+    re.I,
+)
+_HOW_MANY_SALES_YESTERDAY = re.compile(
+    r"\bhow\s+many\s+(sales?|bills?|transactions?|invoices?)\b.*\b(yesterday|yesterdays)\b|"
+    r"\bhow\s+many\s+(sales?|bills?|transactions?)\s+yesterday\b",
+    re.I,
+)
 _SALES_MTD_VS_LY = re.compile(
     r"\b(sales?|revenue|turnover)\b.*\b(this\s+)?month\b.*\b(vs|versus|compared)\b.*\b(last\s+year|same\s+month\s+last\s+year|ly)\b|"
     r"\b(this\s+)?month\b.*\b(vs|versus)\b.*\b(same\s+month\s+)?last\s+year\b.*\b(sales?|revenue)\b",
@@ -106,6 +118,8 @@ def _fuzzy_example_match(nq: str) -> Optional[tuple[str, str]]:
         inter = len(q_tok & e_tok)
         score = inter / max(len(q_tok), len(e_tok))
         if ex.get("category") == "sales_kpi" and "today" in q_tok and "today" in e_tok:
+            score = max(score, 0.78)
+        if ex.get("category") == "sales_kpi" and "yesterday" in q_tok and "yesterday" in e_tok:
             score = max(score, 0.78)
         if ex.get("category") == "sales_kpi" and "year" in q_tok and "month" in q_tok:
             score = max(score, 0.78)
@@ -299,9 +313,12 @@ def _view_columns(table: str) -> set[str]:
 def _amount_candidates(table: str) -> list[str]:
     u = (table or "").upper()
     if "SLS_REPORT" in u and "SLSXNS" not in u:
-        return ["SlsNetAmount", "NetAmount", "NetSlsNetAmount", "NetSlsMrpValue", "SlsMrpValue", "MrpValue"]
+        # MrpValue is APP_REPORT only — not on SLS_REPORT (causes SQL 207).
+        return ["NetAmount", "SlsNetAmount", "NetSlsNetAmount"]
     if "SLSXNS" in u:
-        return ["NetSlsNetAmount", "NetAmount", "MrpValue"]
+        return ["NetSlsNetAmount", "NetAmount"]
+    if "APP_REPORT" in u:
+        return ["MrpValue", "NetAmount", "SaleNetAmount"]
     return ["NetSlsNetAmount", "SlsNetAmount", "NetAmount", "MrpValue"]
 
 
@@ -342,15 +359,21 @@ def _pick_view_column(table: str, candidates: list[str], env_key: str, fallback:
     return fallback
 
 
-def _build_sales_today_sql(
+def _build_sales_period_kpi_sql(
     tbl: str,
     dc: str,
     amt: str,
     qty: str,
+    period: str,
     *,
     count_focus: bool = False,
 ) -> str:
-    where = f"CAST([{dc}] AS DATE) = CAST(GETDATE() AS DATE)"
+    if period == "yesterday":
+        where = f"CAST([{dc}] AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)"
+        pfx = "Yesterday"
+    else:
+        where = f"CAST([{dc}] AS DATE) = CAST(GETDATE() AS DATE)"
+        pfx = "Today"
     if "SLSXNS" in tbl.upper():
         bills_expr = "CAST(SUM(ISNULL([BillCount], 0)) AS BIGINT)"
     else:
@@ -363,26 +386,34 @@ def _build_sales_today_sql(
             f"FROM {tbl} WITH (NOLOCK) WHERE {where}"
         )
     return (
-        f"SELECT ISNULL(SUM([{amt}]), 0) AS TodaySales, "
-        f"ISNULL(SUM([{qty}]), 0) AS TodayQty, "
-        f"{bills_expr} AS TodayBills "
+        f"SELECT ISNULL(SUM([{amt}]), 0) AS {pfx}Sales, "
+        f"ISNULL(SUM([{qty}]), 0) AS {pfx}Qty, "
+        f"{bills_expr} AS {pfx}Bills "
         f"FROM {tbl} WITH (NOLOCK) WHERE {where}"
     )
 
 
-def _sales_today_kpi_sql(*, count_focus: bool = False) -> str:
+def _sales_period_kpi_sql(period: str, *, count_focus: bool = False) -> str:
     tbl = _primary_sales_table()
-    dc = _pick_view_column(tbl, _date_candidates(tbl), "SALES_FILTER_DATE_COLUMN", "XnDt")
-    qty = _pick_view_column(tbl, _qty_candidates(tbl), "SALES_ANALYTICS_QTY_COLUMN", "SlsQty")
-    amt = _pick_view_column(tbl, _amount_candidates(tbl), "SALES_ANALYTICS_AMOUNT_COLUMN", "SlsNetAmount")
-    return _build_sales_today_sql(tbl, dc, amt, qty, count_focus=count_focus)
+    dc = _pick_view_column(tbl, _date_candidates(tbl), "SALES_FILTER_DATE_COLUMN", "XnMemoDate")
+    qty = _pick_view_column(tbl, _qty_candidates(tbl), "SALES_ANALYTICS_QTY_COLUMN", "NetSlsQty")
+    amt = _pick_view_column(tbl, _amount_candidates(tbl), "SALES_ANALYTICS_AMOUNT_COLUMN", "NetAmount")
+    return _build_sales_period_kpi_sql(tbl, dc, amt, qty, period, count_focus=count_focus)
 
 
-def _sales_today_sql_variants(*, count_focus: bool = False) -> list[str]:
+def _sales_today_kpi_sql(*, count_focus: bool = False) -> str:
+    return _sales_period_kpi_sql("today", count_focus=count_focus)
+
+
+def _sales_yesterday_kpi_sql(*, count_focus: bool = False) -> str:
+    return _sales_period_kpi_sql("yesterday", count_focus=count_focus)
+
+
+def _sales_period_sql_variants(period: str, *, count_focus: bool = False) -> list[str]:
     """Multiple SQL variants — live DB columns may differ from metadata snapshot."""
     tbl = _primary_sales_table()
     view_cols = _view_columns(tbl)
-    dc = _pick_view_column(tbl, _date_candidates(tbl), "SALES_FILTER_DATE_COLUMN", "XnDt")
+    dc = _pick_view_column(tbl, _date_candidates(tbl), "SALES_FILTER_DATE_COLUMN", "XnMemoDate")
     qty_opts = [c for c in _qty_candidates(tbl) if not view_cols or c in view_cols] or _qty_candidates(tbl)
     amt_meta = [c for c in _amount_candidates(tbl) if not view_cols or c in view_cols]
     amt_opts = list(dict.fromkeys(amt_meta + _amount_candidates(tbl)))
@@ -391,18 +422,51 @@ def _sales_today_sql_variants(*, count_focus: bool = False) -> list[str]:
     out: list[str] = []
     for amt in amt_opts:
         for q in qty_opts[:2]:
-            sql = _build_sales_today_sql(tbl, dc, amt, q, count_focus=count_focus)
+            sql = _build_sales_period_kpi_sql(tbl, dc, amt, q, period, count_focus=count_focus)
             if sql not in seen:
                 seen.add(sql)
                 out.append(sql)
     for dc_alt in _date_candidates(tbl):
         if dc_alt == dc:
             continue
-        sql = _build_sales_today_sql(tbl, dc_alt, amt_opts[0], qty, count_focus=count_focus)
+        sql = _build_sales_period_kpi_sql(tbl, dc_alt, amt_opts[0], qty, period, count_focus=count_focus)
         if sql not in seen:
             seen.add(sql)
             out.append(sql)
-    return out or [_sales_today_kpi_sql(count_focus=count_focus)]
+    fallback = _sales_yesterday_kpi_sql if period == "yesterday" else _sales_today_kpi_sql
+    return out or [fallback(count_focus=count_focus)]
+
+
+def _sales_today_sql_variants(*, count_focus: bool = False) -> list[str]:
+    return _sales_period_sql_variants("today", count_focus=count_focus)
+
+
+def remap_generated_sales_sql(sql: str) -> str:
+    """After LLM SQL: SLS_REPORT must not use MrpValue / APP_REPORT-only columns."""
+    if not sql:
+        return sql
+    s = sql
+    tbl = _primary_sales_table()
+    u_tbl = tbl.upper()
+    if "APP_REPORT" in sql.upper() and "SLS_REPORT" not in u_tbl:
+        return s
+    if "SLS_REPORT" in u_tbl or ("SLS_REPORT" in sql.upper() and "APP_REPORT" not in sql.upper()):
+        amt = _pick_view_column(tbl, _amount_candidates(tbl), "SALES_ANALYTICS_AMOUNT_COLUMN", "NetAmount")
+        dc = _pick_view_column(tbl, _date_candidates(tbl), "SALES_FILTER_DATE_COLUMN", "XnMemoDate")
+        qty = _pick_view_column(tbl, _qty_candidates(tbl), "SALES_ANALYTICS_QTY_COLUMN", "NetSlsQty")
+        for old in ("MrpValue", "NetSlsMrpValue", "SlsMrpValue", "SaleNetAmount", "AppQty"):
+            if old.lower() != amt.lower() and re.search(rf"\b{old}\b", s, re.I):
+                s = re.sub(rf"\[{old}\]", f"[{amt}]", s, flags=re.I)
+                s = re.sub(rf"\b{old}\b", amt, s, flags=re.I)
+        if "APP_REPORT" in s.upper():
+            s = re.sub(r"dbo\.VW_MB_POWERBI_APP_REPORT", tbl, s, flags=re.I)
+        for old_dc in ("XnDt", "InvoiceDt", "CashmemoDt"):
+            if old_dc.lower() != dc.lower():
+                s = re.sub(rf"CAST\s*\(\s*\[{old_dc}\]", f"CAST([{dc}]", s, flags=re.I)
+        if qty != "AppQty":
+            s = re.sub(r"\bAppQty\b", qty, s, flags=re.I)
+        s = _remap_sales_sql_to_analytics_base(s)
+    return s
 
 
 async def execute_fast_path_sql(
@@ -419,9 +483,10 @@ async def execute_fast_path_sql(
     from .db_mssql import execute_query
 
     variants = [sql_raw]
-    if source == "sales_today_kpi":
+    if source in ("sales_today_kpi", "sales_yesterday_kpi"):
         count_focus = bool(re.search(r"\bhow\s+many\b", question, re.I))
-        variants = _sales_today_sql_variants(count_focus=count_focus)
+        period = "yesterday" if source == "sales_yesterday_kpi" else "today"
+        variants = _sales_period_sql_variants(period, count_focus=count_focus)
 
     if source == "sales_mtd_vs_ly":
         sql = prepare_exec_sql(sql_raw)
@@ -445,8 +510,34 @@ async def execute_fast_path_sql(
     return [], prepare_exec_sql(sql_raw)
 
 
+def _resolve_sales_yesterday_sql(question: str) -> Optional[str]:
+    q = question or ""
+    if re.search(r"\bpurchase\b", q, re.I):
+        return None
+    if _HOW_MANY_SALES_YESTERDAY.search(q):
+        return _sales_yesterday_kpi_sql(count_focus=True)
+    if _SALES_YESTERDAY.search(q):
+        return _sales_yesterday_kpi_sql(count_focus=False)
+    nq = normalize_question(q)
+    if nq in (
+        "how many sales yesterday",
+        "sales yesterday",
+        "total sales yesterday",
+        "yesterdays sales",
+        "yesterday total sales",
+        "yesterdays total sales",
+    ):
+        return _sales_yesterday_kpi_sql(count_focus="how" in nq and "many" in nq)
+    tok = _tokens(nq)
+    if "yesterday" in tok and ("sales" in tok or "sale" in tok or "total" in tok):
+        return _sales_yesterday_kpi_sql(count_focus="how" in tok and "many" in tok)
+    return None
+
+
 def _resolve_sales_today_sql(question: str) -> Optional[str]:
     q = question or ""
+    if _resolve_sales_yesterday_sql(q):
+        return None
     if _HOW_MANY_SALES_TODAY.search(q):
         return _sales_today_kpi_sql(count_focus=True)
     if _SALES_TODAY.search(q) and not re.search(r"\bpurchase\b", q, re.I):
@@ -454,7 +545,6 @@ def _resolve_sales_today_sql(question: str) -> Optional[str]:
     nq = normalize_question(q)
     if nq in ("how many sales today", "sales today", "total sales today", "todays sales"):
         return _sales_today_kpi_sql(count_focus="how many" in nq)
-    # Fuzzy: sales + today tokens
     tok = _tokens(nq)
     if "today" in tok and ("sales" in tok or "sale" in tok) and "purchase" not in tok:
         return _sales_today_kpi_sql(count_focus="how" in tok and "many" in tok)
@@ -488,6 +578,9 @@ def _canonical_sql(question: str) -> Optional[str]:
         return _SQL_OVERRIDES["purchase returns this month by supplier"]
     if _NET_PURCHASE_BRANCH_MTD.search(q):
         return _SQL_OVERRIDES["net purchase value by branch this month"]
+    sales_yesterday = _resolve_sales_yesterday_sql(q)
+    if sales_yesterday:
+        return sales_yesterday
     sales_today = _resolve_sales_today_sql(q)
     if sales_today:
         return sales_today
@@ -515,6 +608,10 @@ def resolve_fast_path_sql(
     nq = normalize_question(question)
     if not nq:
         return None
+
+    sales_yesterday = _resolve_sales_yesterday_sql(question)
+    if sales_yesterday:
+        return sales_yesterday, "sales_yesterday_kpi"
 
     sales_today = _resolve_sales_today_sql(question)
     if sales_today:
@@ -560,6 +657,7 @@ _YOY_COL_LABELS: dict[str, str] = {
     "ThisMonthSales": "This Month (MTD)",
     "LastYearMonthSales": "Same Month Last Year",
     "TodaySales": "Today",
+    "YesterdaySales": "Yesterday",
     "MTDSales": "MTD Sales",
 }
 
@@ -685,6 +783,26 @@ def summarize_answer(question: str, rows: list[dict], source: str = "") -> str:
                 parts.append(f"qty {qty}")
         if parts:
             return f"Today ({_primary_sales_table()}): " + "; ".join(parts) + "."
+    if len(rows) == 1 and source.startswith("sales_yesterday"):
+        r = rows[0]
+        bills = r.get("SalesCount") or r.get("YesterdayBills") or r.get("yesterdaybills")
+        sales = r.get("TotalSales") or r.get("YesterdaySales") or r.get("yesterdaysales")
+        qty = r.get("TotalQty") or r.get("YesterdayQty") or r.get("yesterdayqty")
+        parts = []
+        if sales is not None:
+            try:
+                parts.append(f"total sales amounted to ₹{float(sales) / 1e5:.2f} Lakhs")
+            except (TypeError, ValueError):
+                parts.append(f"total sales {sales}")
+        if qty is not None:
+            try:
+                parts.append(f"a quantity of {float(qty):,.0f} items sold")
+            except (TypeError, ValueError):
+                parts.append(f"qty {qty}")
+        if bills is not None:
+            parts.append(f"across {int(float(bills)):,} bills")
+        if parts:
+            return f"Yesterday, " + ", ".join(parts) + "."
     keys = list(rows[0].keys())
     label_k = keys[0] if keys else "label"
     val_k = keys[1] if len(keys) > 1 else keys[0]
