@@ -1,5 +1,5 @@
 # Smart ERP — single container: React build + FastAPI + SQL Server ODBC
-FROM node:20-slim-bookworm AS frontend-build
+FROM node:20-bookworm-slim AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
