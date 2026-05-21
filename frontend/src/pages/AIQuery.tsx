@@ -358,7 +358,7 @@ function AssistantTurn({ msg }: { msg: Message }) {
           <div className="flex items-center gap-3">
             <Bot size={18} color="var(--brand)" />
             <p className="text-sm font-semibold m-0" style={{ color: "var(--text-strong)" }}>
-              {msg.text}
+          {msg.text}
             </p>
           </div>
         </div>
@@ -384,15 +384,15 @@ function AssistantTurn({ msg }: { msg: Message }) {
           <p className="text-xs font-bold m-0 uppercase tracking-wide" style={{ color: "var(--accent-good)" }}>
             Plain-English Answer
           </p>
-          {badge && (
+            {badge && (
             <span style={{ color: badge.color, fontWeight: 700, fontSize: 11 }}>● {badge.label}</span>
-          )}
-          {msg.rowCount !== undefined && (
+            )}
+            {msg.rowCount !== undefined && (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
               {formatNum(msg.rowCount)} rows
             </span>
-          )}
-          {msg.elapsedMs !== undefined && (
+            )}
+            {msg.elapsedMs !== undefined && (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>{msg.elapsedMs}ms</span>
           )}
         </div>
@@ -446,7 +446,7 @@ function AssistantTurn({ msg }: { msg: Message }) {
 
       {/* Meta + SQL */}
       <div className="ai-meta-row">
-        {msg.sql && (
+            {msg.sql && (
           <button
             type="button"
             onClick={() => setShowSql(!showSql)}
@@ -757,28 +757,28 @@ export default function AIQuery() {
           >
             <Star size={12} /> Templates
           </button>
-        </div>
+      </div>
 
         <div className="ai-composer-input-row">
-          <textarea
-            ref={inputRef}
-            value={input}
+        <textarea
+          ref={inputRef}
+          value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
+          onKeyDown={handleKeyDown}
             rows={1}
             placeholder="Ask anything about your ERP data… (Enter to send, Shift+Enter for new line)"
             className="ai-composer-textarea"
-          />
-          <button
+        />
+        <button
             type="button"
             className="ai-composer-send"
-            onClick={() => sendMessage(input)}
-            disabled={loading || !input.trim()}
+          onClick={() => sendMessage(input)}
+          disabled={loading || !input.trim()}
             title="Send"
             aria-label="Send message"
           >
             <Send size={20} />
-          </button>
+        </button>
         </div>
       </div>
     </div>

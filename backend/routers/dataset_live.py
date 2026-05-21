@@ -1,9 +1,7 @@
 """
 GET /api/dataset/:key — load registry datasets (simplified parity with Node).
 """
-import json
-import re
-from pathlib import Path
+import asyncio
 from datetime import datetime, date
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Response
@@ -11,36 +9,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from ..services.auth import require_feature
 from ..services.db_mssql import execute_query
 from ..services import runtime_config as rc
+from ..services.dataset_registry import normalize_key, resolve_table
 
 router = APIRouter(tags=["dataset"])
-_META = Path(__file__).parent.parent.parent / "metadata"
-_TABLE = re.compile(r"^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$")
-
-
-def _load_access() -> dict:
-    try:
-        raw = json.loads((_META / "dataset-access.json").read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
-    except Exception:
-        return {}
-
-
-def _normalize_key(name: str) -> str:
-    return (name or "").strip().lower().replace(" ", "_")
-
-
-def _resolve_table(dataset_key: str) -> str | None:
-    by_key = _load_access().get("byKey") or {}
-    entry = by_key.get(_normalize_key(dataset_key))
-    if entry and entry.get("denied"):
-        raise HTTPException(
-            status_code=403,
-            detail=entry.get("message") or f"SELECT denied for dataset: {dataset_key}",
-        )
-    table = (entry or {}).get("table")
-    if table and _TABLE.match(table.strip()):
-        return table.strip()
-    return None
 
 
 def _parse_limit(raw: str | None) -> int:
@@ -73,15 +44,19 @@ async def get_dataset(
     user: dict = Depends(require_feature("data")),
 ):
     del user
-    dk = _normalize_key(name)
-    table = _resolve_table(dk)
+    dk = normalize_key(name)
+    try:
+        table, _entry = resolve_table(name)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+
     if not table:
         raise HTTPException(
             status_code=400,
             detail={
                 "error": "unknown_dataset",
                 "message": f"Unknown dataset key: {dk}",
-                "hint": "GET /api/connector-config lists valid keys",
+                "hint": "GET /api/connector-config lists valid keys (e.g. sales, mb_powerbi_app_report)",
             },
         )
 
@@ -90,7 +65,6 @@ async def get_dataset(
     sql = f"SELECT TOP {row_limit} * FROM {table} WITH (NOLOCK)"
 
     try:
-        import asyncio
         timeout_s = rc.get_int("DB_REQUEST_TIMEOUT_MS", 120000) / 1000
         rows = await asyncio.wait_for(execute_query(sql), timeout=timeout_s)
         data = _serialize_rows(rows)
