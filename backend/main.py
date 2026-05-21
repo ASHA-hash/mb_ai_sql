@@ -4,12 +4,12 @@ Run with: uvicorn backend.main:app --reload --port 8000
 """
 import os
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
@@ -146,19 +146,51 @@ async def home_kpi(
 # ── Serve React frontend (production build) ───────────────────────────────────
 _FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
+
+def _safe_dist_file(rel_path: str) -> Path | None:
+    """Resolve a file under frontend/dist (blocks path traversal)."""
+    if not rel_path or ".." in rel_path.replace("\\", "/"):
+        return None
+    root = _FRONTEND_DIST.resolve()
+    target = (root / rel_path).resolve()
+    if not str(target).startswith(str(root)):
+        return None
+    return target if target.is_file() else None
+
+
+def _file_response(path: Path) -> FileResponse:
+    media_type, _ = mimetypes.guess_type(str(path))
+    return FileResponse(str(path), media_type=media_type or "application/octet-stream")
+
+
 if _FRONTEND_DIST.exists():
-    # Serve static assets
-    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="assets")
+    # Catch-all must serve /assets/* with correct MIME types. A bare mount("/assets")
+    # loses to GET /{full_path:path} in Starlette, which returned index.html for .css → blank UI.
+
+    @app.get("/", include_in_schema=False)
+    async def spa_index():
+        index = _FRONTEND_DIST / "index.html"
+        if not index.exists():
+            return JSONResponse(
+                {"error": "Frontend not built. Run: cd frontend && npm run build"},
+                status_code=503,
+            )
+        return FileResponse(str(index), media_type="text/html")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(request: Request, full_path: str):
-        # API routes are already handled — this catches everything else
+    async def serve_spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="API route not found")
+        static = _safe_dist_file(full_path)
+        if static:
+            return _file_response(static)
         index = _FRONTEND_DIST / "index.html"
         if index.exists():
-            return FileResponse(str(index))
-        return JSONResponse({"error": "Frontend not built. Run: cd frontend && npm run build"}, status_code=503)
+            return FileResponse(str(index), media_type="text/html")
+        return JSONResponse(
+            {"error": "Frontend not built. Run: cd frontend && npm run build"},
+            status_code=503,
+        )
 else:
     @app.get("/", include_in_schema=False)
     async def root():
