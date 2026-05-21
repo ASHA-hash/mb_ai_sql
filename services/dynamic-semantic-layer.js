@@ -101,6 +101,12 @@ function resolveViewForQuestion(question, opts = {}) {
     if (views[hint]) return hint;
   }
 
+  if (/\bMrpValue\b/i.test(question) && /\b(vendors?|suppliers?)\b/i.test(question)) {
+    const { getCanonicalSalesTable } = require("./canonical-sales-sql");
+    const salesFact = normalizeDbo(getCanonicalSalesTable());
+    if (views[salesFact]) return salesFact;
+  }
+
   if (domain && rules[domain]) {
     const def = rules[domain];
     const fromEnv = envView(def);

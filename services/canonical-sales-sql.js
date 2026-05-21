@@ -10,22 +10,78 @@ const { translateJargonToColumn, getForcedDatePredicate, loadSemanticConfig } = 
 const { buildBillsTodaySqlAlignedWithHome } = require("./home-kpi-sql");
 const runtimeConfig = require("./runtime-config");
 
+/** Views that may be missing on a given SQL Server tenant — try in order, skip blocked. */
+const SALES_FACT_VIEW_ALIASES = [
+  "dbo.VW_MB_POWERBI_SLS_REPORT",
+  "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
+  "dbo.VW_MB_POWERBI_APP_REPORT",
+];
+
+const _blockedSalesViews = new Set();
+
 function normalizeTable(t) {
   const s = String(t || "").trim();
   if (!s) return DEFAULT_ANALYTICS_TABLE;
   return s.startsWith("dbo.") ? s : `dbo.${s}`;
 }
 
-function getCanonicalSalesTable() {
+function getSalesFactTableCandidates() {
   const layer = loadSemanticConfig();
-  // Home dashboard + NLQ use ANALYTICS_BASE_TABLE (SLSXNS). SALES_AI_TABLE is legacy APP_REPORT.
-  const raw =
-    runtimeConfig.get("ANALYTICS_BASE_TABLE") ||
-    runtimeConfig.get("SALES_AI_TABLE") ||
-    layer.target_view ||
-    runtimeConfig.get("SALES_VIEW") ||
-    DEFAULT_ANALYTICS_TABLE;
-  return normalizeTable(raw);
+  const raw = [
+    runtimeConfig.get("ANALYTICS_BASE_TABLE"),
+    ...SALES_FACT_VIEW_ALIASES,
+    runtimeConfig.get("SALES_AI_TABLE"),
+    layer.target_view,
+    runtimeConfig.get("SALES_VIEW"),
+    DEFAULT_ANALYTICS_TABLE,
+  ];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const t = normalizeTable(item);
+    const key = t.toLowerCase();
+    if (!t || seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+function markSalesFactTableUnavailable(table) {
+  const key = normalizeTable(table).toLowerCase();
+  if (!key) return;
+  _blockedSalesViews.add(key);
+  console.warn("[canonical-sales] marking view unavailable:", table);
+}
+
+function getCanonicalSalesTable() {
+  for (const t of getSalesFactTableCandidates()) {
+    if (!_blockedSalesViews.has(t.toLowerCase())) return t;
+  }
+  return normalizeTable(DEFAULT_ANALYTICS_TABLE);
+}
+
+/** After "Invalid object name", swap to the next working sales fact view. */
+function rewriteSqlToAvailableSalesFact(sql) {
+  const target = getCanonicalSalesTable();
+  let s = String(sql || "");
+  if (!s.trim()) return s;
+  for (const v of getSalesFactTableCandidates()) {
+    if (v.toLowerCase() === target.toLowerCase()) continue;
+    const esc = v.replace(/\./g, "\\.");
+    s = s.replace(new RegExp(esc, "gi"), target);
+  }
+  return remapLegacyColumnNames(s);
+}
+
+function pickMrpAmountColumn(table) {
+  const viewCols = getViewColumns(normalizeTable(table));
+  const set = new Set(viewCols);
+  if (set.has("MrpValue")) return "MrpValue";
+  if (set.has("NetSlsMrpValue")) return "NetSlsMrpValue";
+  if (set.has("NetAmount")) return "NetAmount";
+  if (set.has("NetSlsNetAmount")) return "NetSlsNetAmount";
+  return resolveAnalyticsColumns(table).amountCol;
 }
 
 function getCanonicalSalesContext() {
@@ -109,6 +165,10 @@ function remapLegacyColumnNames(sql) {
   if (!/APP_REPORT/i.test(c.table) && !isSalespersonView) {
     s = s.replace(/\bdbo\.VW_MB_POWERBI_APP_REPORT\b/gi, c.table);
     s = s.replace(/\bVW_MB_POWERBI_APP_REPORT\b/gi, c.tableShort);
+    if (!/SLSXNS/i.test(c.table)) {
+      s = s.replace(/\bdbo\.VW_MB_POWERBI_SLSXNS_REPORT\b/gi, c.table);
+      s = s.replace(/\bVW_MB_POWERBI_SLSXNS_REPORT\b/gi, c.tableShort);
+    }
     if (/SLSXNS/i.test(c.table)) {
       s = s.replace(/\b\[MrpValue\]/gi, `[${c.amountCol}]`);
       s = s.replace(/\bMrpValue\b/gi, c.amountCol);
@@ -173,6 +233,35 @@ function parseTrendDaySpan(question, fallback = 30) {
     return Math.min(Math.max(parseInt(m2[1], 10) || fallback, 1), 366);
   }
   return fallback;
+}
+
+/** Top suppliers/brands by MrpValue on the sales fact (not purchase inward). */
+function isTopVendorsByMrpValueQuestion(question) {
+  const q = String(question || "").toLowerCase();
+  if (!/\b(vendors?|suppliers?)\b/.test(q)) return false;
+  if (!/\b(top|highest|best|leading|rank)\b/.test(q)) return false;
+  if (/\b(purchase|procurement|inward|grn|buying)\b/.test(q) && !/\bMrpValue\b/i.test(question)) {
+    return false;
+  }
+  return /\bMrpValue\b/i.test(question) || /\b(revenue|sales|turnover)\b/.test(q);
+}
+
+function buildTopVendorsByMrpValueSql(question) {
+  const c = getCanonicalSalesContext();
+  const amountCol = pickMrpAmountColumn(c.table);
+  const vendorCol = resolveStaffDimensionColumn(c.table);
+  const nMatch = String(question || "").match(/\btop\s*(\d+)\b/i);
+  const topN = Math.min(Math.max(parseInt(nMatch ? nMatch[1] : 10, 10) || 10, 1), 100);
+  const mtd = buildMtdWhereClause(c.dateCol);
+  return (
+    `SELECT TOP (${topN}) [${vendorCol}] AS Vendor, ` +
+    `SUM(ISNULL([${amountCol}], 0)) AS TotalMrpValue ` +
+    `FROM ${c.table} WITH (NOLOCK) ` +
+    `WHERE ${mtd} ` +
+    `GROUP BY [${vendorCol}] ` +
+    `HAVING SUM(ISNULL([${amountCol}], 0)) > 0 ` +
+    `ORDER BY TotalMrpValue DESC`
+  );
 }
 
 function buildDailyRevenueTrendSql(question) {
@@ -243,6 +332,9 @@ function buildBillsTodaySql() {
 
 module.exports = {
   getCanonicalSalesTable,
+  getSalesFactTableCandidates,
+  markSalesFactTableUnavailable,
+  rewriteSqlToAvailableSalesFact,
   getCanonicalSalesContext,
   resolveStaffDimensionColumn,
   buildMtdWhereClause,
@@ -252,6 +344,8 @@ module.exports = {
   isSalesDomainQuestion,
   isDailyRevenueTrendQuestion,
   buildDailyRevenueTrendSql,
+  isTopVendorsByMrpValueQuestion,
+  buildTopVendorsByMrpValueSql,
   getBillsKpiTable,
   buildBillsTodaySql,
   translateJargonToColumn,

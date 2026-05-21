@@ -375,15 +375,15 @@ function validateSqlAccuracy(generatedSql, userQuestion, context = {}) {
       runtimeConfig.get("SALES_AI_TABLE") ||
       ""
   ).trim();
-  const blocksAppReport =
+  const blocksWrongSalesView =
     canonicalSales &&
-    /SLSXNS/i.test(canonicalSales) &&
-    /APP_REPORT/i.test(upper) &&
-    /\b(revenue|sales|turnover|gross|trend|daily|by\s+day)\b/.test(q);
-  if (blocksAppReport) {
+    /APP_REPORT|SLSXNS/i.test(upper) &&
+    !new RegExp(canonicalSales.replace(/\./g, "\\."), "i").test(upper) &&
+    /\b(revenue|sales|turnover|gross|trend|daily|by\s+day|vendor|supplier)\b/.test(q);
+  if (blocksWrongSalesView) {
     return {
       isValid: false,
-      reason: `Use ${canonicalSales} (NetSlsNetAmount) — dbo.VW_MB_POWERBI_APP_REPORT is not available on this database.`,
+      reason: `Use ${canonicalSales} for this question — the SQL targets a view that is not deployed on this database.`,
     };
   }
 

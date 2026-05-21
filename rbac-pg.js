@@ -79,6 +79,15 @@ async function initAndLoad(configPath) {
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS erp_sql_templates (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        sql         TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_by  TEXT NOT NULL DEFAULT '',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
 
     // Check if users have already been bootstrapped from the file
@@ -311,6 +320,92 @@ async function closePool() {
   }
 }
 
+/* ── SQL Templates — stored in PostgreSQL so they survive redeployments ──── */
+
+/**
+ * List all SQL templates, newest first.
+ * @returns {Promise<Array<{id,name,sql,desc,createdAt,updatedAt,createdBy}>>}
+ */
+async function listSqlTemplates() {
+  if (!pool) return null; // caller falls back to JSON file
+  const r = await pool.query(
+    "SELECT id, name, sql, description, created_by, created_at, updated_at FROM erp_sql_templates ORDER BY created_at DESC"
+  );
+  return r.rows.map((row) => ({
+    id:        row.id,
+    name:      row.name,
+    sql:       row.sql,
+    desc:      row.description || "",
+    createdBy: row.created_by || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+/**
+ * Create a new SQL template.
+ * @param {{ id: string, name: string, sql: string, desc?: string, createdBy?: string }} tpl
+ */
+async function createSqlTemplate(tpl) {
+  if (!pool) return null;
+  await pool.query(
+    `INSERT INTO erp_sql_templates (id, name, sql, description, created_by, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+    [tpl.id, tpl.name, tpl.sql, tpl.desc || "", tpl.createdBy || ""]
+  );
+}
+
+/**
+ * Update an existing SQL template.
+ * @param {string} id
+ * @param {{ name: string, sql: string, desc?: string }} fields
+ * @returns {Promise<boolean>} true if found and updated
+ */
+async function updateSqlTemplate(id, fields) {
+  if (!pool) return false;
+  const r = await pool.query(
+    `UPDATE erp_sql_templates SET name = $1, sql = $2, description = $3, updated_at = NOW()
+     WHERE id = $4`,
+    [fields.name, fields.sql, fields.desc || "", id]
+  );
+  return r.rowCount > 0;
+}
+
+/**
+ * Delete a SQL template.
+ * @param {string} id
+ * @returns {Promise<boolean>} true if found and deleted
+ */
+async function deleteSqlTemplate(id) {
+  if (!pool) return false;
+  const r = await pool.query("DELETE FROM erp_sql_templates WHERE id = $1", [id]);
+  return r.rowCount > 0;
+}
+
+/**
+ * One-time import: copy templates from JSON array into Postgres (skips duplicates).
+ * @param {Array<{id,name,sql,desc,createdBy,createdAt}>} templates
+ */
+async function importSqlTemplatesFromJson(templates) {
+  if (!pool || !Array.isArray(templates) || templates.length === 0) return;
+  for (const t of templates) {
+    await pool.query(
+      `INSERT INTO erp_sql_templates (id, name, sql, description, created_by, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        t.id,
+        t.name,
+        t.sql,
+        t.desc || t.description || "",
+        t.createdBy || t.created_by || "",
+        t.createdAt || t.created_at || new Date(),
+        t.updatedAt || t.updated_at || new Date(),
+      ]
+    );
+  }
+}
+
 module.exports = {
   connectionString,
   initAndLoad,
@@ -320,4 +415,10 @@ module.exports = {
   setPasswordHash,
   isConfigured,
   closePool,
+  listSqlTemplates,
+  createSqlTemplate,
+  updateSqlTemplate,
+  deleteSqlTemplate,
+  importSqlTemplatesFromJson,
+  getPool: () => pool,
 };

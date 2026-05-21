@@ -2860,6 +2860,14 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     : (process.env.OPENAI_MODEL || "gpt-4o-mini");
   const claudeApiKey = isClaude ? (process.env.ANTHROPIC_API_KEY || "") : undefined;
   const forceMode = String(req.body?.forceMode ?? "").trim().toLowerCase(); // "langgraph" | ""
+  // Multi-turn conversation history — last 3 Q→SQL pairs from the UI chat
+  const conversationHistory = Array.isArray(req.body?.conversationHistory)
+    ? req.body.conversationHistory.slice(-3).map(h => ({
+        question: String(h.question || "").slice(0, 500),
+        sql: String(h.sql || "").slice(0, 2000),
+        summary: String(h.summary || "").slice(0, 300),
+      }))
+    : [];
 
   // ── LangGraph (Adaptive Agent): Home KPI align → full graph (no static cache) ──
   if (forceMode === "langgraph") {
@@ -2894,6 +2902,7 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
         dateContext,
         userDateRange,
         tableHint: tableHint || undefined,
+        conversationHistory,
       });
       if (lg.clarificationNeeded) {
         return res.json({
@@ -3100,183 +3109,109 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     return;
   }
 
-  // Single deterministic path first: strict intent -> semantic mapping -> SQL templates.
-  try {
-    const deterministic = await runDeterministicQuery({
-      apiKey: String(apiKey).trim(),
-      model,
-      question,
-      pool,
-      fromDate,
-      toDate,
-    });
-    if (deterministic?.handled) {
-      if (
-        deterministic.intent &&
-        String(deterministic.intent.confidence || "").toLowerCase() === "low" &&
-        deterministic.intent.clarification_question
-      ) {
-        return res.json({
-          clarificationNeeded: true,
-          clarificationQuestion: deterministic.intent.clarification_question,
-          mode: "deterministic",
-          intentType: String(deterministic.intent.intent || "generic"),
-        });
-      }
-      const data = rowsForJson(deterministic.data || []);
-      const tags = tagColumnsByValues(data);
-      const intentTypeRaw = String(deterministic.intent?.intent || "generic");
-      const intentType = reconcileIntentTypeForResponse(question, intentTypeRaw, data);
-      const shapeChart = chartPolicyFromResultShape(data);
-      const chartPolicyBase =
-        shapeChart !== "table" ? shapeChart : deterministic.chartPolicy ||
-        (intentType === "trend" ? "line" :
-          intentType === "top_n" || intentType === "breakdown" ? "bar" :
-          intentType === "kpi" ? "kpi_card" : "auto");
-      const chartPolicy = preferChartForTrendQuestion(question, intentType, chartPolicyBase);
-      const plannerLogicalPlan = deterministic.intent?.planner?.logicalPlan ?? null;
-      const drillDownSuggestions = await maybeDrillDownSuggestions({
-        apiKey: String(apiKey).trim(),
-        model,
-        question,
-        data,
-        intentType,
-        tableHint,
-      });
-      return res.json({
-        sql: deterministic.sql,
-        rowCount: data.length,
-        data,
-        mode: "deterministic",
-        tableHint: tableHint || null,
-        summary: deterministic.summary || null,
-        intentType,
-        intentDescription: "Deterministic semantic-template pipeline",
-        chartPolicy,
-        dataSource: "full_aggregate",
-        contractPassed: deterministic.reliability?.ok !== false,
-        contractIssues: deterministic.reliability?.ok ? [] : [deterministic.reliability?.reason || "reliability_check_failed"],
-        contractWarnings: deterministic.reliability?.reason === "fallback_applied" ? ["Applied deterministic fallback query for higher accuracy."] : [],
-        columnTags: tags,
-        confidence: deterministic.confidence?.level || "high",
-        confidenceNote: deterministic.confidence?.note || "",
-        retryCount: deterministic.retriesUsed || 0,
-        interpretation: deterministic.interpretation || null,
-        logicalPlan: plannerLogicalPlan,
-        drillDownSuggestions,
-      });
-    }
-  } catch (detErr) {
-    console.warn("[adaptive] deterministic pipeline skipped:", detErr.message);
-  }
-
-  // ── Semantic parser runs FIRST — before any LLM fallback ──────────────────
-  // Same input → same intent every time. Used by LangGraph fallback AND main path.
+  // ── Primary AI path: LangGraph adaptive agent ────────────────────────────
+  // Semantic parser enriches the question with structural hints (GROUP BY, ORDER BY etc.)
+  // before handing off to LangGraph — so the 9-node graph gets better grounding.
   const parsedIntent = parseQuery(question);
   const semanticConstraints = buildIntentConstraints(parsedIntent);
+  try {
+    const dateContext = buildDateContext();
+    const userDateRange = {};
+    if (fromDate) userDateRange.from = fromDate;
+    if (toDate)   userDateRange.to   = toDate;
+    const lgQuestion = semanticConstraints
+      ? `${question}${semanticConstraints}`
+      : question;
+    const lg = await runLangChainQuery({
+      apiKey:            String(apiKey || "").trim(),
+      model,
+      provider:          aiProvider,
+      claudeApiKey,
+      question:          lgQuestion,
+      pool,
+      dateContext,
+      userDateRange,
+      tableHint:         tableHint || undefined,
+      conversationHistory,
+    });
 
-  // Optional fallback: deterministic-first, then LangGraph for hard/edge queries.
-  // Skip LangGraph for comparison queries — it generates trend queries instead of UNION ALL.
-  const langgraphFallbackOn = !/^(0|false|no)$/i.test(String(process.env.DETERMINISTIC_LANGGRAPH_FALLBACK || "1").trim());
-  const skipLGForComparison = parsedIntent.queryType === "comparison";
-  if (langgraphFallbackOn && !skipLGForComparison) {
-    try {
-      const dateContext = buildDateContext();
-      const userDateRange = {};
-      if (fromDate) userDateRange.from = fromDate;
-      if (toDate) userDateRange.to = toDate;
-      // Pass semantic constraints so LangGraph uses correct SQL structure
-      const lgQuestion = semanticConstraints
-        ? `${question}${semanticConstraints}`
-        : question;
-      const lg = await runLangChainQuery({
-        apiKey:       String(apiKey || "").trim(),
-        model,
-        provider:     aiProvider,
-        claudeApiKey,
-        question:     lgQuestion,
-        pool,
-        dateContext,
-        userDateRange,
-        tableHint: tableHint || undefined,
+    if (lg.clarificationNeeded) {
+      return res.json({
+        clarificationNeeded:  true,
+        clarificationQuestion: lg.clarificationQuestion,
+        clarificationOptions: lg.clarificationOptions || [],
+        suggestedOptions:     lg.suggestedOptions || [],
+        uiType:               lg.uiType || "SUGGESTION_CHIPS",
+        status:               "CLARIFICATION_REQUIRED",
+        mode:                 "pre_flight_clarification",
+        preFlightMs:          lg.preFlightMs,
+        clarityScore:         lg.clarityScore,
+        tableHint:            tableHint || null,
+        userGuidanceMeta,
       });
-      if (lg.clarificationNeeded) {
-        return res.json({
-          clarificationNeeded: true,
-          clarificationQuestion: lg.clarificationQuestion,
-          clarificationOptions: lg.clarificationOptions || [],
-          suggestedOptions: lg.suggestedOptions || [],
-          uiType: lg.uiType || "SUGGESTION_CHIPS",
-          status: "CLARIFICATION_REQUIRED",
-          mode: "pre_flight_clarification",
-          preFlightMs: lg.preFlightMs,
-          clarityScore: lg.clarityScore,
-          tableHint: tableHint || null,
-          userGuidanceMeta,
-        });
-      }
-      if (lg.fastPath && Array.isArray(lg.data) && lg.data.length >= 0) {
-        const data = rowsForJson(lg.data || []);
-        const tags = tagColumnsByValues(data);
-        const intent = classifyQueryIntent(question);
-        const lgShape = detectResultShape(data, tags);
-        const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
-        const lgChart = preferChartForTrendQuestion(question, lgIntent, lgShape.chartType || "kpi_card");
-        return res.json({
-          sql: lg.sql,
-          rowCount: data.length,
-          data,
-          mode: "fast_path",
-          tableHint: tableHint || null,
-          summary: lg.answer || null,
-          intentType: lgIntent,
-          intentDescription: "Pre-flight cached SQL (no LLM planning)",
-          chartPolicy: lgChart,
-          resultShape: lgShape.shape,
-          dataSource: "fast_path_cache",
-          contractPassed: true,
-          contractIssues: [],
-          columnTags: tags,
-          confidence: "high",
-          confidenceNote: `Fast path ${lg.preFlightMs}ms`,
-          retryCount: 0,
-          preFlightMs: lg.preFlightMs,
-        });
-      }
-      if (Array.isArray(lg.data) && lg.data.length > 0) {
-        const data = rowsForJson(lg.data);
-        const tags = tagColumnsByValues(data);
-        const intent = classifyQueryIntent(question);
-        // Shape-based chart detection — not name guessing
-        const lgShape = detectResultShape(data, tags);
-        const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
-        const lgChartRaw =
-          lgShape.chartType || (lgShape.shape !== "table" ? lgShape.chartType : intent.chartPolicy) || "auto";
-        const lgChart = preferChartForTrendQuestion(question, lgIntent, lgChartRaw);
-        return res.json({
-          sql: lg.sql,
-          rowCount: data.length,
-          data,
-          mode: "deterministic_langgraph_fallback",
-          tableHint: tableHint || null,
-          summary: lg.answer || null,
-          intentType: lgIntent,
-          intentDescription: "Deterministic pipeline with LangGraph fallback",
-          chartPolicy: lgChart,
-          resultShape: lgShape.shape,
-          dataSource: "full_aggregate",
-          contractPassed: true,
-          contractIssues: [],
-          contractWarnings: ["Fallback path used LangGraph execution for higher recovery."],
-          columnTags: tags,
-          confidence: lg.confidence || "medium",
-          confidenceNote: lg.confidenceNote || "",
-          retryCount: lg.retryCount || 0,
-        });
-      }
-    } catch (lgErr) {
-      console.warn("[adaptive] langgraph fallback skipped:", lgErr.message);
     }
+
+    // Fast-path result (canonical SQL matched without LLM)
+    if (lg.fastPath && Array.isArray(lg.data) && lg.data.length >= 0) {
+      const data   = rowsForJson(lg.data || []);
+      const tags   = tagColumnsByValues(data);
+      const intent = classifyQueryIntent(question);
+      const lgShape  = detectResultShape(data, tags);
+      const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
+      const lgChart  = preferChartForTrendQuestion(question, lgIntent, lgShape.chartType || "kpi_card");
+      return res.json({
+        sql: lg.sql, rowCount: data.length, data,
+        mode: "fast_path", tableHint: tableHint || null,
+        summary: lg.answer || null,
+        intentType: lgIntent,
+        intentDescription: "Pre-flight canonical SQL (no LLM call)",
+        chartPolicy: lgChart, resultShape: lgShape.shape,
+        dataSource: "fast_path_cache",
+        contractPassed: true, contractIssues: [],
+        columnTags: tags,
+        confidence: "high", confidenceNote: `Fast path ${lg.preFlightMs}ms`,
+        retryCount: 0, preFlightMs: lg.preFlightMs,
+      });
+    }
+
+    // Full LangGraph result
+    if (Array.isArray(lg.data) && lg.data.length >= 0) {
+      const data   = rowsForJson(lg.data || []);
+      const tags   = tagColumnsByValues(data);
+      const intent = classifyQueryIntent(question);
+      const lgShape  = detectResultShape(data, tags);
+      const lgIntent = reconcileIntentTypeForResponse(question, intent.type, data);
+      const lgChartRaw =
+        lgShape.chartType || (lgShape.shape !== "table" ? lgShape.chartType : intent.chartPolicy) || "auto";
+      const lgChart = preferChartForTrendQuestion(question, lgIntent, lgChartRaw);
+      const drillDownSuggestions = await maybeDrillDownSuggestions({
+        apiKey: String(apiKey).trim(), model, question, data, intentType: lgIntent, tableHint,
+      });
+      return res.json({
+        sql: lg.sql, rowCount: data.length, data,
+        mode: lg.retryCount > 0 ? "langgraph_recovered" : "langgraph",
+        tableHint: tableHint || null,
+        summary: lg.answer || null,
+        intentType: lgIntent,
+        intentDescription:
+          "Adaptive agent — schema RAG → intent resolution → T-SQL → self-healing retry (AskYourDatabase-style)",
+        chartPolicy: lgChart, resultShape: lgShape.shape,
+        dataSource: "full_aggregate",
+        contractPassed: data.length > 0,
+        contractIssues: data.length === 0 ? ["No rows returned"] : [],
+        contractWarnings: [],
+        columnTags: tags,
+        confidence: lg.confidence || "medium",
+        confidenceNote: lg.confidenceNote || "",
+        retryCount: lg.retryCount || 0,
+        _langchainNodes: lg.nodeLog || [],
+        drillDownSuggestions,
+        userGuidanceMeta,
+      });
+    }
+  } catch (lgErr) {
+    console.warn("[adaptive] LangGraph primary path error:", lgErr.message);
+    // Fall through to legacy path below
   }
 
   // ── Classify intent before SQL generation ──────────────────────────────────
@@ -3342,8 +3277,9 @@ app.post("/api/query/adaptive", rbac.requireFeature("ai"), async (req, res) => {
     return lines.join("\n");
   }
 
-  // parsedIntent + semanticConstraints already computed above (before LangGraph fallback).
-  // Domain-specific ERP guidance stacked after structural constraints.
+  // ── EMERGENCY LAST-RESORT: plain nlToSelectSql (no RAG, no value sampling) ──
+  // Reached only when LangGraph threw an exception (network error, quota exceeded etc).
+  // parsedIntent + semanticConstraints already computed above before the LangGraph block.
   const guidedQuestion = `${question}${semanticConstraints}${buildIntentGuidance(question)}${buildIntentContractGuidance(queryIntent)}`;
 
   let sqlText;
@@ -4031,14 +3967,69 @@ app.delete("/api/ai/history", rbac.rbacMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * GET /api/ai/suggestions — dynamic suggestion chips for the AI Query panel.
+ * Returns top RAG examples (verified Q→SQL pairs) sorted by use-frequency score,
+ * supplemented with curated fallback chips when the RAG store has < 5 entries.
+ * No auth required (same as /api/sql-templates GET).
+ */
+app.get("/api/ai/suggestions", async (req, res) => {
+  const FALLBACK_SUGGESTIONS = [
+    { q: "Top 10 branches by total gross revenue (MrpValue) this month",    hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 10 salespersons by total sales this month",                   hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 10 product categories by total sales this month",              hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Today's total gross revenue and number of bills",                  hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Monthly sales trend for the last 6 months grouped by month",       hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 10 articles by quantity sold this month",                      hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 10 departments by gross revenue this month",                   hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 10 vendors by purchase amount this month",                     hint: "dbo.VW_MB_POWERBI_PUR_REPORT" },
+    { q: "Compare this month vs last month gross revenue by branch",         hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+    { q: "Top 20 highest selling articles all time by total MrpValue",       hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
+  ];
+
+  try {
+    // Pull top verified examples from RAG store — these improve as users correct queries
+    const examples = await ragStore.search("sales revenue branch department category trend", 20, { type: "example" });
+    const verified  = examples
+      .filter(r => r.score >= 0.35 && r.metadata?.question && r.metadata?.sql)
+      .slice(0, 12)
+      .map(r => ({
+        q:    String(r.metadata.question).trim(),
+        hint: r.metadata.tableHint || r.metadata.hint || null,
+        rag:  true,
+      }));
+
+    // Merge: RAG chips first, then fill from fallback if fewer than 6 RAG results
+    const combined = [...verified];
+    if (combined.length < 6) {
+      for (const fb of FALLBACK_SUGGESTIONS) {
+        if (!combined.some(c => c.q === fb.q)) combined.push(fb);
+        if (combined.length >= 10) break;
+      }
+    }
+    return res.json({ ok: true, suggestions: combined.slice(0, 12) });
+  } catch (e) {
+    console.warn("[ai/suggestions] RAG search failed, returning fallback:", e.message);
+    return res.json({ ok: true, suggestions: FALLBACK_SUGGESTIONS });
+  }
+});
+
 /* ─────────────────────────────────────────────────────────────
    SQL TEMPLATES — server-side CRUD
    Stored in data/sql-templates.json, shared across all users.
    Each template: { id, name, sql, desc, createdAt, updatedAt }
    ───────────────────────────────────────────────────────────── */
+/*
+ * SQL Templates — PostgreSQL primary, JSON file fallback.
+ * PostgreSQL (erp_sql_templates) is used when RBAC_DATABASE_URL / DATABASE_URL is set.
+ * JSON file (data/sql-templates.json) is used as fallback on cold start / PG down.
+ * On first startup with PG, any existing JSON templates are imported once.
+ */
 const SQL_TEMPLATES_PATH = path.join(rootDir, "data", "sql-templates.json");
+const rbacPg = require("./rbac-pg");
 
-function readSqlTemplates() {
+/* ── JSON file helpers (fallback) ─────────────────────────────────────────── */
+function _readJsonTemplates() {
   try {
     const dir = path.dirname(SQL_TEMPLATES_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -4046,27 +4037,54 @@ function readSqlTemplates() {
     return JSON.parse(fs.readFileSync(SQL_TEMPLATES_PATH, "utf8") || "[]");
   } catch { return []; }
 }
-
-function writeSqlTemplates(templates) {
-  const dir = path.dirname(SQL_TEMPLATES_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SQL_TEMPLATES_PATH, JSON.stringify(templates, null, 2) + "\n", "utf8");
+function _writeJsonTemplates(templates) {
+  try {
+    const dir = path.dirname(SQL_TEMPLATES_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SQL_TEMPLATES_PATH, JSON.stringify(templates, null, 2) + "\n", "utf8");
+  } catch (e) { console.warn("[sql-templates] JSON write failed:", e.message); }
 }
 
-/** GET /api/sql-templates — list all (auth: global rbacMiddleware on /api/*) */
-app.get("/api/sql-templates", (req, res) => {
-  res.json({ ok: true, templates: readSqlTemplates() });
+/* ── One-time JSON → PG import on startup ────────────────────────────────── */
+let _tplImportDone = false;
+async function _maybeImportJsonTemplatesToPg() {
+  if (_tplImportDone) return;
+  _tplImportDone = true;
+  try {
+    const fromFile = _readJsonTemplates();
+    if (fromFile.length > 0) {
+      await rbacPg.importSqlTemplatesFromJson(fromFile);
+      console.log(`[sql-templates] Imported ${fromFile.length} templates from JSON → Postgres`);
+    }
+  } catch (e) {
+    console.warn("[sql-templates] JSON→PG import failed (non-fatal):", e.message);
+  }
+}
+
+/* Schedule one-time import 5 s after boot (rbac-pg pool is ready by then) */
+setTimeout(() => _maybeImportJsonTemplatesToPg().catch(() => {}), 5000);
+
+/** GET /api/sql-templates — list all */
+app.get("/api/sql-templates", async (req, res) => {
+  try {
+    const pgList = await rbacPg.listSqlTemplates();
+    if (pgList !== null) {
+      return res.json({ ok: true, templates: pgList });
+    }
+  } catch (e) {
+    console.warn("[sql-templates] PG list failed, using JSON file:", e.message);
+  }
+  res.json({ ok: true, templates: _readJsonTemplates() });
 });
 
 /** POST /api/sql-templates — create */
-app.post("/api/sql-templates", rbac.requireManagerOrAdminApi, (req, res) => {
+app.post("/api/sql-templates", rbac.requireManagerOrAdminApi, async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const sql  = String(req.body?.sql  ?? "").trim();
   const desc = String(req.body?.desc ?? "").trim();
   if (!name || !sql) {
     return res.status(400).json({ error: "missing_fields", message: "name and sql are required" });
   }
-  const templates = readSqlTemplates();
   const entry = {
     id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name, sql, desc,
@@ -4074,13 +4092,23 @@ app.post("/api/sql-templates", rbac.requireManagerOrAdminApi, (req, res) => {
     updatedAt: new Date().toISOString(),
     createdBy: (req.rbac && req.rbac.email) || "unknown",
   };
+  try {
+    const pgOk = await rbacPg.createSqlTemplate({ ...entry, createdBy: entry.createdBy });
+    if (pgOk !== null) {
+      return res.json({ ok: true, template: entry });
+    }
+  } catch (e) {
+    console.warn("[sql-templates] PG create failed, writing JSON file:", e.message);
+  }
+  // JSON fallback
+  const templates = _readJsonTemplates();
   templates.unshift(entry);
-  writeSqlTemplates(templates);
+  _writeJsonTemplates(templates);
   res.json({ ok: true, template: entry });
 });
 
 /** PUT /api/sql-templates/:id — update */
-app.put("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, (req, res) => {
+app.put("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, async (req, res) => {
   const { id } = req.params;
   const name = String(req.body?.name ?? "").trim();
   const sql  = String(req.body?.sql  ?? "").trim();
@@ -4088,23 +4116,45 @@ app.put("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, (req, res) => {
   if (!name || !sql) {
     return res.status(400).json({ error: "missing_fields", message: "name and sql are required" });
   }
-  const templates = readSqlTemplates();
+  try {
+    const updated = await rbacPg.updateSqlTemplate(id, { name, sql, desc });
+    if (updated) {
+      return res.json({ ok: true, template: { id, name, sql, desc, updatedAt: new Date().toISOString() } });
+    }
+    if (updated === false) {
+      return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
+    }
+  } catch (e) {
+    console.warn("[sql-templates] PG update failed, using JSON file:", e.message);
+  }
+  // JSON fallback
+  const templates = _readJsonTemplates();
   const idx = templates.findIndex(t => t.id === id);
   if (idx < 0) return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
   templates[idx] = { ...templates[idx], name, sql, desc, updatedAt: new Date().toISOString() };
-  writeSqlTemplates(templates);
+  _writeJsonTemplates(templates);
   res.json({ ok: true, template: templates[idx] });
 });
 
 /** DELETE /api/sql-templates/:id — delete */
-app.delete("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, (req, res) => {
+app.delete("/api/sql-templates/:id", rbac.requireManagerOrAdminApi, async (req, res) => {
   const { id } = req.params;
-  const templates = readSqlTemplates();
+  try {
+    const deleted = await rbacPg.deleteSqlTemplate(id);
+    if (deleted) return res.json({ ok: true });
+    if (deleted === false) {
+      return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
+    }
+  } catch (e) {
+    console.warn("[sql-templates] PG delete failed, using JSON file:", e.message);
+  }
+  // JSON fallback
+  const templates = _readJsonTemplates();
   const next = templates.filter(t => t.id !== id);
   if (next.length === templates.length) {
     return res.status(404).json({ error: "not_found", message: `Template ${id} not found` });
   }
-  writeSqlTemplates(next);
+  _writeJsonTemplates(next);
   res.json({ ok: true });
 });
 
@@ -4630,81 +4680,6 @@ app.post("/api/rag/reseed", rbac.requireManagerOrAdminApi, async (req, res) => {
     await initMCPClient();
   } catch (err) {
     console.error("[mcp:http] MCP Client failed to connect:", err.message || err);
-    console.warn("[mcp:http] Agentic queries will use in-process tools until MCP HTTP is reachable");
+    console.warn("[mcp:http] Agentic queries will use in-process tools until MCP HTTP is reachable.");
   }
-
-  // Seed RAG with business semantic layer + query examples + KPI dictionary.
-  // Runs in background — idempotent, only re-seeds when metadata files change.
-  seedRagKnowledge().catch(e =>
-    console.warn("[semantic-seeder] non-fatal:", e.message)
-  );
-
-  // Index raw schema into RAG store in background (non-blocking)
-  ragSchemaIndexer.indexSchema().catch(e =>
-    console.warn("[rag-schema-indexer] background index failed:", e.message)
-  );
-
-  // Seed golden Q→SQL examples into RAG store (idempotent — skips if already seeded)
-  seedGoldenExamples().catch(e =>
-    console.warn("[golden-seeder] non-fatal:", e.message)
-  );
-
-  // Schedule analytics cache warm-up (30s delay, then every 15 min).
-  // Pre-runs MTD/QTD/YTD/180d so the first user never waits for a cold query.
-  // Disable: ANALYTICS_WARMUP=0 in .env
-  getPool().then(pool => scheduleAnalyticsWarmup(pool)).catch(() => {});
-
-  if (!/^(0|false|no)$/i.test(String(process.env.BUILD_DIMENSION_INDEX_ON_STARTUP || "0").trim())) {
-    getPool()
-      .then(async (pool) => {
-        const { buildDimensionIndex } = require("./scripts/build-dimension-index");
-        const { indexIsStale } = require("./services/dimension-index");
-        if (indexIsStale(24)) {
-          await buildDimensionIndex(pool);
-          console.log("[dimension-index] background build complete");
-        }
-      })
-      .catch((e) => console.warn("[dimension-index] startup build skipped:", e.message));
-  }
-
-  server.listen(port, "0.0.0.0", () => {
-    server.ref();
-    console.log(`ERP API listening on http://0.0.0.0:${port} (pid ${process.pid})`);
-    console.log(
-      "[datasets] DATASET_HARD_CAP=%s  DATASET_PAGE_MAX=%s (editable in Admin → System Settings; hot-reload)",
-      getDatasetHardCap(),
-      getDatasetPageMax()
-    );
-    console.log(
-      "Leave this window open. Health: http://127.0.0.1:%s/api/health  Dashboard: http://127.0.0.1:%s/dashboard.html",
-      port,
-      port
-    );
-    for (const rel of [
-      "assets/dashboard.css",
-      "assets/shared-core.jsx",
-      "assets/page-shell.jsx",
-      "panels/home.js",
-    ]) {
-      const fp = path.join(__dirname, rel);
-      if (fs.existsSync(fp)) {
-        console.log(`[dashboard] static OK  /${rel.replace(/\\/g, "/")}`);
-      } else {
-        console.warn(`[dashboard] MISSING ${rel} — run: node scripts/split-dashboard-pages.js`);
-      }
-    }
-
-    if (rbac.rbacEnabled()) {
-      try {
-        const cfg = rbac.loadUsersConfigFresh();
-        const n = (cfg.users || []).length;
-        const where = rbac.usesPostgresForUsers() ? "PostgreSQL" : "users-config.json";
-        console.log(`[rbac] ON — ${n} user(s) in ${where} (emails must match X-User-Email for Sheets)`);
-      } catch (e) {
-        console.warn("[rbac] user list read failed:", e.message);
-      }
-    } else {
-      console.log("[rbac] off — set RBAC_ENABLED=1 to require X-User-Email");
-    }
-  });
 })();

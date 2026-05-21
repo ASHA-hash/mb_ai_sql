@@ -253,9 +253,9 @@ const SETTINGS_MANIFEST = [
     label: "Analytics base table",
     group: "analytics",
     type: "string",
-    default: "dbo.VW_MB_POWERBI_SLSXNS_REPORT",
+    default: "dbo.VW_MB_POWERBI_SLS_REPORT",
     requiresRestart: false,
-    description: "Base view for Home KPI cards and the Analytics dashboard.",
+    description: "Base view for Home KPI cards and the Analytics dashboard (use SLS_REPORT if SLSXNS is not deployed).",
   },
   {
     key: "SALES_ANALYTICS_AMOUNT_COLUMN",

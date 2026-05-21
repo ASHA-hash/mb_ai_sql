@@ -91,7 +91,7 @@
     "purchase": {
       "label": "Purchase / vendor inward",
       "match": ["purchase", "procurement", "inward", "grn", "vendor"],
-      "exclude": ["salesperson", "sales rep"],
+      "exclude": ["salesperson", "sales rep", "mrpvalue", "mrp value"],
       "viewEnv": null,
       "defaultView": "dbo.VW_MB_POWERBI_PURXNS_REPORT",
       "metrics": {

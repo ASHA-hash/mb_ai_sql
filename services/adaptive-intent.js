@@ -302,7 +302,7 @@ function buildIntentUserPrompt(state) {
           )
           .join("\n") +
         "\n[Use history to resolve pronouns like 'same branch', 'those products', 'compare to last']"
-      : "";
+    : "";
 
   return (
     `[ORIGINAL USER QUESTION]\n${rootQ}\n\n` +

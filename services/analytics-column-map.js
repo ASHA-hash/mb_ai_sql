@@ -32,7 +32,7 @@ const ENV_ROLE_KEYS = {
   cat: "SALES_ANALYTICS_CATEGORY_DIM",
 };
 
-const DEFAULT_ANALYTICS_TABLE = "dbo.VW_MB_POWERBI_SLSXNS_REPORT";
+const DEFAULT_ANALYTICS_TABLE = "dbo.VW_MB_POWERBI_SLS_REPORT";
 
 function normalizeTableKey(table) {
   const t = String(table || "").trim();

@@ -123,6 +123,8 @@ function AIQueryPanel({ auth, initialContext }) {
   const [queryToDate, setQueryToDate] = useState("");
   const [queryMode, setQueryMode]     = useState(() => { try { return localStorage.getItem("erp_ai_mode") || "langgraph"; } catch { return "langgraph"; } });
   const [aiProvider, setAiProvider]   = useState(() => { try { return localStorage.getItem("erp_ai_provider") || "openai"; } catch { return "openai"; } });
+  // Dynamic suggestions — loaded from RAG store, fall back to static list
+  const { suggestions: dynamicSuggestions } = useDynamicSuggestions(auth?.token);
   /* Sales dashboard (intent) UI */
   const [sdDrill, setSdDrill] = useState({});
   const [sdBarAxis, setSdBarAxis] = useState("vertical");
@@ -1753,11 +1755,16 @@ function AIQueryPanel({ auth, initialContext }) {
         </div>
       )}
 
-      {/* Suggestions */}
+      {/* Suggestions — live from RAG store, falls back to static list */}
       <div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">💡 Suggestions</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+          💡 Suggestions
+          {dynamicSuggestions.some(s => s.rag) && (
+            <span className="ml-2 text-[9px] font-semibold text-indigo-400 uppercase tracking-wider">✦ AI-Learned</span>
+          )}
+        </p>
         <div className="flex flex-wrap gap-2">
-          {AI_SUGGESTIONS.map(s => {
+          {dynamicSuggestions.map(s => {
             const text = s.q || s;
             return (
               <button key={text} type="button" onClick={() => { setQuestion(text); run(text, s.hint); }} className="chip">

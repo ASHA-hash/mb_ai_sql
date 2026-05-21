@@ -44,7 +44,14 @@ const {
   discoverLiveSamplesForQuestion,
 } = require("./services/agentic-db-tools");
 const { validateSqlAccuracy } = require("./services/sql-validator");
-const { getCanonicalSalesContext, remapLegacyColumnNames } = require("./services/canonical-sales-sql");
+const {
+  getCanonicalSalesContext,
+  remapLegacyColumnNames,
+  markSalesFactTableUnavailable,
+  rewriteSqlToAvailableSalesFact,
+  isTopVendorsByMrpValueQuestion,
+  buildTopVendorsByMrpValueSql,
+} = require("./services/canonical-sales-sql");
 const { getCanonicalPurchaseContext } = require("./services/canonical-purchase-sql");
 const {
   isSalespersonTopNQuestion,
@@ -902,6 +909,38 @@ function makeErrorRecovery(llm) {
     const failedSQL = state.executionResult?.failed_sql || state.checkedSQL || state.generatedSQL;
     const attempt   = (state.retryCount || 0) + 1;
     console.log("[langchain] node: error_recovery attempt", attempt, "— error:", errMsg);
+
+    const objMatch = errMsg.match(/invalid object name\s+'([^']+)'/i);
+    if (objMatch) {
+      markSalesFactTableUnavailable(objMatch[1]);
+      const swapped = rewriteSqlToAvailableSalesFact(failedSQL);
+      if (swapped && swapped !== failedSQL) {
+        console.log("[langchain] error_recovery: swapped missing view →", getCanonicalSalesContext().table);
+        return {
+          checkedSQL: swapped,
+          generatedSQL: swapped,
+          sqlValidationFailed: false,
+          executionResult: {},
+          retryCount: attempt,
+          retryErrors: [`Attempt ${attempt}: ${errMsg}`],
+          nodeLog: [`error_recovery:view_fallback_${attempt}`],
+        };
+      }
+    }
+
+    const rootQ = state.originalQuestion || state.question || "";
+    if (isTopVendorsByMrpValueQuestion(rootQ)) {
+      const vendorSql = buildTopVendorsByMrpValueSql(rootQ);
+      return {
+        checkedSQL: vendorSql,
+        generatedSQL: vendorSql,
+        sqlValidationFailed: false,
+        executionResult: {},
+        retryCount: attempt,
+        retryErrors: [`Attempt ${attempt}: ${errMsg}`],
+        nodeLog: [`error_recovery:vendor_mrp_canonical_${attempt}`],
+      };
+    }
 
     // ── Build rich observation with column-specific replacement hints ──────
     const observation = formatSystemObservation(

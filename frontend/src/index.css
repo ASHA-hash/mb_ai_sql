@@ -1,0 +1,205 @@
+/* ── CSS imports MUST come before any other rules (CSS spec §6.3) ── */
+/* Node.js dashboard: themes, sidebar, KPI tiles, charts, tables    */
+@import "../../assets/dashboard.css";
+/* Public marketing / landing page tokens                           */
+@import "./marketing.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Map legacy inline-style variable names → dashboard.css tokens */
+:root {
+  --color-bg:      var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-border:  var(--border);
+  --color-text:    var(--text);
+  --color-muted:   var(--text-muted);
+  --color-accent:  var(--brand);
+  --color-danger:  var(--accent-bad);
+  --color-success: var(--accent-good);
+  --color-warn:    var(--accent-warn);
+}
+
+/* Sidebar enhancements (React shell) */
+.sidebar-enhanced .sidebar-logo-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 900;
+  font-size: 1rem;
+  flex-shrink: 0;
+  background: linear-gradient(145deg, #8b5cf6, #7c3aed);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+}
+.sidebar-collapse-btn {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-collapse-btn:hover {
+  background: var(--bg-muted);
+  color: var(--text-strong);
+}
+.sidebar-nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  padding: 10px 14px 4px;
+  margin: 0;
+}
+.sidebar-nav-divider {
+  height: 1px;
+  margin: 6px 14px;
+  background: var(--border-soft);
+  opacity: 0.7;
+}
+.nav-icon-wrap {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.nav-active .nav-icon-wrap {
+  background: rgba(139, 92, 246, 0.18);
+}
+:root[data-theme="dark"] .nav-active .nav-icon-wrap {
+  background: rgba(139, 92, 246, 0.28);
+}
+.sidebar-version-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-soft);
+}
+.sidebar-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+.sidebar-role-badge {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #fff !important;
+  border: none !important;
+}
+.app-header-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.app-header-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Login — ensure password field is visible (incl. autofill on Chrome/Edge) */
+.login-page .login-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text);
+}
+.login-page .login-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+.login-page .login-input:-webkit-autofill,
+.login-page .login-input:-webkit-autofill:hover,
+.login-page .login-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset !important;
+  box-shadow: 0 0 0 1000px var(--bg-input) inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--text);
+}
+.login-pwd-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 6px;
+  border-radius: 6px;
+  z-index: 2;
+}
+.login-pwd-toggle:hover {
+  color: var(--text-strong);
+  background: var(--bg-muted);
+}
+
+/* Recharts tooltips — contentStyle.color does not reach inner text */
+.recharts-tooltip-wrapper .recharts-default-tooltip,
+.erp-chart-tooltip {
+  background-color: #111827 !important;
+  border: 1px solid #475569 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22) !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-name,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-value,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-separator {
+  color: #f8fafc !important;
+}
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label,
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item,
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-name,
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-value,
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-separator {
+  color: #111827 !important;
+}
+:root[data-theme="dark"] .erp-chart-tooltip {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #111827 !important;
+}
+:root[data-theme="dark"] .erp-chart-tooltip .erp-chart-tooltip-head {
+  color: #334155 !important;
+}
+:root[data-theme="dark"] .erp-chart-tooltip .erp-chart-tooltip-row {
+  color: #111827 !important;
+}

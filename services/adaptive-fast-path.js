@@ -16,6 +16,8 @@ const {
   buildBillsTodaySql,
   isDailyRevenueTrendQuestion,
   buildDailyRevenueTrendSql,
+  isTopVendorsByMrpValueQuestion,
+  buildTopVendorsByMrpValueSql,
 } = require("./canonical-sales-sql");
 const {
   isSalespersonTopNQuestion,
@@ -64,6 +66,14 @@ function resolveAdaptiveFastPathSql(question, opts = {}) {
     if (sql) {
       return { sql, source: "bills_today_kpi", matchType: "canonical" };
     }
+  }
+
+  if (isTopVendorsByMrpValueQuestion(q)) {
+    return {
+      sql: buildTopVendorsByMrpValueSql(q),
+      source: "top_vendors_mrpvalue",
+      matchType: "canonical",
+    };
   }
 
   if (isDailyRevenueTrendQuestion(q)) {

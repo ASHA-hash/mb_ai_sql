@@ -168,7 +168,11 @@ async function uploadBlobToDrive({ blob, filename, mimeType, folderId }) {
 const CHART_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
 const KPI_GRADIENTS = ['kpi-purple','kpi-purple','kpi-purple','kpi-purple'];
 
-/** hint = optional dbo.Table — sent as tableHint so AI gets live columns for the right view */
+/**
+ * AI_SUGGESTIONS — static fallback chips shown before the server responds.
+ * The AI Query panel fetches /api/ai/suggestions on mount and replaces these
+ * with live RAG-backed suggestions that improve as users verify queries.
+ */
 const AI_SUGGESTIONS = [
   { q: "Top 10 branches by total gross revenue (MrpValue) this month", hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
   { q: "Top 10 salespersons by total sales (MrpValue) this month", hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
@@ -181,6 +185,33 @@ const AI_SUGGESTIONS = [
   { q: "Compare this month vs last month gross revenue by branch", hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
   { q: "Top 20 highest selling articles all time by total MrpValue", hint: "dbo.VW_MB_POWERBI_APP_REPORT" },
 ];
+
+/**
+ * useDynamicSuggestions — fetches live suggestions from /api/ai/suggestions.
+ * Falls back to AI_SUGGESTIONS on error or if server returns < 3 items.
+ * @param {string|null} token - auth token
+ * @returns {{ suggestions: Array<{q:string, hint?:string}>, loading: boolean }}
+ */
+function useDynamicSuggestions(token) {
+  const [suggestions, setSuggestions] = React.useState(AI_SUGGESTIONS);
+  const [loading, setLoading] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetch('/api/ai/suggestions', { token })
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data?.suggestions) && data.suggestions.length >= 3
+          ? data.suggestions
+          : AI_SUGGESTIONS;
+        setSuggestions(list);
+      })
+      .catch(() => { /* keep fallback */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
+  return { suggestions, loading };
+}
 
 const ROLE_COLORS = {
   admin:   "bg-red-500/15 text-red-400",
